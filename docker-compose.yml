@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cnpaf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cnpaf
+      POSTGRES_PASSWORD: cnpaf
+      POSTGRES_DB: cnpaf
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cnpaf -d cnpaf"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks:
+      - cnpaf
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cnpaf-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://cnpaf:cnpaf@postgres:5432/cnpaf
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      SEED_PASSWORD: ${SEED_PASSWORD:-cnpaf-dev-change-me}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - cnpaf
+    profiles:
+      - app
+
+volumes:
+  postgres-data:
+  uploads:
+
+networks:
+  cnpaf:
+    name: cnpaf

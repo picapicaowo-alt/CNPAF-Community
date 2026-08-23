@@ -1,0 +1,13 @@
+{
+  "name": "CNPAF Collect",
+  "short_name": "CNPAF",
+  "description": "Field intelligence for CNPAF volunteers",
+  "start_url": "/capture",
+  "display": "standalone",
+  "background_color": "#f4efe4",
+  "theme_color": "#0f5c4c",
+  "lang": "zh",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CNPAF Collect — UI Design Showcase (PWA & Operations)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f7f5',
+              100: '#dbeee8',
+              500: '#1e6f5c',
+              600: '#0f5c4c',
+              700: '#0a3f35',
+              900: '#062822',
+            },
+            cnpaf: {
+              blue: '#1A56DB',
+              bluelight: '#EBF5FF',
+              amber: '#D97706',
+              amberlight: '#FEF3C7',
+              emerald: '#059669',
+              emeraldlight: '#D1FAE5',
+              rose: '#E11D48',
+              roselight: '#FFE4E6',
+              slatebg: '#F8FAFC',
+              border: '#E2E8F0',
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '"Noto Sans SC"', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background: #0f172a;
+      font-family: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif;
+    }
+    .phone-frame {
+      width: 390px;
+      height: 844px;
+      border-radius: 48px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 12px #1e293b, 0 0 0 14px #334155;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: #F8FAFC;
+    }
+    .desktop-frame {
+      width: 1080px;
+      height: 780px;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 8px #1e293b;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: #FFFFFF;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="text-slate-100 antialiased min-h-screen py-10 px-4">
+
+  <!-- Top Navigation & Header -->
+  <header class="max-w-7xl mx-auto mb-10 text-center">
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mb-4">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      CNPAF UI/UX Specification V1 · Zero Frontend AI · Operations Intelligence
+    </div>
+    <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-3">
+      CNPAF 信息收集系统 — 交互视觉规范与页面全景
+    </h1>
+    <p class="text-slate-400 max-w-3xl mx-auto text-sm sm:text-base leading-relaxed">
+      基于 Nonprofit Research & Healthcare Operations SaaS 标准重构。志愿者端采用<strong class="text-emerald-400">引导式结构化采集</strong>（零 AI 成本、源头清洗），管理后台负责<strong class="text-blue-400">隐私筛查 + AI 归纳分析 + 人工审阅</strong>。
+    </p>
+
+    <!-- Tab Selector -->
+    <div class="flex flex-wrap justify-center gap-2 mt-8">
+      <button onclick="switchTab('vol-obs')" id="btn-vol-obs" class="tab-btn px-4 py-2 text-xs font-medium rounded-lg transition bg-blue-600 text-white shadow-lg shadow-blue-500/30">
+        📱 志愿者：引导式观察采集 (Guided Obs)
+      </button>
+      <button onclick="switchTab('vol-notes')" id="btn-vol-notes" class="tab-btn px-4 py-2 text-xs font-medium rounded-lg transition bg-slate-800 text-slate-300 hover:bg-slate-700">
+        📱 志愿者：四源笔记区分 (Add Note)
+      </button>
+      <button onclick="switchTab('vol-submit')" id="btn-vol-submit" class="tab-btn px-4 py-2 text-xs font-medium rounded-lg transition bg-slate-800 text-slate-300 hover:bg-slate-700">
+        📱 志愿者：隐私核验与提交 (Privacy Check)
+      </button>
+      <button onclick="switchTab('vol-records')" id="btn-vol-records" class="tab-btn px-4 py-2 text-xs font-medium rounded-lg transition bg-slate-800 text-slate-300 hover:bg-slate-700">
+        📱 志愿者：记录中心与离线队列 (Records)
+      </button>
+      <button onclick="switchTab('ops-review')" id="btn-ops-review" class="tab-btn px-4 py-2 text-xs font-medium rounded-lg transition bg-slate-800 text-slate-300 hover:bg-slate-700">
+        💻 运营后台：AI 审阅与证据提取 (Record Review)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Showcase Container -->
+  <main class="max-w-7xl mx-auto flex justify-center items-center">
+
+    <!-- ========================================== -->
+    <!-- SCREEN 1: VOLUNTEER GUIDED OBSERVATION -->
+    <!-- ========================================== -->
+    <div id="screen-vol-obs" class="screen-panel flex flex-col lg:flex-row items-center gap-8">
+      <!-- Phone Mockup -->
+      <div class="phone-frame relative text-slate-800">
+        <!-- Status Bar -->
+        <div class="h-11 px-6 flex justify-between items-center text-xs font-semibold select-none pt-2">
+          <span>9:41</span>
+          <div class="w-20 h-4 bg-slate-900 rounded-full mx-auto -mt-2"></div>
+          <div class="flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 18.23c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l.73-.73C8.16 20.21 9.98 21 12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9z"/></svg>
+            <div class="w-5 h-2.5 border border-slate-700 rounded-sm p-0.5"><div class="h-full bg-slate-800 rounded-2xs w-3/4"></div></div>
+          </div>
+        </div>
+
+        <!-- App Header -->
+        <div class="px-5 py-3 bg-white border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-700 flex items-center justify-center text-white font-bold text-sm">C</div>
+            <div>
+              <h2 class="text-xs font-bold text-slate-900 leading-tight">CNPAF Collect</h2>
+              <p class="text-[10px] text-slate-500">Field Record #CR-2026-088</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            已自动保存
+          </div>
+        </div>
+
+        <!-- Progress Tracker -->
+        <div class="px-5 pt-3 pb-2 bg-white border-b border-slate-100">
+          <div class="flex justify-between items-center text-[11px] mb-1.5">
+            <span class="font-bold text-slate-800">步骤 3 / 5: 现场行为与反馈</span>
+            <span class="text-slate-400 font-medium">60%</span>
+          </div>
+          <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden flex">
+            <div class="bg-blue-600 h-full w-3/5 rounded-full transition-all duration-300"></div>
+          </div>
+        </div>
+
+        <!-- Scrollable Content -->
+        <div class="flex-1 overflow-y-auto px-4 py-3 space-y-3.5 custom-scrollbar pb-24">
+
+          <!-- Card 1: What are you recording? -->
+          <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-slate-900">1. 你在记录什么？ (可多选)</label>
+              <span class="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">引导分类</span>
+            </div>
+            <p class="text-[11px] text-slate-500 mb-3">选择本次观察涉及的核心维度，系统将自动展开对应细节：</p>
+            
+            <div class="flex flex-wrap gap-1.5">
+              <span class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600 text-white shadow-xs flex items-center gap-1">
+                ✓ 参与度 / 积极性
+              </span>
+              <span class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600 text-white shadow-xs flex items-center gap-1">
+                ✓ 沟通 / 听力困难
+              </span>
+              <span class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100">
+                情绪 / 行为表现
+              </span>
+              <span class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100">
+                社交互动
+              </span>
+              <span class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100">
+                无障碍 / 身体受限
+              </span>
+              <span class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100">
+                活动理解难度
+              </span>
+              <span class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100">
+                ⚠️ 安全 / 紧急关切
+              </span>
+            </div>
+          </div>
+
+          <!-- Card 2: Dynamic Follow-up: Communication & Hearing -->
+          <div class="bg-white rounded-2xl p-4 border-2 border-blue-100 shadow-xs relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
+            
+            <div class="flex items-center gap-1.5 mb-2">
+              <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+              <h3 class="text-xs font-bold text-slate-900">沟通 / 听力困难 细化追踪</h3>
+            </div>
+
+            <!-- Follow-up Question 1 -->
+            <div class="space-y-1.5 mb-3">
+              <p class="text-[11px] font-semibold text-slate-700">具体观察到了什么现象？</p>
+              <div class="space-y-1">
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-blue-50/60 border border-blue-200 text-[11px] font-medium text-slate-800">
+                  <input type="radio" checked class="text-blue-600 focus:ring-0">
+                  <span>听不清讲师指令 / 声音音量不足</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
+                  <input type="radio" class="text-blue-600 focus:ring-0">
+                  <span>多次主动要求讲师重复步骤</span>
+                </label>
+                <label class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
+                  <input type="radio" class="text-blue-600 focus:ring-0">
+                  <span>方言或语言理解存在障碍</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Follow-up Question 2: Affected range -->
+            <div class="mb-3">
+              <p class="text-[11px] font-semibold text-slate-700 mb-1.5">影响了大约多少位老人/参与者？</p>
+              <div class="grid grid-cols-5 gap-1 text-center">
+                <div class="py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">1 人</div>
+                <div class="py-1.5 rounded-lg text-[11px] font-bold bg-blue-600 text-white shadow-xs">2–5 人</div>
+                <div class="py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">6–10 人</div>
+                <div class="py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">10+ 人</div>
+                <div class="py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">不确定</div>
+              </div>
+            </div>
+
+            <!-- Follow-up Question 3: Timing -->
+            <div>
+              <p class="text-[11px] font-semibold text-slate-700 mb-1.5">发生在活动的哪个阶段？</p>
+              <div class="grid grid-cols-4 gap-1 text-center">
+                <div class="py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">前半程</div>
+                <div class="py-1.5 rounded-lg text-[11px] font-bold bg-blue-600 text-white shadow-xs">中途</div>
+                <div class="py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">后半程</div>
+                <div class="py-1.5 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">贯穿始终</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Describe What You Saw (Raw Fact Input) -->
+          <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-slate-900">2. 现场客观事实描述</label>
+              <span class="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">仅记录事实</span>
+            </div>
+            <p class="text-[10px] text-slate-400 mb-2">💡 提示：只写亲眼所见/所听到的行为，无需推测原因或给出改善建议。</p>
+            <div class="relative">
+              <textarea rows="3" class="w-full text-[11px] leading-relaxed p-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:outline-none bg-slate-50/50 text-slate-800 resize-none font-sans" placeholder="例如：后排有3位老人在活动开始约15分钟后放下手工材料，其中2位向助教招手询问操作方法...">后排有3位老人在活动开始约15分钟后放下手工材料停止操作。其中2位举手向助教表示听不清音响声音，询问是否能重复步骤。</textarea>
+              <span class="absolute bottom-2 right-2 text-[9px] text-slate-400">72 字</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sticky Bottom CTA -->
+        <div class="absolute bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur border-t border-slate-200 flex gap-2">
+          <button class="w-1/3 py-3 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs text-center active:scale-95 transition">
+            存为草稿
+          </button>
+          <button class="w-2/3 py-3 rounded-xl bg-blue-600 text-white font-bold text-xs text-center shadow-md shadow-blue-500/20 active:scale-95 transition flex items-center justify-center gap-1">
+            <span>继续下一步</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Spec & Explanation Card -->
+      <div class="max-w-md space-y-4 text-slate-300 text-sm">
+        <div class="p-5 rounded-2xl bg-slate-800/80 border border-slate-700">
+          <div class="flex items-center gap-2 text-emerald-400 font-bold mb-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            前端引导分类的核心价值 (Zero AI on Volunteer)
+          </div>
+          <ul class="space-y-2 text-xs leading-relaxed text-slate-300">
+            <li class="flex items-start gap-2">
+              <span class="text-blue-400 font-bold">•</span>
+              <span><strong>杜绝无意义自由大文本：</strong>原本志愿者面对空白文本框容易写成抒情散文，结构化分类引导志愿者在10秒内完成精准打标。</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-blue-400 font-bold">•</span>
+              <span><strong>字段自带结构化维度：</strong>Category (听力) + Issue (指令不清) + Count (2-5人) + Timing (中途)，数据入库即干净，可直接生成初筛统计。</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-blue-400 font-bold">•</span>
+              <span><strong>极低认知负荷与零成本：</strong>不用调用任何前端模型，在弱网甚至离线状态下也能丝滑运行。</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="p-4 rounded-xl bg-blue-950/40 border border-blue-800/50 text-xs">
+          <div class="text-blue-300 font-bold mb-1">设计规范参数</div>
+          <p class="text-slate-400">8px 栅格对齐 · 卡片圆角 16px · 选项高度 44px (移动端易点击) · 主色 #1A56DB · 阴影极浅低对比度。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 2: VOLUNTEER NOTE DISTINCTION -->
+    <!-- ========================================== -->
+    <div id="screen-vol-notes" class="screen-panel hidden flex flex-col lg:flex-row items-center gap-8">
+      <!-- Phone Mockup -->
+      <div class="phone-frame relative text-slate-800">
+        <!-- Status Bar -->
+        <div class="h-11 px-6 flex justify-between items-center text-xs font-semibold select-none pt-2">
+          <span>9:42</span>
+          <div class="w-20 h-4 bg-slate-900 rounded-full mx-auto -mt-2"></div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-5 h-2.5 border border-slate-700 rounded-sm p-0.5"><div class="h-full bg-slate-800 rounded-2xs w-full"></div></div>
+          </div>
+        </div>
+
+        <!-- Header -->
+        <div class="px-5 py-3 bg-white border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <button class="p-1 text-slate-400 hover:text-slate-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></button>
+            <h2 class="text-sm font-bold text-slate-900">补充记录与反馈 (Notes)</h2>
+          </div>
+          <span class="text-xs text-blue-600 font-semibold">+ 添加一条</span>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto px-4 py-3 space-y-3 custom-scrollbar pb-24">
+          
+          <div class="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-900">
+            <strong>💡 请明确区分信息来源：</strong>将老人亲口反馈与志愿者个人观察分开，保证科研数据真实可信。
+          </div>
+
+          <!-- Note Type Selector -->
+          <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+            <label class="text-xs font-bold text-slate-900 block mb-2">选择笔记类型 (Source Type)</label>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center gap-2 cursor-pointer">
+                <span class="w-3 h-3 rounded-full bg-blue-500 flex-shrink-0"></span>
+                <div>
+                  <div class="text-[11px] font-bold text-slate-800">亲眼观察</div>
+                  <div class="text-[9px] text-slate-500">我亲眼看到/听到的</div>
+                </div>
+              </div>
+              <div class="p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/60 flex items-center gap-2 cursor-pointer shadow-xs">
+                <span class="w-3 h-3 rounded-full bg-emerald-600 flex-shrink-0"></span>
+                <div>
+                  <div class="text-[11px] font-bold text-emerald-950">参与者反馈</div>
+                  <div class="text-[9px] text-emerald-700">老人本人原话/反馈</div>
+                </div>
+              </div>
+              <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center gap-2 cursor-pointer">
+                <span class="w-3 h-3 rounded-full bg-purple-500 flex-shrink-0"></span>
+                <div>
+                  <div class="text-[11px] font-bold text-slate-800">工作人员反馈</div>
+                  <div class="text-[9px] text-slate-500">现场社工/助教提出</div>
+                </div>
+              </div>
+              <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center gap-2 cursor-pointer">
+                <span class="w-3 h-3 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div>
+                  <div class="text-[11px] font-bold text-slate-800">关切/疑虑</div>
+                  <div class="text-[9px] text-slate-500">需重点留意的潜在风险</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Note Cards List -->
+          <div class="space-y-2.5">
+            <!-- Item 1: Participant Feedback -->
+            <div class="bg-white rounded-xl p-3 border border-emerald-200/80 shadow-xs relative">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                  🗣️ 参与者原话 (Participant feedback)
+                </span>
+                <span class="text-[10px] text-slate-400">10:15 AM</span>
+              </div>
+              <blockquote class="text-[11px] text-slate-700 italic border-l-2 border-emerald-500 pl-2 my-1">
+                “这个字太小了，而且投影仪反光看不清前面的演示步骤。”
+              </blockquote>
+              <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+                <span>对象：张奶奶 (78岁)</span>
+                <span class="text-blue-600 font-medium">编辑</span>
+              </div>
+            </div>
+
+            <!-- Item 2: Direct Observation -->
+            <div class="bg-white rounded-xl p-3 border border-blue-200/80 shadow-xs relative">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                  👀 现场观察 (Direct observation)
+                </span>
+                <span class="text-[10px] text-slate-400">10:25 AM</span>
+              </div>
+              <p class="text-[11px] text-slate-700 my-1">
+                在互动环节中，邻座两位长者开始互相协助剪纸，互动氛围良好，情绪转为积极。
+              </p>
+              <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+                <span>涉及：2 人</span>
+                <span class="text-blue-600 font-medium">编辑</span>
+              </div>
+            </div>
+
+            <!-- Item 3: Concern -->
+            <div class="bg-white rounded-xl p-3 border border-amber-200/80 shadow-xs relative">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                  ⚠️ 志愿者关切 (Concern)
+                </span>
+                <span class="text-[10px] text-slate-400">10:40 AM</span>
+              </div>
+              <p class="text-[11px] text-slate-700 my-1">
+                后门地面有一根麦克风音频线未贴地胶固定，有老人经过时险些绊倒。
+              </p>
+              <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+                <span class="text-amber-600 font-semibold">场地安全隐患</span>
+                <span class="text-blue-600 font-medium">编辑</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sticky CTA -->
+        <div class="absolute bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur border-t border-slate-200 flex gap-2">
+          <button class="w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-xs text-center shadow-md shadow-blue-500/20 active:scale-95 transition">
+            保存并进入核对 (Review)
+          </button>
+        </div>
+      </div>
+
+      <!-- Spec & Explanation Card -->
+      <div class="max-w-md space-y-4 text-slate-300 text-sm">
+        <div class="p-5 rounded-2xl bg-slate-800/80 border border-slate-700">
+          <div class="flex items-center gap-2 text-emerald-400 font-bold mb-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            信息源清晰区分 (Origin Separation)
+          </div>
+          <p class="text-xs leading-relaxed text-slate-300 mb-3">
+            质性研究中最忌讳将参与者主观原话与志愿者主观推测混在一起。通过四个明确的 Note 类型标签：
+          </p>
+          <div class="space-y-1.5 text-xs">
+            <div class="p-2 rounded bg-slate-900/60 border border-slate-700 flex items-center justify-between">
+              <span class="text-emerald-300">🗣️ Participant Feedback</span>
+              <span class="text-slate-400">第一手引述 (Quotation)</span>
+            </div>
+            <div class="p-2 rounded bg-slate-900/60 border border-slate-700 flex items-center justify-between">
+              <span class="text-blue-300">👀 Direct Observation</span>
+              <span class="text-slate-400">客观事实 (Fact)</span>
+            </div>
+            <div class="p-2 rounded bg-slate-900/60 border border-slate-700 flex items-center justify-between">
+              <span class="text-purple-300">🏢 Staff Feedback</span>
+              <span class="text-slate-400">运营方视角 (Ops Insight)</span>
+            </div>
+            <div class="p-2 rounded bg-slate-900/60 border border-slate-700 flex items-center justify-between">
+              <span class="text-amber-300">⚠️ Field Concern</span>
+              <span class="text-slate-400">风险预警 (Risk)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 3: VOLUNTEER PRIVACY CHECK & SUBMIT -->
+    <!-- ========================================== -->
+    <div id="screen-vol-submit" class="screen-panel hidden flex flex-col lg:flex-row items-center gap-8">
+      <!-- Phone Mockup -->
+      <div class="phone-frame relative text-slate-800">
+        <!-- Status Bar -->
+        <div class="h-11 px-6 flex justify-between items-center text-xs font-semibold select-none pt-2">
+          <span>9:45</span>
+          <div class="w-20 h-4 bg-slate-900 rounded-full mx-auto -mt-2"></div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-5 h-2.5 border border-slate-700 rounded-sm p-0.5"><div class="h-full bg-slate-800 rounded-2xs w-full"></div></div>
+          </div>
+        </div>
+
+        <!-- Header -->
+        <div class="px-5 py-3 bg-white border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <button class="p-1 text-slate-400 hover:text-slate-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></button>
+            <h2 class="text-sm font-bold text-slate-900">核对并提交 (Step 5/5)</h2>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3.5 custom-scrollbar pb-24">
+          
+          <!-- Privacy Shield Notice (No AI mentions) -->
+          <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 shadow-xs">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 font-bold text-sm">
+                🛡️
+              </div>
+              <div>
+                <h3 class="text-xs font-bold text-emerald-900">隐私与合规保护检查</h3>
+                <p class="text-[11px] text-emerald-700 mt-1 leading-relaxed">
+                  提交后，系统会在进入审核流程前自动检查并遮蔽可能的个人身份信息（如电话、身份证号等），保障长者隐私安全。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Record Summary Card -->
+          <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-2.5">
+            <h3 class="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2">本次采集概览</h3>
+            
+            <div class="flex justify-between text-[11px]">
+              <span class="text-slate-500">记录站点：</span>
+              <span class="font-semibold text-slate-800">朝阳区和平街长者日间照料中心</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-slate-500">活动主题：</span>
+              <span class="font-semibold text-slate-800">认知活力手工坊 (第4期)</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-slate-500">实到参与者：</span>
+              <span class="font-semibold text-slate-800">18 位</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-slate-500">涉及观察维度：</span>
+              <span class="font-semibold text-blue-600">听力困难 · 参与度 · 安全</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-slate-500">记录笔记条数：</span>
+              <span class="font-semibold text-slate-800">3 条独立证据</span>
+            </div>
+          </div>
+
+          <!-- Done reassurance banner -->
+          <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+            <div class="text-xs font-bold text-blue-900 mb-1">✅ 提交后无需停留在现场</div>
+            <p class="text-[11px] text-blue-700 leading-relaxed">
+              数据将加密同步至 CNPAF 研究审核团队。若当前处于弱网环境，系统将保留在本地队列并在连接 WiFi 时自动同步。
+            </p>
+          </div>
+
+          <!-- Attestation checkbox -->
+          <label class="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-700 cursor-pointer">
+            <input type="checkbox" checked class="mt-0.5 rounded text-blue-600 focus:ring-0">
+            <span>我确认所记录的数据均基于现场真实观察与参与者自愿反馈，未包含任何未经授权的个人敏感隐私。</span>
+          </label>
+
+        </div>
+
+        <!-- Sticky CTA -->
+        <div class="absolute bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur border-t border-slate-200">
+          <button class="w-full py-3.5 rounded-xl bg-blue-600 text-white font-bold text-xs text-center shadow-lg shadow-blue-500/30 active:scale-95 transition flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span>确认并提交审核 (Submit)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Spec & Explanation Card -->
+      <div class="max-w-md space-y-4 text-slate-300 text-sm">
+        <div class="p-5 rounded-2xl bg-slate-800/80 border border-slate-700">
+          <div class="flex items-center gap-2 text-blue-400 font-bold mb-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            文案去工程化改造 (Removing AI Jargon)
+          </div>
+          <div class="space-y-2.5 text-xs text-slate-300">
+            <div class="p-2.5 rounded bg-rose-950/40 border border-rose-800/60">
+              <span class="text-rose-400 font-bold">❌ 原版过于工程化：</span>
+              <p class="text-slate-400 line-through">"Server-side PII scan happens before external AI call. You can leave immediately, AI analysis runs asynchronously."</p>
+            </div>
+            <div class="p-2.5 rounded bg-emerald-950/40 border border-emerald-800/60">
+              <span class="text-emerald-400 font-bold">✅ 优化后更贴近人本：</span>
+              <p class="text-emerald-300">"隐私与合规保护检查：提交后系统会自动检查并遮蔽个人身份信息，保障长者隐私。数据已加密同步至 CNPAF 审核团队。"</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 4: VOLUNTEER RECORDS & OFFLINE QUEUE -->
+    <!-- ========================================== -->
+    <div id="screen-vol-records" class="screen-panel hidden flex flex-col lg:flex-row items-center gap-8">
+      <!-- Phone Mockup -->
+      <div class="phone-frame relative text-slate-800">
+        <!-- Status Bar -->
+        <div class="h-11 px-6 flex justify-between items-center text-xs font-semibold select-none pt-2">
+          <span>9:48</span>
+          <div class="w-20 h-4 bg-slate-900 rounded-full mx-auto -mt-2"></div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-5 h-2.5 border border-slate-700 rounded-sm p-0.5"><div class="h-full bg-slate-800 rounded-2xs w-full"></div></div>
+          </div>
+        </div>
+
+        <!-- Header -->
+        <div class="px-5 py-3 bg-white border-b border-slate-100 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-900">我的采集记录 (Records)</h2>
+          <span class="text-xs text-slate-500">共 8 条</span>
+        </div>
+
+        <!-- Filter Chips (Human status only) -->
+        <div class="px-4 py-2 bg-slate-50 border-b border-slate-200/60 flex gap-1.5 overflow-x-auto text-[11px]">
+          <span class="px-2.5 py-1 rounded-full font-bold bg-slate-900 text-white flex-shrink-0">全部</span>
+          <span class="px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 flex-shrink-0">待同步 (1)</span>
+          <span class="px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 flex-shrink-0">审核中 (2)</span>
+          <span class="px-2.5 py-1 rounded-full font-medium bg-white text-slate-600 border border-slate-200 flex-shrink-0">已归档 (5)</span>
+        </div>
+
+        <!-- Records List -->
+        <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 custom-scrollbar pb-16">
+          
+          <!-- Record 1: Pending sync (Offline) -->
+          <div class="bg-white rounded-xl p-3.5 border-2 border-amber-200 shadow-xs">
+            <div class="flex justify-between items-start mb-1.5">
+              <span class="text-xs font-bold text-slate-900">朝阳区和平街日照中心</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                待同步 (离线)
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-600 mb-2">认知活力手工坊 · 3条现场观察</p>
+            <div class="flex justify-between items-center text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+              <span>今天 09:40 · 本地版本 v3</span>
+              <span class="text-amber-600 font-semibold">连接网络后自动上传</span>
+            </div>
+          </div>
+
+          <!-- Record 2: Under review -->
+          <div class="bg-white rounded-xl p-3.5 border border-slate-200 shadow-xs">
+            <div class="flex justify-between items-start mb-1.5">
+              <span class="text-xs font-bold text-slate-900">海淀区学院路街道长者驿站</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                审核中 (Under review)
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-600 mb-2">数字技能手机辅导 · 4条现场观察</p>
+            <div class="flex justify-between items-center text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+              <span>昨天 14:20 · 已提交</span>
+              <span class="text-blue-600 font-medium">查看详情 →</span>
+            </div>
+          </div>
+
+          <!-- Record 3: Completed -->
+          <div class="bg-white rounded-xl p-3.5 border border-slate-200 shadow-xs opacity-80">
+            <div class="flex justify-between items-start mb-1.5">
+              <span class="text-xs font-bold text-slate-900">西城区广安门综合养老中心</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                已入库 (Completed)
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-600 mb-2">长者合唱排练观察 · 2条现场观察</p>
+            <div class="flex justify-between items-center text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+              <span>08月20日 · 已归档至成果库</span>
+              <span class="text-slate-500 font-medium">查看 →</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Bottom Navigation -->
+        <div class="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex justify-around items-center text-[10px] text-slate-400">
+          <div class="flex flex-col items-center gap-1 cursor-pointer">
+            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span>新采集</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 cursor-pointer text-blue-600 font-bold">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span>记录</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 cursor-pointer">
+            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            <span>我的</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spec & Explanation Card -->
+      <div class="max-w-md space-y-4 text-slate-300 text-sm">
+        <div class="p-5 rounded-2xl bg-slate-800/80 border border-slate-700">
+          <div class="flex items-center gap-2 text-amber-400 font-bold mb-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            状态规范：去除后台中间态
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            志愿者端不再展示 <code class="text-rose-400">AI analyzing</code>, <code class="text-rose-400">AI queued</code>, <code class="text-rose-400">AI retried</code> 等内部引擎状态，只展示 6 个业务语义状态：
+          </p>
+          <div class="grid grid-cols-2 gap-2 mt-3 text-[11px]">
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-700"><strong>草稿 (Draft)</strong>：本地编辑中</div>
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-700"><strong>待同步 (Pending)</strong>：离线暂存</div>
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-700"><strong>已提交 (Submitted)</strong>：已入库</div>
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-700"><strong>审核中 (Under review)</strong>：团队核验</div>
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-700"><strong>需修改 (Needs update)</strong>：退回</div>
+            <div class="bg-slate-900/80 p-2 rounded border border-slate-700"><strong>已归档 (Completed)</strong>：进入成果库</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 5: OPERATIONS DESKTOP REVIEW -->
+    <!-- ========================================== -->
+    <div id="screen-ops-review" class="screen-panel hidden flex flex-col items-center gap-6 w-full">
+      <!-- Desktop Frame -->
+      <div class="desktop-frame text-slate-800">
+        <!-- Desktop Header / Navigation Bar -->
+        <div class="h-14 bg-slate-900 text-white px-6 flex items-center justify-between border-b border-slate-800">
+          <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-sm shadow-md">C</div>
+              <span class="font-bold text-base tracking-tight">CNPAF Operations Console</span>
+            </div>
+            <nav class="flex gap-1 text-xs">
+              <a href="#" class="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800">总览 Dashboard</a>
+              <a href="#" class="px-3 py-1.5 rounded-lg bg-blue-600/30 text-blue-400 font-semibold border border-blue-500/30">记录审核 Review (12)</a>
+              <a href="#" class="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800">主题与关切 Themes</a>
+              <a href="#" class="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800">学术成果导出 Export</a>
+            </nav>
+          </div>
+          <div class="flex items-center gap-3 text-xs">
+            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              AI Triage Service: Normal
+            </span>
+            <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-semibold">OP</div>
+          </div>
+        </div>
+
+        <!-- Operations Main Content: Split Screen Layout -->
+        <div class="flex-1 flex overflow-hidden bg-slate-50">
+          
+          <!-- LEFT COLUMN: Submitted Evidence (60%) -->
+          <div class="w-[58%] border-r border-slate-200 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-white">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-base font-bold text-slate-900">记录详情 · #REC-2026-0819-02</h2>
+                  <span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">Field Visit</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">采集员：李华 (Volunteer ID: 1042) · 采集时间：2026-08-22 10:30</p>
+              </div>
+              <div class="flex gap-2">
+                <button class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">驳回修改</button>
+                <button class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-xs">批准入库</button>
+              </div>
+            </div>
+
+            <!-- Site & Activity Badge -->
+            <div class="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+              <div>
+                <span class="text-slate-400 text-[11px] block">站点名称</span>
+                <span class="font-bold text-slate-800">朝阳区和平街日照中心 (ADHC)</span>
+              </div>
+              <div>
+                <span class="text-slate-400 text-[11px] block">活动定义</span>
+                <span class="font-bold text-slate-800">认知活力手工坊 (Cognitive Activity v2)</span>
+              </div>
+            </div>
+
+            <!-- Structured Volunteer Categories Section -->
+            <div class="space-y-2">
+              <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider text-slate-500">
+                1. 志愿者端结构化打标 (Structured Tags)
+              </h3>
+              <div class="flex flex-wrap gap-2">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  🏷️ 沟通与听力 (Communication/Hearing)
+                </span>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  🏷️ 参与度 (Participation)
+                </span>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                  影响人数: 2–5 人
+                </span>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                  发生阶段: 活动中途
+                </span>
+              </div>
+            </div>
+
+            <!-- Raw Observation -->
+            <div class="space-y-1.5">
+              <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider text-slate-500">
+                2. 现场客观事实观察 (Raw Observation)
+              </h3>
+              <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs leading-relaxed text-slate-800 font-mono">
+                “后排有3位老人在活动开始约15分钟后放下手工材料停止操作。其中2位举手向助教表示听不清音响声音，询问是否能重复步骤。”
+              </div>
+            </div>
+
+            <!-- Multi-origin Notes -->
+            <div class="space-y-2">
+              <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider text-slate-500">
+                3. 独立证据条目 (Origin Segregated Notes)
+              </h3>
+              
+              <div class="p-3 rounded-xl border-l-4 border-emerald-500 bg-emerald-50/50 border border-slate-200 text-xs space-y-1">
+                <div class="flex justify-between font-bold text-emerald-900 text-[11px]">
+                  <span>🗣️ 参与者原话 (Participant Feedback)</span>
+                  <span class="text-slate-400 font-normal">长者 张奶奶 (78岁)</span>
+                </div>
+                <p class="text-slate-700 italic">“这个字太小了，而且投影仪反光看不清前面的演示步骤。”</p>
+              </div>
+
+              <div class="p-3 rounded-xl border-l-4 border-amber-500 bg-amber-50/50 border border-slate-200 text-xs space-y-1">
+                <div class="flex justify-between font-bold text-amber-900 text-[11px]">
+                  <span>⚠️ 场地关切 (Safety/Environmental Concern)</span>
+                  <span class="text-slate-400 font-normal">现场环境</span>
+                </div>
+                <p class="text-slate-700">后门地面有一根音频麦克风线缆未固定，老人走动时存在跌倒隐患。</p>
+              </div>
+            </div>
+
+            <!-- Privacy Scan Status -->
+            <div class="p-3 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span class="font-bold text-slate-800">隐私筛查已通过 (PII Clean)</span>
+              </div>
+              <span class="text-slate-400">未检测到身份证号 / 电话等直接标识符</span>
+            </div>
+
+          </div>
+
+          <!-- RIGHT COLUMN: AI Analysis Assistant (42%) -->
+          <div class="w-[42%] bg-slate-900 text-slate-100 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">✨</div>
+                <div>
+                  <h3 class="text-sm font-bold text-white">AI 分析与提炼助手</h3>
+                  <p class="text-[10px] text-slate-400">Operations Internal Intelligence</p>
+                </div>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                人工复核必需
+              </span>
+            </div>
+
+            <!-- AI Suggested Theme Card -->
+            <div class="bg-slate-800/90 rounded-xl p-4 border border-slate-700 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-bold text-blue-400">建议归纳主题 (Suggested Theme)</span>
+                </div>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  高置信度 94%
+                </span>
+              </div>
+              
+              <div class="text-sm font-bold text-white">
+                “听觉可及性不足导致长者中途参与度衰减”
+              </div>
+
+              <div class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700 text-xs space-y-1">
+                <span class="text-[10px] font-bold text-slate-400 block uppercase">关联证据支撑 (Supporting Evidence)</span>
+                <p class="text-slate-300 italic text-[11px]">“后排3位老人停止操作...2位表示听不清音响声音...”</p>
+              </div>
+
+              <!-- Human Action Buttons -->
+              <div class="flex gap-2 pt-1">
+                <button class="flex-1 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition">
+                  ✓ 采纳主题
+                </button>
+                <button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition">
+                  编辑
+                </button>
+                <button class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs transition">
+                  忽略
+                </button>
+              </div>
+            </div>
+
+            <!-- AI Potential Concern Card -->
+            <div class="bg-slate-800/90 rounded-xl p-4 border border-amber-500/40 space-y-3 relative overflow-hidden">
+              <div class="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+              
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-amber-400">⚠️ 识别到的潜在关切 (Identified Concern)</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  环境安全 · 中风险
+                </span>
+              </div>
+
+              <p class="text-xs text-slate-200 leading-relaxed">
+                现场活动动线存在明线隐患（麦克风线），在长者日照中心可能增加跌倒发生率。
+              </p>
+
+              <div class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700 text-xs space-y-1">
+                <span class="text-[10px] font-bold text-slate-400 block uppercase">来源备注</span>
+                <p class="text-slate-300 text-[11px]">来自志愿者关切记录条目 #N-03</p>
+              </div>
+
+              <div class="flex gap-2 pt-1">
+                <button class="flex-1 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition">
+                  登记为全局关切事项
+                </button>
+                <button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs transition">
+                  忽略
+                </button>
+              </div>
+            </div>
+
+            <!-- Cross-site Analysis Insight -->
+            <div class="p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/60 text-xs space-y-1.5">
+              <div class="flex items-center gap-1.5 text-blue-300 font-bold">
+                <span>📊 跨站点趋势关联</span>
+              </div>
+              <p class="text-slate-400 text-[11px] leading-relaxed">
+                在过去30天内，类似“指令声音/音响听觉困难”已在 4 个不同 ADHC 站点被提及累计 14 次。建议列为组织级干预优化项。
+              </p>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Spec & Explanation Card -->
+      <div class="max-w-4xl text-center space-y-2 text-slate-300 text-xs">
+        <p><strong class="text-white">左右分工体系：</strong>左侧为纯净的人类现场采集证据（志愿者的结构分类 + 原始引言），右侧为 Operations AI 提炼的分析建议。</p>
+        <p class="text-slate-400">所有 AI 生成结果均需运营人员显式点击“采纳 / 编辑 / 忽略”，确保进入最终研究报告的数据 100% 经过人类审阅。</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Interactive Script for Tab Switching -->
+  <script>
+    function switchTab(screenId) {
+      // Hide all screen panels
+      document.querySelectorAll('.screen-panel').forEach(panel => {
+        panel.classList.add('hidden');
+      });
+      // Show target panel
+      const target = document.getElementById('screen-' + screenId);
+      if (target) {
+        target.classList.remove('hidden');
+      }
+
+      // Update button styles
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-600', 'text-white', 'shadow-lg', 'shadow-blue-500/30');
+        btn.classList.add('bg-slate-800', 'text-slate-300');
+      });
+
+      const activeBtn = document.getElementById('btn-' + screenId);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow-lg', 'shadow-blue-500/30');
+        activeBtn.classList.remove('bg-slate-800', 'text-slate-300');
+      }
+    }
+  </script>
+</body>
+</html>

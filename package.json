@@ -1,0 +1,23 @@
+{
+  "name": "cnpaf-collect",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @cnpaf/web",
+    "build": "npm run build -w @cnpaf/web",
+    "db:generate": "npm run generate -w @cnpaf/db",
+    "db:migrate": "npm run migrate -w @cnpaf/db",
+    "db:seed": "npm run seed -w @cnpaf/db",
+    "docker:up": "docker compose up -d postgres",
+    "docker:down": "docker compose down",
+    "docker:app": "docker compose --profile app up --build",
+    "db:studio": "npm run studio -w @cnpaf/db"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
