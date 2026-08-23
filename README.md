@@ -42,6 +42,8 @@ Demo accounts (password from `SEED_PASSWORD`, default `cnpaf-dev-change-me`):
 
 Set `OPENAI_API_KEY` to use OpenAI structured JSON. Without it, analysis uses a local heuristic so the queue still runs.
 
+Attachments default to local disk (`STORAGE_BACKEND=local`, `UPLOAD_DIR`). On AWS set `STORAGE_BACKEND=s3` plus `S3_BUCKET` / `S3_REGION`. For MinIO or other S3-compatible stores, also set `S3_ENDPOINT`. EC2 should use an instance role; do not put access keys in git.
+
 ## v1 behavior
 
 - Field visits require de-identification attestation; professor interviews store names; literature stores title/URL

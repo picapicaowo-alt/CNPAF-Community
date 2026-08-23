@@ -34,9 +34,14 @@ services:
       SEED_PASSWORD: ${SEED_PASSWORD:-cnpaf-dev-change-me}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
       UPLOAD_DIR: /app/uploads
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-west-2}
+      S3_PREFIX: ${S3_PREFIX:-cnpaf}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     volumes:
       - uploads:/app/uploads
     networks:

@@ -1,11 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { attachments, records } from "@cnpaf/db/schema";
 import { db } from "@/lib/db";
 import { requireUser, jsonError } from "@/lib/http";
 import { attachmentKey, stripExif } from "@/lib/images";
+import { putObject } from "@/lib/storage";
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { user, error } = await requireUser();
@@ -22,10 +21,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const mime = file.type || "application/octet-stream";
   const stripped = stripExif(buf, mime);
   const key = attachmentKey(record.headVersionId, file.name || "photo.jpg");
-  const dir = process.env.UPLOAD_DIR ?? path.join(process.cwd(), "uploads");
-  const full = path.join(dir, key);
-  await mkdir(path.dirname(full), { recursive: true });
-  await writeFile(full, stripped);
+  await putObject(key, stripped, mime);
   const [row] = await db
     .insert(attachments)
     .values({
