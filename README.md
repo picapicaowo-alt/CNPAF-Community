@@ -59,3 +59,11 @@ Attachments default to local disk (`STORAGE_BACKEND=local`, `UPLOAD_DIR`). On AW
 ## API
 
 Versioned at `/api/v1`. Health: `GET /api/v1/health`.
+
+Frontend integration should use the [backend API contract](docs/backend-api-contract.md), the [OpenAPI description](docs/openapi.v1.yaml), and the exported Zod request schemas in `packages/shared`.
+
+Backend authorization is database-driven RBAC with organization/site/service/template/data/research-use scopes and explicit allow/deny overrides. Run the backend and migration suite with:
+
+```bash
+npm run test:backend
+```

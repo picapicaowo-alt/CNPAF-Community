@@ -6,7 +6,7 @@ import { messages, type Locale } from "@cnpaf/shared";
 type Ctx = {
   locale: Locale;
   setLocale: (l: Locale) => void;
-  t: (typeof messages)["zh"];
+  t: (typeof messages)[Locale];
 };
 
 const LocaleContext = createContext<Ctx | null>(null);

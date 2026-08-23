@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { draftBodySchema, submitBodySchema } from "@cnpaf/shared";
-import { requireUser, jsonError } from "@/lib/http";
+import { requirePermission, requireUser, jsonError } from "@/lib/http";
 import { listRecordsForUser, submitRecord, upsertDraft } from "@/lib/records";
 import { processJobs } from "@/lib/jobs";
 
@@ -13,11 +13,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { user, error } = await requireUser();
-  if (error) return error;
   const json = await req.json();
   const parsed = draftBodySchema.safeParse(json);
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid draft");
+  const { user, error } = await requirePermission("records.create", { siteId: parsed.data.siteId, serviceKey: parsed.data.sourceKind });
+  if (error || !user) return error;
   try {
     const result = await upsertDraft(user!, parsed.data);
     return NextResponse.json(result);
@@ -27,10 +27,10 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const { user, error } = await requireUser();
-  if (error) return error;
   const parsed = submitBodySchema.safeParse(await req.json());
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid submit");
+  const { user, error } = await requirePermission("records.submit", { siteId: parsed.data.siteId, serviceKey: parsed.data.sourceKind });
+  if (error || !user) return error;
   try {
     const result = await submitRecord(user!, parsed.data);
     after(async () => {

@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { CONCERN_ORIGINS, MISSING_REASONS, SOURCE_KINDS } from "./lookups";
 
 export const uuidSchema = z.string().uuid();
 
 export const quantitativeValueSchema = z.object({
-  reason: z.enum(MISSING_REASONS),
+  reason: z.string().min(1),
   value: z.number().nullable(),
 });
 
@@ -25,10 +24,21 @@ export const draftBodySchema = z.object({
   clientRecordId: uuidSchema,
   idempotencyKey: z.string().min(8).max(80),
   localVersion: z.number().int().min(1),
-  sourceKind: z.enum(SOURCE_KINDS),
+  sourceKind: z.string().min(1).max(120),
   siteId: uuidSchema.nullable().optional(),
   visitId: uuidSchema.nullable().optional(),
   activityDefinitionId: uuidSchema.nullable().optional(),
+  templateVersionId: uuidSchema.nullable().optional(),
+  structuredSelections: z.array(z.object({
+    templateFieldId: uuidSchema,
+    optionId: uuidSchema,
+    value: z.record(z.unknown()).default({}),
+  })).default([]),
+  customEntries: z.array(z.object({
+    templateFieldId: uuidSchema,
+    categoryId: uuidSchema.nullable().optional(),
+    customText: z.string().min(1).max(20_000),
+  })).default([]),
   qualitative: z.string().default(""),
   quantitative: z.record(quantitativeValueSchema).default({}),
   attribution: attributionSchema.default({}),
@@ -47,8 +57,25 @@ export const loginBodySchema = z.object({
 
 export const inviteBodySchema = z.object({
   email: z.string().email(),
-  role: z.enum(["volunteer", "coordinator", "admin"]),
+  roleId: uuidSchema.optional(),
+  roleKey: z.string().min(1).max(120).optional(),
+  role: z.string().min(1).max(120).optional(),
+  organizationId: uuidSchema.nullable().optional(),
+  initialScopes: z
+    .object({
+      organizationIds: z.array(uuidSchema).default([]),
+      siteIds: z.array(uuidSchema).default([]),
+      serviceIds: z.array(uuidSchema).default([]),
+      serviceKeys: z.array(z.string().min(1)).default([]),
+      templateIds: z.array(uuidSchema).default([]),
+      dataClasses: z.array(z.string().min(1)).default([]),
+    })
+    .partial()
+    .default({}),
   name: z.string().min(1).max(120).optional(),
+}).refine((value) => value.roleId || value.roleKey || value.role, {
+  message: "roleId or roleKey is required",
+  path: ["roleId"],
 });
 
 export const acceptInviteBodySchema = z.object({
@@ -68,6 +95,7 @@ export const siteCreateBodySchema = z.object({
 export const reviewBodySchema = z.object({
   action: z.enum(["approve", "needs_completion"]),
   annotation: z.string().max(4000).optional(),
+  researchUseStatus: z.string().min(1).max(120).optional(),
   findings: z
     .array(
       z.object({
@@ -75,7 +103,7 @@ export const reviewBodySchema = z.object({
         decision: z.enum(["approve", "edit", "reject"]),
         editedStatement: z.string().optional(),
         canonicalThemeId: uuidSchema.nullable().optional(),
-        origin: z.enum(CONCERN_ORIGINS).optional(),
+        origin: z.string().min(1).optional(),
       }),
     )
     .default([]),
@@ -104,7 +132,7 @@ export const aiOutputSchema = z.object({
     z.object({
       statement: z.string(),
       suggestedCanonicalKey: z.string(),
-      origin: z.enum(CONCERN_ORIGINS),
+      origin: z.string().min(1),
       confidence: z.number().min(0).max(1),
       evidence: z.array(evidenceSchema).min(1),
     }),

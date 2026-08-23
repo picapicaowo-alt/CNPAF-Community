@@ -60,7 +60,7 @@ export const otherHandler: SourceKindHandler = {
   validateAttribution: () => [],
 };
 
-export const SOURCE_KIND_HANDLERS: Record<SourceKind, SourceKindHandler> = {
+export const SOURCE_KIND_HANDLERS: Record<string, SourceKindHandler> = {
   field_visit: fieldVisitHandler,
   professor_interview: professorInterviewHandler,
   literature: literatureHandler,
@@ -68,5 +68,18 @@ export const SOURCE_KIND_HANDLERS: Record<SourceKind, SourceKindHandler> = {
 };
 
 export function getSourceKindHandler(key: string): SourceKindHandler | undefined {
-  return SOURCE_KIND_HANDLERS[key as SourceKind];
+  const registered = SOURCE_KIND_HANDLERS[key];
+  if (registered) return registered;
+  if (!key) return undefined;
+  // Safe generic behavior for new registry-backed business values. New executable
+  // behavior can still opt into a named handler without spreading switch statements.
+  return {
+    key,
+    requiresVisit: false,
+    requiresSite: false,
+    requiresActivity: false,
+    requiresPiiAttestation: true,
+    allowedIdentifierFields: [],
+    validateAttribution: () => [],
+  };
 }

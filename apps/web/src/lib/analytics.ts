@@ -1,109 +1,56 @@
-import { and, eq, sql } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { concerns, records, recordVersions } from "@cnpaf/db/schema";
 import { db } from "./db";
+import { evaluateAuthorization, getAccessContext } from "./authorization";
 
-export async function analyticsSummary() {
-  const field = await db
-    .select({
-      observations: sql<number>`count(*)::int`,
-      visits: sql<number>`count(distinct ${records.visitId})::int`,
-      sites: sql<number>`count(distinct ${records.siteId})::int`,
-    })
-    .from(concerns)
-    .innerJoin(records, eq(concerns.recordId, records.id))
-    .where(
-      and(
-        eq(records.reviewStatus, "approved"),
-        sql`${concerns.origin} in ('field_observation','participant_feedback')`,
-      ),
-    );
-
-  const expert = await db
-    .select({
-      experts: sql<number>`count(distinct ${recordVersions.attribution}->>'professorName')::int`,
-      concerns: sql<number>`count(*)::int`,
-    })
-    .from(concerns)
-    .innerJoin(records, eq(concerns.recordId, records.id))
-    .innerJoin(recordVersions, eq(concerns.recordVersionId, recordVersions.id))
-    .where(and(eq(records.reviewStatus, "approved"), eq(concerns.origin, "expert_interview")));
-
-  const literature = await db
-    .select({
-      publications: sql<number>`count(distinct coalesce(${recordVersions.attribution}->>'url', ${recordVersions.attribution}->>'title'))::int`,
-      concerns: sql<number>`count(*)::int`,
-    })
-    .from(concerns)
-    .innerJoin(records, eq(concerns.recordId, records.id))
-    .innerJoin(recordVersions, eq(concerns.recordVersionId, recordVersions.id))
-    .where(and(eq(records.reviewStatus, "approved"), eq(concerns.origin, "literature")));
-
-  const themes = await db
-    .select({
-      origin: concerns.origin,
-      themeId: concerns.canonicalThemeId,
-      n: sql<number>`count(*)::int`,
-    })
-    .from(concerns)
-    .innerJoin(records, eq(concerns.recordId, records.id))
-    .where(eq(records.reviewStatus, "approved"))
-    .groupBy(concerns.origin, concerns.canonicalThemeId);
-
-  const approvedField = await db
-    .select({
-      siteId: records.siteId,
-      activityDefinitionId: records.activityDefinitionId,
-      quantitative: recordVersions.quantitative,
-      submittedAt: recordVersions.submittedAt,
-    })
-    .from(records)
-    .innerJoin(recordVersions, eq(recordVersions.id, records.headVersionId))
-    .where(and(eq(records.reviewStatus, "approved"), eq(records.sourceKind, "field_visit")));
-
-  const quantitative = approvedField.map((row) => ({
-    siteId: row.siteId,
-    activityDefinitionId: row.activityDefinitionId,
-    week: row.submittedAt,
-    quantitative: row.quantitative,
-  }));
-
-  const started = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(records)
-    .where(eq(records.sourceKind, "field_visit"));
-  const submitted = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(records)
-    .where(
-      and(
-        eq(records.sourceKind, "field_visit"),
-        sql`${records.reviewStatus} in ('pending','approved','needs_completion')`,
-      ),
-    );
-
-  const startN = started[0]?.n ?? 0;
-  const submittedN = submitted[0]?.n ?? 0;
-
+export async function analyticsSummary(userId: string) {
+  const allRecords = await db.select().from(records);
+  const access = await getAccessContext(userId);
+  const authorized = allRecords.filter((record) => evaluateAuthorization(access, "analytics.view", {
+    organizationId: record.organizationId,
+    siteId: record.siteId,
+    serviceKey: record.sourceKind,
+    researchUse: record.researchUseStatus,
+  }).allowed);
+  const approved = authorized.filter((record) => record.reviewStatus === "approved");
+  const approvedIds = approved.map((record) => record.id);
+  const concernRows = approvedIds.length ? await db.select().from(concerns).where(inArray(concerns.recordId, approvedIds)) : [];
+  const versionIds = [...new Set([
+    ...concernRows.map((concern) => concern.recordVersionId),
+    ...(approved.map((record) => record.headVersionId).filter(Boolean) as string[]),
+  ])];
+  const versions = versionIds.length ? await db.select().from(recordVersions).where(inArray(recordVersions.id, versionIds)) : [];
+  const versionById = new Map(versions.map((version) => [version.id, version]));
+  const fieldOrigins = new Set(["field_observation", "participant_feedback"]);
+  const fieldConcerns = concernRows.filter((concern) => fieldOrigins.has(concern.origin));
+  const expertConcerns = concernRows.filter((concern) => concern.origin === "expert_interview");
+  const literatureConcerns = concernRows.filter((concern) => concern.origin === "literature");
+  const experts = new Set(expertConcerns.map((concern) => (versionById.get(concern.recordVersionId)?.attribution as { professorName?: string } | null)?.professorName).filter(Boolean));
+  const publications = new Set(literatureConcerns.map((concern) => {
+    const attribution = versionById.get(concern.recordVersionId)?.attribution as { url?: string; title?: string } | null;
+    return attribution?.url ?? attribution?.title;
+  }).filter(Boolean));
+  const themeCounts = new Map<string, { origin: string; themeId: string | null; n: number }>();
+  for (const concern of concernRows) {
+    const key = `${concern.origin}:${concern.canonicalThemeId ?? "none"}`;
+    const current = themeCounts.get(key);
+    themeCounts.set(key, { origin: concern.origin, themeId: concern.canonicalThemeId, n: (current?.n ?? 0) + 1 });
+  }
+  const approvedField = approved.filter((record) => record.sourceKind === "field_visit" && record.headVersionId).map((record) => {
+    const version = versionById.get(record.headVersionId!);
+    return { siteId: record.siteId, activityDefinitionId: record.activityDefinitionId, week: version?.submittedAt ?? null, quantitative: version?.quantitative ?? {} };
+  });
+  const fieldRecords = approved.filter((record) => fieldConcerns.some((concern) => concern.recordId === record.id));
+  const started = authorized.filter((record) => record.sourceKind === "field_visit").length;
+  const submitted = authorized.filter((record) => record.sourceKind === "field_visit" && ["pending", "approved", "needs_completion"].includes(record.reviewStatus)).length;
   return {
-    fieldSignal: {
-      observations: field[0]?.observations ?? 0,
-      visits: field[0]?.visits ?? 0,
-      sites: field[0]?.sites ?? 0,
-    },
-    expertSignal: {
-      experts: expert[0]?.experts ?? 0,
-      concerns: expert[0]?.concerns ?? 0,
-    },
-    literatureSupport: {
-      publications: literature[0]?.publications ?? 0,
-      concerns: literature[0]?.concerns ?? 0,
-    },
-    themesByOrigin: themes,
-    quantitative,
-    submissionCompletion: {
-      submitted: submittedN,
-      started: startN,
-      rate: startN ? submittedN / startN : 0,
-    },
+    fieldSignal: { observations: fieldConcerns.length, visits: new Set(fieldRecords.map((record) => record.visitId).filter(Boolean)).size, sites: new Set(fieldRecords.map((record) => record.siteId).filter(Boolean)).size },
+    expertSignal: { experts: experts.size, concerns: expertConcerns.length },
+    literatureSupport: { publications: publications.size, concerns: literatureConcerns.length },
+    themesByOrigin: [...themeCounts.values()],
+    quantitative: approvedField,
+    submissionCompletion: { submitted, started, rate: started ? submitted / started : 0 },
+    scopeApplied: true,
+    authorizedRecordCount: authorized.length,
   };
 }

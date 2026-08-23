@@ -74,7 +74,3 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     locale: row.locale,
   };
 }
-
-export function isOps(role: UserRole): boolean {
-  return role === "coordinator" || role === "admin";
-}

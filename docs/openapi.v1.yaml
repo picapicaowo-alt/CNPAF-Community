@@ -1,0 +1,271 @@
+openapi: 3.1.0
+info:
+  title: CNPAF Collect API
+  version: 1.0.0-backend-contract
+  description: Permission- and scope-aware API for CNPAF Collect. Exported Zod schemas in @cnpaf/shared are the canonical TypeScript request contracts.
+servers:
+  - url: /api/v1
+security:
+  - cookieAuth: []
+tags:
+  - name: Session
+  - name: Access
+  - name: Configuration
+  - name: Records
+  - name: AI
+  - name: Reports
+  - name: Ask Collect
+  - name: Exports
+paths:
+  /health:
+    get: { tags: [Session], operationId: health, security: [], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /auth/login:
+    post: { tags: [Session], operationId: login, security: [], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '401': { $ref: '#/components/responses/Unauthorized' } } }
+  /auth/logout:
+    post: { tags: [Session], operationId: logout, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /auth/me:
+    get: { tags: [Session], operationId: getLegacyAuthMe, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '401': { $ref: '#/components/responses/Unauthorized' } } }
+  /account:
+    get: { tags: [Session], operationId: getAccount, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    delete: { tags: [Session], operationId: deleteAccount, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /me:
+    get: { tags: [Session], operationId: getMe, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '401': { $ref: '#/components/responses/Unauthorized' } } }
+  /me/capabilities:
+    get: { tags: [Session], operationId: getCapabilities, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '401': { $ref: '#/components/responses/Unauthorized' } } }
+  /lookups:
+    get: { tags: [Configuration], operationId: getLegacyLookups, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /invites:
+    get: { tags: [Access], operationId: listLegacyInvites, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Access], operationId: createLegacyInvite, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    put: { tags: [Access], operationId: acceptLegacyInvite, security: [], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /users:
+    get: { tags: [Access], operationId: listUsers, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '403': { $ref: '#/components/responses/Forbidden' } } }
+  /users/invite:
+    post: { tags: [Access], operationId: inviteUser, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '403': { $ref: '#/components/responses/Forbidden' } } }
+  /users/{id}:
+    get: { tags: [Access], operationId: getUser, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '404': { $ref: '#/components/responses/NotFound' } } }
+  /users/{id}/status:
+    patch: { tags: [Access], operationId: updateUserStatus, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '403': { $ref: '#/components/responses/Forbidden' } } }
+  /users/{id}/role-assignments:
+    post: { tags: [Access], operationId: createRoleAssignment, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /users/{id}/permission-scopes:
+    post: { tags: [Access], operationId: createPermissionScope, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /permission-scopes/{id}:
+    patch: { tags: [Access], operationId: updatePermissionScope, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    delete: { tags: [Access], operationId: deletePermissionScope, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '204': { description: Deleted } } }
+  /roles:
+    get: { tags: [Access], operationId: listRoles, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users:
+    get: { tags: [Access], operationId: adminListUsers, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users/{userId}:
+    get: { tags: [Access], operationId: adminGetUser, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Access], operationId: adminUpdateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users/{userId}/access:
+    get: { tags: [Access], operationId: getUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    put: { tags: [Access], operationId: replaceUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /admin/users/{userId}/roles:
+    get: { tags: [Access], operationId: getUserRoles, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    put: { tags: [Access], operationId: replaceUserRoles, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users/{userId}/deactivate:
+    post: { tags: [Access], operationId: deactivateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users/{userId}/reactivate:
+    post: { tags: [Access], operationId: reactivateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/roles:
+    get: { tags: [Access], operationId: adminListRoles, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Access], operationId: createRole, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/roles/{roleId}:
+    patch: { tags: [Access], operationId: updateRole, parameters: [{ $ref: '#/components/parameters/RoleId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/permissions:
+    get: { tags: [Access], operationId: listPermissions, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/audit-events:
+    get: { tags: [Access], operationId: listAuditEvents, parameters: [{ name: before, in: query, description: Opaque cursor returned as nextBefore; ISO date-time is accepted for legacy clients., schema: { type: string } }, { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 250, default: 100 } }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /config/registries/{registryKey}:
+    get: { tags: [Configuration], operationId: getRegistry, parameters: [{ $ref: '#/components/parameters/RegistryKey' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /config/registries/{registryKey}/items:
+    post: { tags: [Configuration], operationId: createRegistryItem, parameters: [{ $ref: '#/components/parameters/RegistryKey' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /config/registries/{registryKey}/items/{id}:
+    patch: { tags: [Configuration], operationId: updateRegistryItem, parameters: [{ $ref: '#/components/parameters/RegistryKey' }, { $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /config/registries/{registryKey}/items/{id}/archive:
+    post: { tags: [Configuration], operationId: archiveRegistryItem, parameters: [{ $ref: '#/components/parameters/RegistryKey' }, { $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /templates:
+    get: { tags: [Configuration], operationId: listTemplates, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Configuration], operationId: createTemplate, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /templates/{id}:
+    get: { tags: [Configuration], operationId: getTemplate, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /templates/{id}/versions:
+    post: { tags: [Configuration], operationId: createTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /template-versions/{id}:
+    get: { tags: [Configuration], operationId: getTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Configuration], operationId: updateTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /template-versions/{id}/publish:
+    post: { tags: [Configuration], operationId: publishTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /template-versions/{id}/sections:
+    post: { tags: [Configuration], operationId: createTemplateSection, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /template-sections/{id}/fields:
+    post: { tags: [Configuration], operationId: createTemplateField, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /template-fields/{id}/options:
+    post: { tags: [Configuration], operationId: createTemplateFieldOption, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /template-field-options/{id}:
+    patch: { tags: [Configuration], operationId: updateTemplateFieldOption, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /template-field-options/{id}/archive:
+    post: { tags: [Configuration], operationId: archiveTemplateFieldOption, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /records:
+    get: { tags: [Records], operationId: listRecords, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Records], operationId: upsertDraft, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    put: { tags: [Records], operationId: submitRecord, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /records/{id}:
+    get: { tags: [Records], operationId: getRecord, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '404': { $ref: '#/components/responses/NotFound' } } }
+  /records/{id}/attachments:
+    post: { tags: [Records], operationId: createRecordAttachment, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /records/{id}/attachments/{attachmentId}:
+    get: { tags: [Records], operationId: getRecordAttachment, parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/AttachmentId' }], responses: { '200': { description: Attachment bytes }, '403': { $ref: '#/components/responses/Forbidden' } } }
+  /records/{id}/ai/classify:
+    post: { tags: [AI], operationId: classifyRecord, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '202': { $ref: '#/components/responses/JsonSuccess' } } }
+  /records/{id}/review:
+    post: { tags: [Records], operationId: legacyReviewRecord, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /records/{id}/review-decisions:
+    post: { tags: [Records], operationId: reviewRecord, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /review-queue:
+    get: { tags: [Records], operationId: getReviewQueue, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /privacy-queue:
+    get: { tags: [Records], operationId: getPrivacyQueue, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /privacy-flags/{id}/resolve:
+    post: { tags: [Records], operationId: resolvePrivacyFlag, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /safety-queue:
+    get: { tags: [Records], operationId: getSafetyQueue, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /safety-flags/{id}/resolve:
+    post: { tags: [Records], operationId: resolveSafetyFlag, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /safety:
+    get: { tags: [Records], operationId: getLegacySafetyFlags, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Records], operationId: resolveLegacySafetyFlag, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /custom-entries:
+    get: { tags: [Configuration], operationId: listCustomEntries, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /custom-entries/{id}/map-existing:
+    post: { tags: [Configuration], operationId: mapCustomEntryExisting, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /custom-entries/{id}/create-option:
+    post: { tags: [Configuration], operationId: createOptionFromCustomEntry, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /custom-entries/{id}/keep-free-text:
+    post: { tags: [Configuration], operationId: keepCustomEntryFreeText, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /custom-entries/{id}/dismiss:
+    post: { tags: [Configuration], operationId: dismissCustomEntry, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /sites:
+    get: { tags: [Configuration], operationId: listSites, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Configuration], operationId: createSite, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Configuration], operationId: mergeSite, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/runs:
+    get: { tags: [AI], operationId: listAiRuns, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/runs/{id}:
+    get: { tags: [AI], operationId: getAiRun, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/runs/{id}/findings:
+    get: { tags: [AI], operationId: listAiRunFindings, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/runs/{id}/reclassify:
+    post: { tags: [AI], operationId: reclassify, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '202': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/runs/{id}/retry:
+    post: { tags: [AI], operationId: retryAiRun, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '202': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/findings/{id}/review:
+    post: { tags: [AI], operationId: reviewAiFinding, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/workflows:
+    get: { tags: [AI], operationId: listAiWorkflows, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [AI], operationId: createAiWorkflow, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/workflows/{id}/versions:
+    post: { tags: [AI], operationId: createAiWorkflowVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/workflow-versions/{id}:
+    patch: { tags: [AI], operationId: updateAiWorkflowVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/workflow-versions/{id}/publish:
+    post: { tags: [AI], operationId: publishAiWorkflowVersion, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/prompt-versions:
+    get: { tags: [AI], operationId: listPromptVersions, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [AI], operationId: createPromptVersion, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/output-schema-versions:
+    get: { tags: [AI], operationId: listOutputSchemaVersions, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [AI], operationId: createOutputSchemaVersion, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/output-schema-versions/{id}:
+    patch: { tags: [AI], operationId: updateOutputSchemaVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /ai/output-schema-versions/{id}/publish:
+    post: { tags: [AI], operationId: publishOutputSchemaVersion, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/provider-configs:
+    get: { tags: [AI], operationId: listAiProviderConfigs, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [AI], operationId: createAiProviderConfig, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/provider-configs/{id}:
+    patch: { tags: [AI], operationId: updateAiProviderConfig, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/model-configs:
+    get: { tags: [AI], operationId: listAiModelConfigs, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [AI], operationId: createAiModelConfig, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ai/model-configs/{id}:
+    patch: { tags: [AI], operationId: updateAiModelConfig, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /analytics:
+    get: { tags: [Reports], operationId: getAnalytics, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /reports:
+    get: { tags: [Reports], operationId: listReports, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-runs:
+    post: { tags: [Reports], operationId: createReportRun, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '202': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-runs/{id}:
+    get: { tags: [Reports], operationId: getReportRun, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-templates:
+    get: { tags: [Reports], operationId: listReportTemplates, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Reports], operationId: createReportTemplate, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-templates/{id}/versions:
+    post: { tags: [Reports], operationId: createReportTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-template-versions/{id}:
+    patch: { tags: [Reports], operationId: updateReportTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /report-template-versions/{id}/publish:
+    post: { tags: [Reports], operationId: publishReportTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /reports/{id}:
+    get: { tags: [Reports], operationId: getReport, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /reports/{id}/approve:
+    post: { tags: [Reports], operationId: approveReport, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ask-collect/conversations:
+    post: { tags: [Ask Collect], operationId: createAskConversation, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ask-collect/conversations/{id}:
+    get: { tags: [Ask Collect], operationId: getAskConversation, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /ask-collect/conversations/{id}/messages:
+    post: { tags: [Ask Collect], operationId: createAskMessage, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /export-jobs:
+    get: { tags: [Exports], operationId: listExportJobs, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Exports], operationId: createExportJob, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '202': { $ref: '#/components/responses/JsonSuccess' } } }
+  /export-jobs/{id}:
+    get: { tags: [Exports], operationId: getExportJob, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /export-jobs/{id}/download:
+    get: { tags: [Exports], operationId: downloadExport, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { description: Generated JSON or CSV file, content: { application/json: { schema: {} }, text/csv: { schema: { type: string } } } }, '403': { $ref: '#/components/responses/Forbidden' } } }
+  /jobs:
+    get: { tags: [Configuration], operationId: listInternalJobs, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Configuration], operationId: processInternalJobs, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Configuration], operationId: retryInternalJob, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: cnpaf_session }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    UserId: { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    RoleId: { name: roleId, in: path, required: true, schema: { type: string, format: uuid } }
+    AttachmentId: { name: attachmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    RegistryKey: { name: registryKey, in: path, required: true, schema: { type: string } }
+  requestBodies:
+    JsonBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, additionalProperties: true }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        authorization: { type: string }
+  responses:
+    JsonSuccess:
+      description: Successful JSON response; see the named Zod contract and backend API contract document.
+      content: { application/json: { schema: { type: object, additionalProperties: true } } }
+    Unauthorized:
+      description: Authentication required
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Effective permission or scope denied
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Resource not found or hidden by access policy
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Immutable version or invalid state transition
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

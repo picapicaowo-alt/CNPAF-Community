@@ -6,3 +6,5 @@ export * from "./prompt";
 export * from "./contracts";
 export * from "./attribution";
 export * from "./source-kinds";
+export * from "./permissions";
+export * from "./backend-contracts";

@@ -1,10 +1,17 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import {
   activityDefinitions,
   annotations,
   records,
   recordVersions,
+  privacyFlags,
+  recordCustomEntries,
+  recordStructuredSelections,
   visits,
+  templateFieldOptions,
+  templateFields,
+  templateSections,
+  templateVersions,
 } from "@cnpaf/db/schema";
 import {
   getSourceKindHandler,
@@ -17,6 +24,32 @@ import { contentHash } from "./crypto";
 import { enqueueAnalyze } from "./jobs";
 import { scanPrivacy } from "./pii";
 import type { SessionUser } from "./session";
+import { evaluateAuthorization, getAccessContext } from "./authorization";
+
+function resourceForRecord(record: typeof records.$inferSelect) {
+  return {
+    organizationId: record.organizationId,
+    siteId: record.siteId,
+    serviceKey: record.sourceKind,
+    researchUse: record.researchUseStatus,
+    ownerUserId: record.createdById,
+  };
+}
+
+function approvedEvidenceEligible(record: typeof records.$inferSelect) {
+  return record.reviewStatus === "approved" &&
+    ["clear", "redacted"].includes(record.privacyStatus) &&
+    record.researchUseStatus === "approved_for_research";
+}
+
+export async function recordAccessMode(userId: string, record: typeof records.$inferSelect) {
+  const access = await getAccessContext(userId);
+  const resource = resourceForRecord(record);
+  if (evaluateAuthorization(access, "records.view", resource).allowed) return "full" as const;
+  if (evaluateAuthorization(access, "records.view_own", resource).allowed) return "full" as const;
+  if (approvedEvidenceEligible(record) && evaluateAuthorization(access, "records.view_approved", { ...resource, dataClassification: "approved_evidence" }).allowed) return "approved_evidence" as const;
+  return null;
+}
 
 function completeness(
   quantitative: Record<string, { reason: string; value: number | null }>,
@@ -31,13 +64,49 @@ async function loadRecordByClient(clientRecordId: string) {
   return (await db.select().from(records).where(eq(records.clientRecordId, clientRecordId)).limit(1))[0];
 }
 
+async function validateTemplatePayload(body: DraftBody) {
+  if (!body.templateVersionId) {
+    if (body.structuredSelections.length || body.customEntries.length) throw new Error("templateVersionId is required for structured template data");
+    return;
+  }
+  const version = (await db.select().from(templateVersions).where(eq(templateVersions.id, body.templateVersionId)).limit(1))[0];
+  if (!version || version.status !== "published") throw new Error("Published template version not found");
+  const sections = await db.select({ id: templateSections.id }).from(templateSections).where(eq(templateSections.templateVersionId, body.templateVersionId));
+  const sectionIds = sections.map((section) => section.id);
+  const fields = sectionIds.length ? await db.select().from(templateFields).where(inArray(templateFields.templateSectionId, sectionIds)) : [];
+  const fieldById = new Map(fields.map((field) => [field.id, field]));
+  const optionIds = body.structuredSelections.map((selection) => selection.optionId);
+  const options = optionIds.length ? await db.select().from(templateFieldOptions).where(inArray(templateFieldOptions.id, optionIds)) : [];
+  const optionById = new Map(options.map((option) => [option.id, option]));
+  for (const selection of body.structuredSelections) {
+    const field = fieldById.get(selection.templateFieldId);
+    const option = optionById.get(selection.optionId);
+    if (!field || !option || option.templateFieldId !== field.id || option.status !== "active") throw new Error("Structured selection does not belong to the published template");
+  }
+  for (const entry of body.customEntries) {
+    const field = fieldById.get(entry.templateFieldId);
+    if (!field?.allowCustomEntry) throw new Error("Custom input is not enabled for this template field");
+  }
+}
+
+async function replaceDraftTemplateData(recordVersionId: string, body: DraftBody) {
+  await db.transaction(async (tx) => {
+    await tx.delete(recordStructuredSelections).where(eq(recordStructuredSelections.recordVersionId, recordVersionId));
+    await tx.delete(recordCustomEntries).where(eq(recordCustomEntries.recordVersionId, recordVersionId));
+    if (body.structuredSelections.length) await tx.insert(recordStructuredSelections).values(body.structuredSelections.map((selection) => ({ recordVersionId, ...selection })));
+    if (body.customEntries.length) await tx.insert(recordCustomEntries).values(body.customEntries.map((entry) => ({ recordVersionId, ...entry, customText: entry.customText.trim() })));
+  });
+}
+
 export async function upsertDraft(user: SessionUser, body: DraftBody) {
   const handler = getSourceKindHandler(body.sourceKind);
   if (!handler) throw new Error("Unknown sourceKind");
+  await validateTemplatePayload(body);
 
   let record = await loadRecordByClient(body.clientRecordId);
-  if (record && record.createdById !== user.id && user.role === "volunteer") {
-    throw new Error("Forbidden");
+  if (record) {
+    const access = await getAccessContext(user.id);
+    if (!evaluateAuthorization(access, "records.edit_own", resourceForRecord(record)).allowed) throw new Error("Forbidden");
   }
 
   if (
@@ -89,7 +158,9 @@ export async function upsertDraft(user: SessionUser, body: DraftBody) {
     qualitative: body.qualitative,
     quantitative: body.quantitative,
     attribution: body.attribution,
+    occurredAt: body.occurredAt ? new Date(body.occurredAt) : null,
     activityDefinitionId: body.activityDefinitionId ?? null,
+    templateVersionId: body.templateVersionId ?? null,
     contentLanguage: body.contentLanguage,
     localVersion: body.localVersion,
     serverVersion: (draft?.serverVersion ?? 0) + 1,
@@ -117,6 +188,8 @@ export async function upsertDraft(user: SessionUser, body: DraftBody) {
     draft = updated;
   }
 
+  await replaceDraftTemplateData(draft.id, body);
+
   await db
     .update(records)
     .set({
@@ -141,7 +214,7 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
     throw new Error("De-identification attestation is required for field visits");
   }
   if (handler.requiresSite && !body.siteId) throw new Error("Site is required");
-  if (handler.requiresActivity && !body.activityDefinitionId) throw new Error("Activity is required");
+  if (handler.requiresActivity && !body.activityDefinitionId && !body.templateVersionId) throw new Error("Activity or template is required");
   if (!body.qualitative.trim()) throw new Error("Qualitative notes are required");
 
   const existing = body.idempotencyKey
@@ -188,9 +261,12 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
   const snapshotNumber = latest && !latest.isSnapshot ? latest.versionNumber : nextNumber || 1;
 
   const hash = contentHash({
+    occurredAt: body.occurredAt ?? null,
     qualitative: body.qualitative,
     quantitative: body.quantitative,
     attribution: body.attribution,
+    structuredSelections: body.structuredSelections,
+    customEntries: body.customEntries,
   });
 
   const def = body.activityDefinitionId
@@ -210,6 +286,8 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
     quantitativeMissing: body.quantitative,
     attribution: body.attribution,
     activityDefinitionId: body.activityDefinitionId ?? null,
+    templateVersionId: body.templateVersionId ?? null,
+    occurredAt: body.occurredAt ? new Date(body.occurredAt) : null,
     piiAttestation: body.piiAttestation,
     contentLanguage: body.contentLanguage,
     contentHash: hash,
@@ -240,7 +318,7 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
 
   const scan = scanPrivacy({
     sourceKind: body.sourceKind,
-    qualitative: body.qualitative,
+    qualitative: [body.qualitative, ...body.customEntries.map((entry) => entry.customText)].join("\n"),
     attribution: body.attribution ?? {},
   });
 
@@ -270,6 +348,15 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
     metadata: { versionId: version.id, privacy: scan.status },
   });
 
+  if (scan.status === "flagged") {
+    await db.insert(privacyFlags).values({
+      recordId: record.id,
+      recordVersionId: version.id,
+      status: "open",
+      hits: scan.hits,
+    });
+  }
+
   if (scan.status !== "flagged") {
     await enqueueAnalyze(version.id);
   }
@@ -278,25 +365,32 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
 }
 
 export async function listRecordsForUser(user: SessionUser) {
-  if (user.role === "volunteer") {
-    return db
-      .select()
-      .from(records)
-      .where(eq(records.createdById, user.id))
-      .orderBy(desc(records.updatedAt));
-  }
-  return db.select().from(records).orderBy(desc(records.updatedAt));
+  const rows = await db.select().from(records).orderBy(desc(records.updatedAt));
+  const access = await getAccessContext(user.id);
+  return rows.filter((record) => {
+    const resource = resourceForRecord(record);
+    if (evaluateAuthorization(access, "records.view", resource).allowed) return true;
+    if (evaluateAuthorization(access, "records.view_own", resource).allowed) return true;
+    return approvedEvidenceEligible(record) && evaluateAuthorization(access, "records.view_approved", { ...resource, dataClassification: "approved_evidence" }).allowed;
+  });
 }
 
 export async function getRecordBundle(id: string, user: SessionUser) {
   const record = (await db.select().from(records).where(eq(records.id, id)).limit(1))[0];
   if (!record) return null;
-  if (user.role === "volunteer" && record.createdById !== user.id) return null;
+  const accessMode = await recordAccessMode(user.id, record);
+  if (!accessMode) return null;
+  if (accessMode === "approved_evidence") return { record, versions: [], notes: [], accessMode };
   const versions = await db
     .select()
     .from(recordVersions)
     .where(eq(recordVersions.recordId, id))
     .orderBy(desc(recordVersions.versionNumber));
   const notes = await db.select().from(annotations).where(eq(annotations.recordId, id));
-  return { record, versions, notes };
+  const versionIds = versions.map((version) => version.id);
+  const [structuredSelections, customEntries] = versionIds.length ? await Promise.all([
+    db.select().from(recordStructuredSelections).where(inArray(recordStructuredSelections.recordVersionId, versionIds)),
+    db.select().from(recordCustomEntries).where(inArray(recordCustomEntries.recordVersionId, versionIds)),
+  ]) : [[], []];
+  return { record, versions, notes, structuredSelections, customEntries, accessMode };
 }

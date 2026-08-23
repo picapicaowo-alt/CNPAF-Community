@@ -34,7 +34,7 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
   const [url, setUrl] = useState("");
   const [authors, setAuthors] = useState("");
   const [localVersion, setLocalVersion] = useState(1);
-  const [status, setStatus] = useState(t.saveDraft);
+  const [status, setStatus] = useState<string>(t.saveDraft);
   const [error, setError] = useState("");
   const [online, setOnline] = useState(true);
 

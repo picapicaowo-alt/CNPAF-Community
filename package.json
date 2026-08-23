@@ -15,7 +15,8 @@
     "docker:up": "docker compose up -d postgres",
     "docker:down": "docker compose down",
     "docker:app": "docker compose --profile app up --build",
-    "db:studio": "npm run studio -w @cnpaf/db"
+    "db:studio": "npm run studio -w @cnpaf/db",
+    "test:backend": "npm run test:backend -w @cnpaf/web && npm run test:migrations -w @cnpaf/db"
   },
   "engines": {
     "node": ">=20"

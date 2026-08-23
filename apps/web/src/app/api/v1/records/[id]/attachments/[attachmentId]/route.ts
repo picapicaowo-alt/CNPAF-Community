@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { attachments, records } from "@cnpaf/db/schema";
 import { db } from "@/lib/db";
 import { requireUser, jsonError } from "@/lib/http";
+import { authorizeAny } from "@/lib/authorization";
 import { getObject } from "@/lib/storage";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string; attachmentId: string }> }) {
@@ -11,7 +12,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; at
   const { id, attachmentId } = await ctx.params;
   const record = (await db.select().from(records).where(eq(records.id, id)).limit(1))[0];
   if (!record?.headVersionId) return jsonError("Record not found", 404);
-  if (user!.role === "volunteer" && record.createdById !== user!.id) return jsonError("Forbidden", 403);
+  const decision = await authorizeAny({ userId: user!.id, permissions: ["records.view", "records.view_own"], resource: { organizationId: record.organizationId, siteId: record.siteId, serviceKey: record.sourceKind, ownerUserId: record.createdById } });
+  if (!decision.allowed) return jsonError("Forbidden", 403);
 
   const file = (
     await db
@@ -23,7 +25,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; at
   if (!file) return jsonError("Attachment not found", 404);
 
   const { body, contentType } = await getObject(file.storageKey);
-  return new NextResponse(body, {
+  return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": contentType || file.mimeType,
       "Content-Length": String(body.length),

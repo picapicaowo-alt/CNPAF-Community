@@ -13,19 +13,20 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
     "seed": "tsx src/seed.ts",
-    "studio": "drizzle-kit studio"
+    "studio": "drizzle-kit studio",
+    "test:migrations": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
     "@cnpaf/shared": "0.1.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.40.0",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "drizzle-kit": "^0.30.5",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   }

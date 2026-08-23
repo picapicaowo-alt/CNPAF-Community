@@ -59,7 +59,8 @@ export async function putObject(key: string, body: Buffer, contentType: string) 
     return;
   }
   assertSafeKey(key);
-  const full = path.join(localDir(), key);
+  // The runtime upload root is intentionally configurable and contains data, not application code.
+  const full = path.join(/* turbopackIgnore: true */ localDir(), key);
   await mkdir(path.dirname(full), { recursive: true });
   await writeFile(full, body);
 }
@@ -72,6 +73,6 @@ export async function getObject(key: string): Promise<{ body: Buffer; contentTyp
     return { body: Buffer.from(bytes), contentType: out.ContentType };
   }
   assertSafeKey(key);
-  const body = await readFile(path.join(localDir(), key));
+  const body = await readFile(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ localDir(), key));
   return { body };
 }
