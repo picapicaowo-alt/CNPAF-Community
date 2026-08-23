@@ -12,6 +12,8 @@ Not a research OS. Not an App Store build. Same site for volunteers (phone) and 
 
 Lookups live in seed tables (not Postgres ENUMs). Activity definitions, canonical themes, and AI prompts are versioned.
 
+**Branches:** backend work on `cursor/backend`, frontend work on `cursor/frontend` (same repo). See [docs/branch-workflow.md](docs/branch-workflow.md).
+
 ## Setup
 
 Postgres runs in Docker. Next.js usually runs on the host.
