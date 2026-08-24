@@ -50,6 +50,8 @@ export const users = pgTable(
     organizationId: uuid("organization_id").references(() => organizations.id),
     locale: text("locale").notNull().default("zh"),
     status: text("status").notNull().default("active"),
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
+    passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [uniqueIndex("users_email").on(t.email)],
@@ -209,6 +211,9 @@ export const sites = pgTable(
     name: text("name").notNull(),
     siteType: text("site_type").notNull(),
     region: text("region"),
+    address: text("address"),
+    latitude: numeric("latitude", { precision: 9, scale: 6 }),
+    longitude: numeric("longitude", { precision: 9, scale: 6 }),
     canonicalStatus: text("canonical_status").notNull().default("unverified"),
     mergedIntoId: uuid("merged_into_id"),
     createdById: uuid("created_by_id").references(() => users.id),
@@ -375,6 +380,197 @@ export const templateFieldOptions = pgTable(
   ],
 );
 
+export const programs = pgTable(
+  "programs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    key: text("key").notNull(),
+    nameEn: text("name_en").notNull(),
+    nameZh: text("name_zh").notNull(),
+    descriptionEn: text("description_en"),
+    descriptionZh: text("description_zh"),
+    status: text("status").notNull().default("active"),
+    configuration: jsonb("configuration").notNull().default({}),
+    createdById: uuid("created_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("programs_org_key").on(t.organizationId, t.key),
+    index("programs_org_status").on(t.organizationId, t.status),
+  ],
+);
+
+export const programMemberships = pgTable(
+  "program_memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id").notNull().references(() => programs.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    membershipRoleKey: text("membership_role_key").notNull(),
+    status: text("status").notNull().default("active"),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    assignedById: uuid("assigned_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("program_memberships_active_unique").on(t.programId, t.userId).where(sql`${t.status} = 'active'`),
+    index("program_memberships_user_status").on(t.userId, t.status),
+    index("program_memberships_program_status").on(t.programId, t.status),
+  ],
+);
+
+export const userAffiliations = pgTable(
+  "user_affiliations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    programId: uuid("program_id").references(() => programs.id),
+    affiliationTypeKey: text("affiliation_type_key").notNull(),
+    institutionName: text("institution_name").notNull(),
+    institutionTypeKey: text("institution_type_key"),
+    departmentName: text("department_name"),
+    title: text("title"),
+    metadata: jsonb("metadata").notNull().default({}),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    status: text("status").notNull().default("active"),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    createdById: uuid("created_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("user_affiliations_user_status").on(t.userId, t.status),
+    index("user_affiliations_organization").on(t.organizationId),
+    index("user_affiliations_program").on(t.programId),
+  ],
+);
+
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id").notNull().references(() => programs.id),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    templateVersionId: uuid("template_version_id").notNull().references(() => templateVersions.id),
+    siteId: uuid("site_id").references(() => sites.id),
+    taskTypeKey: text("task_type_key").notNull(),
+    title: text("title").notNull(),
+    instructions: text("instructions"),
+    status: text("status").notNull().default("draft"),
+    priority: integer("priority").notNull().default(0),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    opensAt: timestamp("opens_at", { withTimezone: true }),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
+    configuration: jsonb("configuration").notNull().default({}),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("tasks_program_status_due").on(t.programId, t.status, t.dueAt),
+    index("tasks_organization_status").on(t.organizationId, t.status),
+    index("tasks_template_version").on(t.templateVersionId),
+    index("tasks_site").on(t.siteId),
+  ],
+);
+
+export const taskAssignments = pgTable(
+  "task_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id").notNull().references(() => tasks.id),
+    assigneeId: uuid("assignee_id").notNull().references(() => users.id),
+    assignedById: uuid("assigned_by_id").notNull().references(() => users.id),
+    status: text("status").notNull().default("assigned"),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
+    declineReason: text("decline_reason"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    recordId: uuid("record_id"),
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("task_assignments_task_assignee").on(t.taskId, t.assigneeId),
+    index("task_assignments_assignee_status").on(t.assigneeId, t.status),
+    index("task_assignments_task_status").on(t.taskId, t.status),
+  ],
+);
+
+export const locationAliases = pgTable(
+  "location_aliases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id").notNull().references(() => sites.id),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    normalizedAlias: text("normalized_alias").notNull(),
+    displayAlias: text("display_alias").notNull(),
+    language: text("language"),
+    status: text("status").notNull().default("active"),
+    createdById: uuid("created_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("location_aliases_org_normalized").on(t.organizationId, t.normalizedAlias),
+    index("location_aliases_site").on(t.siteId),
+  ],
+);
+
+export const locationMergeHistory = pgTable(
+  "location_merge_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceSiteId: uuid("source_site_id").notNull().references(() => sites.id),
+    destinationSiteId: uuid("destination_site_id").notNull().references(() => sites.id),
+    mergedById: uuid("merged_by_id").notNull().references(() => users.id),
+    reason: text("reason").notNull(),
+    movedRecordCount: integer("moved_record_count").notNull().default(0),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("location_merge_source").on(t.sourceSiteId), index("location_merge_destination").on(t.destinationSiteId)],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    kindKey: text("kind_key").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    entityType: text("entity_type"),
+    entityId: uuid("entity_id"),
+    status: text("status").notNull().default("unread"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    metadata: jsonb("metadata").notNull().default({}),
+    ...timestamps,
+  },
+  (t) => [
+    index("notifications_user_status_created").on(t.userId, t.status, t.createdAt),
+    index("notifications_entity").on(t.entityType, t.entityId),
+  ],
+);
+
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    kindKey: text("kind_key").notNull(),
+    inAppEnabled: boolean("in_app_enabled").notNull().default(true),
+    emailEnabled: boolean("email_enabled").notNull().default(false),
+    pushEnabled: boolean("push_enabled").notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("notification_preferences_user_kind").on(t.userId, t.kindKey)],
+);
+
 export const activityDefinitions = pgTable(
   "activity_definitions",
   {
@@ -443,6 +639,9 @@ export const records = pgTable(
     visitId: uuid("visit_id").references(() => visits.id),
     siteId: uuid("site_id").references(() => sites.id),
     organizationId: uuid("organization_id").references(() => organizations.id),
+    programId: uuid("program_id").references(() => programs.id),
+    taskId: uuid("task_id").references(() => tasks.id),
+    taskAssignmentId: uuid("task_assignment_id").references(() => taskAssignments.id),
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id),
@@ -462,6 +661,9 @@ export const records = pgTable(
     index("records_created_by").on(t.createdById),
     index("records_review").on(t.reviewStatus),
     index("records_source").on(t.sourceKind),
+    index("records_program").on(t.programId),
+    index("records_task").on(t.taskId),
+    index("records_task_assignment").on(t.taskAssignmentId),
     index("records_scope_review").on(t.organizationId, t.siteId, t.sourceKind, t.reviewStatus),
   ],
 );
@@ -486,6 +688,7 @@ export const recordVersions = pgTable(
     piiAttestation: boolean("pii_attestation").notNull().default(false),
     contentLanguage: text("content_language").notNull().default("zh"),
     contentHash: text("content_hash"),
+    requestFingerprint: text("request_fingerprint"),
     localVersion: integer("local_version").notNull().default(1),
     serverVersion: integer("server_version").notNull().default(1),
     idempotencyKey: text("idempotency_key"),
@@ -957,6 +1160,192 @@ export const reportEvidenceLinks = pgTable(
   ],
 );
 
+// Human-authored reports are separate from generated report artifacts. The
+// artifact is an AI/output snapshot; these tables preserve authoritative edits.
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    programId: uuid("program_id").references(() => programs.id),
+    reportTemplateVersionId: uuid("report_template_version_id").references(() => reportTemplateVersions.id),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("draft"),
+    headVersionId: uuid("head_version_id"),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    publishedById: uuid("published_by_id").references(() => users.id),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("reports_organization_status_updated").on(t.organizationId, t.status, t.updatedAt),
+    index("reports_program").on(t.programId),
+    index("reports_template_version").on(t.reportTemplateVersionId),
+  ],
+);
+
+export const reportVersions = pgTable(
+  "report_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id").notNull().references(() => reports.id),
+    versionNumber: integer("version_number").notNull(),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("draft"),
+    changeSummary: text("change_summary"),
+    filters: jsonb("filters").notNull().default({}),
+    evidencePolicy: jsonb("evidence_policy").notNull().default({}),
+    sourceReportArtifactId: uuid("source_report_artifact_id").references(() => reportArtifacts.id),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("report_versions_report_number").on(t.reportId, t.versionNumber),
+    index("report_versions_report_status").on(t.reportId, t.status),
+    index("report_versions_source_artifact").on(t.sourceReportArtifactId),
+  ],
+);
+
+export const reportSections = pgTable(
+  "report_sections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportVersionId: uuid("report_version_id").notNull().references(() => reportVersions.id),
+    sectionKey: text("section_key").notNull(),
+    title: text("title").notNull(),
+    content: text("content").notNull().default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
+    aiSuggestion: text("ai_suggestion"),
+    aiSuggestionRunId: uuid("ai_suggestion_run_id").references(() => aiRuns.id),
+    aiSuggestionStatus: text("ai_suggestion_status").notNull().default("none"),
+    aiSuggestedAt: timestamp("ai_suggested_at", { withTimezone: true }),
+    lastEditedById: uuid("last_edited_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("report_sections_version_key").on(t.reportVersionId, t.sectionKey),
+    index("report_sections_version_order").on(t.reportVersionId, t.sortOrder),
+    index("report_sections_ai_run").on(t.aiSuggestionRunId),
+  ],
+);
+
+export const reportVersionEvidenceLinks = pgTable(
+  "report_version_evidence_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportVersionId: uuid("report_version_id").notNull().references(() => reportVersions.id),
+    reportSectionId: uuid("report_section_id").references(() => reportSections.id),
+    evidenceType: text("evidence_type").notNull(),
+    evidenceId: uuid("evidence_id").notNull(),
+    citationLabel: text("citation_label"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("report_version_evidence_unique").on(t.reportVersionId, t.reportSectionId, t.evidenceType, t.evidenceId),
+    index("report_version_evidence_lookup").on(t.evidenceType, t.evidenceId),
+  ],
+);
+
+export const datasets = pgTable(
+  "datasets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    programId: uuid("program_id").references(() => programs.id),
+    name: text("name").notNull(),
+    description: text("description"),
+    status: text("status").notNull().default("active"),
+    dataClassification: text("data_classification").notNull().default("approved_evidence"),
+    selectionQuery: jsonb("selection_query").notNull().default({}),
+    fieldPolicy: jsonb("field_policy").notNull().default({}),
+    headVersionId: uuid("head_version_id"),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("datasets_organization_status_updated").on(t.organizationId, t.status, t.updatedAt),
+    index("datasets_program").on(t.programId),
+  ],
+);
+
+export const datasetVersions = pgTable(
+  "dataset_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    datasetId: uuid("dataset_id").notNull().references(() => datasets.id),
+    versionNumber: integer("version_number").notNull(),
+    status: text("status").notNull().default("building"),
+    selectionQuery: jsonb("selection_query").notNull().default({}),
+    fieldPolicy: jsonb("field_policy").notNull().default({}),
+    recordCount: integer("record_count").notNull().default(0),
+    contentHash: text("content_hash").notNull(),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dataset_versions_dataset_number").on(t.datasetId, t.versionNumber),
+    index("dataset_versions_dataset_created").on(t.datasetId, t.createdAt),
+  ],
+);
+
+export const datasetRecords = pgTable(
+  "dataset_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    datasetVersionId: uuid("dataset_version_id").notNull().references(() => datasetVersions.id),
+    recordId: uuid("record_id").notNull().references(() => records.id),
+    recordVersionId: uuid("record_version_id").notNull().references(() => recordVersions.id),
+    ordinal: integer("ordinal").notNull(),
+    includedFields: jsonb("included_fields").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dataset_records_version_record").on(t.datasetVersionId, t.recordId),
+    uniqueIndex("dataset_records_version_ordinal").on(t.datasetVersionId, t.ordinal),
+    index("dataset_records_record_version").on(t.recordVersionId),
+  ],
+);
+
+export const sharedDatasets = pgTable(
+  "shared_datasets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    datasetVersionId: uuid("dataset_version_id").notNull().references(() => datasetVersions.id),
+    tokenHash: text("token_hash").notNull(),
+    recipientLabel: text("recipient_label"),
+    accessScope: jsonb("access_scope").notNull().default({}),
+    status: text("status").notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedById: uuid("revoked_by_id").references(() => users.id),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("shared_datasets_token_hash").on(t.tokenHash),
+    index("shared_datasets_version_status").on(t.datasetVersionId, t.status),
+    index("shared_datasets_expires").on(t.expiresAt),
+  ],
+);
+
+export const sharedDatasetAccessLogs = pgTable(
+  "shared_dataset_access_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sharedDatasetId: uuid("shared_dataset_id").notNull().references(() => sharedDatasets.id),
+    action: text("action").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id),
+    requestId: text("request_id"),
+    ipHash: text("ip_hash"),
+    userAgentHash: text("user_agent_hash"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("shared_dataset_access_share_created").on(t.sharedDatasetId, t.createdAt)],
+);
+
 export const askConversations = pgTable(
   "ask_conversations",
   {
@@ -1040,9 +1429,16 @@ export const exportJobs = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     errorMetadata: jsonb("error_metadata").notNull().default({}),
     approvedById: uuid("approved_by_id").references(() => users.id),
+    recordVersionId: uuid("record_version_id").references(() => recordVersions.id),
+    datasetVersionId: uuid("dataset_version_id").references(() => datasetVersions.id),
     ...timestamps,
   },
-  (t) => [index("export_jobs_requester_created").on(t.requestedById, t.createdAt), index("export_jobs_status_created").on(t.status, t.createdAt)],
+  (t) => [
+    index("export_jobs_requester_created").on(t.requestedById, t.createdAt),
+    index("export_jobs_status_created").on(t.status, t.createdAt),
+    index("export_jobs_record_version").on(t.recordVersionId),
+    index("export_jobs_dataset_version").on(t.datasetVersionId),
+  ],
 );
 
 export const auditEvents = pgTable(
@@ -1095,6 +1491,15 @@ export const schema = {
   templateSections,
   templateFields,
   templateFieldOptions,
+  programs,
+  programMemberships,
+  userAffiliations,
+  tasks,
+  taskAssignments,
+  locationAliases,
+  locationMergeHistory,
+  notifications,
+  notificationPreferences,
   activityDefinitions,
   promptVersions,
   canonicalThemes,
@@ -1125,6 +1530,15 @@ export const schema = {
   reportRuns,
   reportArtifacts,
   reportEvidenceLinks,
+  reports,
+  reportVersions,
+  reportSections,
+  reportVersionEvidenceLinks,
+  datasets,
+  datasetVersions,
+  datasetRecords,
+  sharedDatasets,
+  sharedDatasetAccessLogs,
   askConversations,
   askMessages,
   askMessageSources,

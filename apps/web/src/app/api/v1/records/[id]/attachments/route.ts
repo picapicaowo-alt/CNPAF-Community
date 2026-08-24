@@ -13,7 +13,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const record = (await db.select().from(records).where(eq(records.id, id)).limit(1))[0];
   if (!record?.headVersionId) return jsonError("Record not found", 404);
-  const decision = await authorize({ userId: user!.id, permission: "records.edit_own", resource: { organizationId: record.organizationId, siteId: record.siteId, serviceKey: record.sourceKind, ownerUserId: record.createdById } });
+  const decision = await authorize({ userId: user!.id, permission: "records.edit_own", resource: { organizationId: record.organizationId, programId: record.programId, siteId: record.siteId, serviceKey: record.sourceKind, ownerUserId: record.createdById } });
   if (!decision.allowed) return jsonError("Forbidden", 403);
 
   const form = await req.formData();

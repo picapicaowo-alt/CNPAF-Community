@@ -26,6 +26,9 @@ export const draftBodySchema = z.object({
   localVersion: z.number().int().min(1),
   sourceKind: z.string().min(1).max(120),
   siteId: uuidSchema.nullable().optional(),
+  programId: uuidSchema.nullable().optional(),
+  taskId: uuidSchema.nullable().optional(),
+  taskAssignmentId: uuidSchema.nullable().optional(),
   visitId: uuidSchema.nullable().optional(),
   activityDefinitionId: uuidSchema.nullable().optional(),
   templateVersionId: uuidSchema.nullable().optional(),
@@ -55,6 +58,14 @@ export const loginBodySchema = z.object({
   password: z.string().min(8),
 });
 
+export const changePasswordBodySchema = z.object({
+  currentPassword: z.string().min(8).max(200),
+  newPassword: z.string().min(12).max(200),
+}).refine((value) => value.currentPassword !== value.newPassword, {
+  message: "New password must differ from current password",
+  path: ["newPassword"],
+});
+
 export const inviteBodySchema = z.object({
   email: z.string().email(),
   roleId: uuidSchema.optional(),
@@ -64,16 +75,21 @@ export const inviteBodySchema = z.object({
   initialScopes: z
     .object({
       organizationIds: z.array(uuidSchema).default([]),
+      programIds: z.array(uuidSchema).default([]),
       siteIds: z.array(uuidSchema).default([]),
+      locationIds: z.array(uuidSchema).default([]),
       serviceIds: z.array(uuidSchema).default([]),
       serviceKeys: z.array(z.string().min(1)).default([]),
       templateIds: z.array(uuidSchema).default([]),
+      formIds: z.array(uuidSchema).default([]),
       dataClasses: z.array(z.string().min(1)).default([]),
+      researchUse: z.array(z.string().min(1)).default([]),
     })
     .partial()
+    .strict()
     .default({}),
   name: z.string().min(1).max(120).optional(),
-}).refine((value) => value.roleId || value.roleKey || value.role, {
+}).strict().refine((value) => value.roleId || value.roleKey || value.role, {
   message: "roleId or roleKey is required",
   path: ["roleId"],
 });
@@ -81,8 +97,8 @@ export const inviteBodySchema = z.object({
 export const acceptInviteBodySchema = z.object({
   token: z.string().min(8),
   name: z.string().min(1).max(120),
-  password: z.string().min(8),
-});
+  password: z.string().min(12).max(200),
+}).strict();
 
 export const siteCreateBodySchema = z.object({
   name: z.string().min(1).max(200),
@@ -90,7 +106,7 @@ export const siteCreateBodySchema = z.object({
   region: z.string().max(120).optional(),
   organizationId: uuidSchema.nullable().optional(),
   organizationName: z.string().max(200).optional(),
-});
+}).strict();
 
 export const reviewBodySchema = z.object({
   action: z.enum(["approve", "needs_completion"]),

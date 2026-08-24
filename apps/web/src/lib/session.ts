@@ -14,6 +14,7 @@ export type SessionUser = {
   role: UserRole;
   organizationId: string | null;
   locale: string;
+  mustChangePassword: boolean;
 };
 
 export async function createSession(userId: string): Promise<string> {
@@ -58,6 +59,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       organizationId: users.organizationId,
       locale: users.locale,
       status: users.status,
+      mustChangePassword: users.mustChangePassword,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -72,5 +74,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     role: row.role as UserRole,
     organizationId: row.organizationId,
     locale: row.locale,
+    mustChangePassword: row.mustChangePassword,
   };
+}
+
+export async function invalidateUserSessions(userId: string) {
+  await db.delete(sessions).where(eq(sessions.userId, userId));
 }

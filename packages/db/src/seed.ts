@@ -18,6 +18,8 @@ import {
   aiWorkflowVersions,
   aiWorkflows,
   canonicalThemes,
+  configRegistries,
+  configRegistryItems,
   featureFlags,
   lookups,
   organizations,
@@ -51,6 +53,31 @@ async function upsertLookup() {
       nameZh: row.nameZh,
       nameEn: row.nameEn,
       sortOrder: row.sortOrder,
+    });
+  }
+
+  // Compatibility lookups are initialization data only. Runtime business
+  // behavior reads versioned config_registry_items, so mirror any baseline row
+  // that was not already installed by a migration without overwriting an
+  // administrator-published version.
+  const [registries, configuredItems] = await Promise.all([
+    db.select().from(configRegistries),
+    db.select().from(configRegistryItems),
+  ]);
+  const registryByKey = new Map(registries.map((registry) => [registry.key, registry]));
+  const configured = new Set(configuredItems.map((item) => `${item.registryId}:${item.key}`));
+  for (const row of LOOKUPS) {
+    const registry = registryByKey.get(row.category);
+    if (!registry || configured.has(`${registry.id}:${row.key}`)) continue;
+    await db.insert(configRegistryItems).values({
+      registryId: registry.id,
+      key: row.key,
+      version: 1,
+      labelEn: row.nameEn,
+      labelZh: row.nameZh,
+      status: "active",
+      sortOrder: row.sortOrder,
+      publishedAt: new Date(),
     });
   }
 }
@@ -204,6 +231,15 @@ async function seed() {
   });
   await ensureWorkflow({ key: "ask_collect", nameEn: "Ask Collect", nameZh: "Ask Collect 问答", promptId: askPrompt.id, outputSchemaId: askOutputSchema.id, humanApprovalRequired: false });
 
+  const reportSectionPrompt = await ensurePrompt(4, "report_section_draft@1", "Draft only the requested report section from the approved evidence supplied in the user JSON. Never claim facts not present in the supplied sources. Return JSON with one suggestion string. The human-authored section remains authoritative.");
+  const reportSectionOutputSchema = await ensureOutputSchema("report_section_draft", {
+    type: "object",
+    additionalProperties: false,
+    required: ["suggestion"],
+    properties: { suggestion: { type: "string", minLength: 1 } },
+  });
+  await ensureWorkflow({ key: "report_section_draft", nameEn: "Report Section Draft", nameZh: "报告段落草稿", promptId: reportSectionPrompt.id, outputSchemaId: reportSectionOutputSchema.id, humanApprovalRequired: true });
+
   let reportTemplate = (await db.select().from(reportTemplates).where(eq(reportTemplates.key, "evidence_summary")).limit(1))[0];
   if (!reportTemplate) {
     [reportTemplate] = await db.insert(reportTemplates).values({ key: "evidence_summary", nameEn: "Evidence Summary", nameZh: "证据摘要", reportTypeKey: "evidence_summary", status: "active" }).returning();
@@ -232,56 +268,31 @@ async function seed() {
     await db.insert(featureFlags).values(flag);
   }
 
-  const [org] =
-    (await db.select().from(organizations).where(eq(organizations.name, "CNPAF"))) ?? [];
-  const organization =
-    org ??
-    (
-      await db
-        .insert(organizations)
-        .values({ name: "CNPAF", collectionPurpose: "operational" })
-        .returning()
-    )[0];
-
-  const password = process.env.SEED_PASSWORD ?? "cnpaf-dev-change-me";
-  const passwordHash = await bcrypt.hash(password, 10);
-  const seedUsers = [
-    { email: "admin@cnpaf.local", name: "Admin", role: "admin" },
-    { email: "ops@cnpaf.local", name: "Coordinator", role: "coordinator" },
-    { email: "volunteer@cnpaf.local", name: "Volunteer", role: "volunteer" },
-  ];
-  const existingUsers = await db.select().from(users);
-  for (const u of seedUsers) {
-    let user = existingUsers.find((e) => e.email === u.email);
-    if (!user) {
-      [user] = await db.insert(users).values({
-        ...u,
-        passwordHash,
-        organizationId: organization.id,
-      }).returning();
+  const demoJson = process.env.SEED_DEMO_USERS_JSON;
+  if (demoJson) {
+    const demo = JSON.parse(demoJson) as {
+      organizationName: string;
+      password: string;
+      users: Array<{ email: string; name: string; roleKey: string }>;
+    };
+    if (!demo.organizationName || !demo.password || demo.password.length < 12 || !Array.isArray(demo.users)) {
+      throw new Error("SEED_DEMO_USERS_JSON must contain organizationName, a 12+ character password, and users");
     }
-    const roleKey = u.role === "coordinator" ? "operations_reviewer" : u.role;
-    const role = (await db.select().from(roles).where(eq(roles.key, roleKey)).limit(1))[0];
-    if (user && role) {
-      const assignment = await db.select().from(userRoleAssignments).where(
-        and(
-          eq(userRoleAssignments.userId, user.id),
-          eq(userRoleAssignments.roleId, role.id),
-          eq(userRoleAssignments.status, "active"),
-        ),
-      ).limit(1);
-      if (!assignment[0]) {
-        await db.insert(userRoleAssignments).values({
-          userId: user.id,
-          roleId: role.id,
-          organizationId: organization.id,
-          status: "active",
-        });
-      }
+    let organization = (await db.select().from(organizations).where(eq(organizations.name, demo.organizationName)).limit(1))[0];
+    if (!organization) [organization] = await db.insert(organizations).values({ name: demo.organizationName, collectionPurpose: "operational" }).returning();
+    const passwordHash = await bcrypt.hash(demo.password, 12);
+    const existingUsers = await db.select().from(users);
+    for (const configured of demo.users) {
+      const role = (await db.select().from(roles).where(eq(roles.key, configured.roleKey)).limit(1))[0];
+      if (!role || role.status !== "active") throw new Error(`Unknown demo role: ${configured.roleKey}`);
+      let user = existingUsers.find((candidate) => candidate.email === configured.email.toLowerCase());
+      if (!user) [user] = await db.insert(users).values({ email: configured.email.toLowerCase(), name: configured.name, role: role.key, passwordHash, organizationId: organization.id, mustChangePassword: true }).returning();
+      const assignment = await db.select().from(userRoleAssignments).where(and(eq(userRoleAssignments.userId, user.id), eq(userRoleAssignments.roleId, role.id), eq(userRoleAssignments.status, "active"))).limit(1);
+      if (!assignment[0]) await db.insert(userRoleAssignments).values({ userId: user.id, roleId: role.id, organizationId: organization.id, status: "active" });
     }
   }
 
-  console.log("Seed complete. Demo password:", password);
+  console.log("Seed complete.");
   process.exit(0);
 }
 

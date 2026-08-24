@@ -27,6 +27,7 @@ import { db } from "./db";
 import { contentHash } from "./crypto";
 import { scanPrivacy } from "./pii";
 import { audit } from "./audit";
+import { loadSourceKindPolicy } from "./source-kind";
 
 const SAFETY_HINT =
   /不给他吃饭|虐待|打人|受伤|abuse|starv|neglect|hit him|hit her|not feeding/i;
@@ -39,27 +40,25 @@ function offsets(haystack: string, needle: string): { text: string; start: numbe
   return { text: needle, start, end: start + needle.length };
 }
 
-function localAnalyze(text: string, sourceKind: string): AiOutput {
+function localAnalyze(
+  text: string,
+  defaultConcernOriginKey: string,
+  themeCatalog: Array<{ key: string; nameEn: string; definition: string }>,
+): AiOutput {
   const sentences = text
     .split(/[。.!?\n]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 8)
     .slice(0, 6);
 
-  const origin: ConcernOrigin =
-    sourceKind === "professor_interview"
-      ? "expert_interview"
-      : sourceKind === "literature"
-        ? "literature"
-        : /说|反馈|asked|said|told/i.test(text)
-          ? "participant_feedback"
-          : "field_observation";
-
-  const themeKey = /孤独|lonely|isolat|社交/i.test(text)
-    ? "social_connection"
-    : /活动|engagement|参与/i.test(text)
-      ? "engagement"
-      : "other";
+  const origin: ConcernOrigin = defaultConcernOriginKey;
+  const normalizedText = text.toLocaleLowerCase();
+  const rankedThemes = themeCatalog.map((theme) => {
+    const terms = [...new Set(`${theme.key.replaceAll("_", " ")} ${theme.nameEn} ${theme.definition}`
+      .toLocaleLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])];
+    return { key: theme.key, score: terms.reduce((score, term) => score + (normalizedText.includes(term) ? 1 : 0), 0) };
+  }).sort((left, right) => right.score - left.score || left.key.localeCompare(right.key));
+  const themeKey = rankedThemes[0]?.key ?? "unclassified";
 
   const concerns = sentences.slice(0, 3).map((sentence) => ({
     statement: sentence.slice(0, 240),
@@ -155,16 +154,17 @@ async function resolveWorkflowConfiguration(workflowVersionId?: string | null, w
     workflowVersion?.modelConfigId ? db.select().from(aiModelConfigs).where(eq(aiModelConfigs.id, workflowVersion.modelConfigId)).limit(1).then((rows) => rows[0]) : Promise.resolve(null),
     workflowVersion?.outputSchemaVersionId ? db.select().from(outputSchemaVersions).where(eq(outputSchemaVersions.id, workflowVersion.outputSchemaVersionId)).limit(1).then((rows) => rows[0]) : Promise.resolve(null),
   ]);
-  const prompt = workflowVersion?.promptVersionId
+  const prompt = workflowVersion.promptVersionId
     ? (await db.select().from(promptVersions).where(eq(promptVersions.id, workflowVersion.promptVersionId)).limit(1))[0]
-    : (await db.select().from(promptVersions).where(eq(promptVersions.status, "active")).limit(1))[0];
-  if (!prompt) throw new Error("No prompt version configured for AI workflow");
-  if (provider && provider.status !== "active") throw new Error("AI workflow provider is not active");
-  if (model && (model.status !== "active" || model.providerConfigId !== provider?.id)) throw new Error("AI workflow model is not active or belongs to another provider");
+    : null;
+  if (!prompt || prompt.status !== "active") throw new Error("AI workflow has no active pinned prompt version");
+  if (!outputSchema || outputSchema.status !== "published") throw new Error("AI workflow has no published pinned output schema version");
+  if (!provider || provider.status !== "active") throw new Error("AI workflow has no active pinned provider");
+  if (!model || model.status !== "active" || model.providerConfigId !== provider.id) throw new Error("AI workflow has no active pinned model for its provider");
   return {
     workflowVersion,
-    providerKey: provider?.key ?? (process.env.OPENAI_API_KEY ? "openai" : "local_heuristic"),
-    modelName: model?.modelName ?? (process.env.OPENAI_API_KEY ? (process.env.AI_MODEL ?? "gpt-4o-mini") : "local-v1"),
+    providerKey: provider.key,
+    modelName: model.modelName,
     outputSchema,
     prompt,
   };
@@ -294,14 +294,16 @@ export async function executeConfiguredWorkflow(input: {
   }
 }
 
-export async function createQueuedAiRun(input: {
+export type QueuedAiRunInput = {
   recordVersionId: string;
   idempotencyKey: string;
   parentAiRunId?: string | null;
   reviewerInstruction?: string | null;
   workflowVersionId?: string | null;
   createdByUserId?: string | null;
-}) {
+};
+
+export async function prepareQueuedAiRun(input: QueuedAiRunInput) {
   const version = (await db.select().from(recordVersions).where(eq(recordVersions.id, input.recordVersionId)).limit(1))[0];
   if (!version) throw new Error("Record version not found");
   const record = (await db.select().from(records).where(eq(records.id, version.recordId)).limit(1))[0];
@@ -321,9 +323,10 @@ export async function createQueuedAiRun(input: {
     privacyStatus: record.privacyStatus,
     reviewerInstruction: input.reviewerInstruction ?? null,
   };
-  let run = existingRun;
-  if (!run) {
-    [run] = await db.insert(aiRuns).values({
+  return {
+    existingRun,
+    input,
+    values: {
       workflowVersionId: configuration.workflowVersion?.id,
       recordVersionId: input.recordVersionId,
       parentAiRunId: input.parentAiRunId,
@@ -339,17 +342,33 @@ export async function createQueuedAiRun(input: {
       idempotencyKey: input.idempotencyKey,
       inputSnapshot,
       createdByUserId: input.createdByUserId,
-    }).onConflictDoNothing({ target: aiRuns.idempotencyKey }).returning();
-    run ??= (await db.select().from(aiRuns).where(eq(aiRuns.idempotencyKey, input.idempotencyKey)).limit(1))[0];
-  }
-  if (!run) throw new Error("Could not create AI classification run");
+    } satisfies typeof aiRuns.$inferInsert,
+  };
+}
+
+export function assertPreparedAiRun(
+  run: typeof aiRuns.$inferSelect,
+  prepared: Awaited<ReturnType<typeof prepareQueuedAiRun>>,
+) {
+  const input = prepared.input;
   if (
-    run.workflowVersionId !== configuration.workflowVersion.id ||
+    run.workflowVersionId !== prepared.values.workflowVersionId ||
     run.recordVersionId !== input.recordVersionId ||
     run.parentAiRunId !== (input.parentAiRunId ?? null) ||
     run.reviewerInstruction !== (input.reviewerInstruction ?? null) ||
     run.createdByUserId !== (input.createdByUserId ?? null)
   ) throw new Error("Idempotency key is already associated with a different AI classification request");
+}
+
+export async function createQueuedAiRun(input: QueuedAiRunInput) {
+  const prepared = await prepareQueuedAiRun(input);
+  let run = prepared.existingRun;
+  if (!run) {
+    [run] = await db.insert(aiRuns).values(prepared.values).onConflictDoNothing({ target: aiRuns.idempotencyKey }).returning();
+    run ??= (await db.select().from(aiRuns).where(eq(aiRuns.idempotencyKey, input.idempotencyKey)).limit(1))[0];
+  }
+  if (!run) throw new Error("Could not create AI classification run");
+  assertPreparedAiRun(run, prepared);
   return run;
 }
 
@@ -358,6 +377,7 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
   if (!version) throw new Error("version not found");
   const record = (await db.select().from(records).where(eq(records.id, version.recordId)).limit(1))[0];
   if (!record) throw new Error("record not found");
+  const sourcePolicy = await loadSourceKindPolicy(record.sourceKind);
   let activeRun = aiRunId
     ? (await db.select().from(aiRuns).where(eq(aiRuns.id, aiRunId)).limit(1))[0]
     : await createQueuedAiRun({ recordVersionId, idempotencyKey: `classify:${recordVersionId}` });
@@ -375,7 +395,7 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
         redactedText: clearance.redactedText ?? version.qualitative,
         hits: [],
       }
-    : scanPrivacy({ sourceKind: record.sourceKind, qualitative: version.qualitative, attribution: (version.attribution ?? {}) as never });
+    : scanPrivacy({ sourceKind: record.sourceKind, qualitative: version.qualitative, attribution: (version.attribution ?? {}) as never, policy: sourcePolicy });
 
   if (scan.status === "flagged") {
     await Promise.all([
@@ -451,11 +471,11 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
         fallbackFrom = activeRun.provider;
         actualProvider = "local_heuristic";
         actualModel = "local-v1";
-        parsed = validateConfiguredJson(localAnalyze(scan.redactedText, record.sourceKind), workflow.outputSchema?.schema ?? { contract: "@cnpaf/shared#aiOutputSchema" });
+        parsed = validateConfiguredJson(localAnalyze(scan.redactedText, sourcePolicy.defaultConcernOriginKey, themes), workflow.outputSchema?.schema ?? { contract: "@cnpaf/shared#aiOutputSchema" });
         raw = JSON.stringify(parsed);
       }
     } else if (activeRun.provider === "local_heuristic") {
-      const local = localAnalyze(scan.redactedText, record.sourceKind);
+      const local = localAnalyze(scan.redactedText, sourcePolicy.defaultConcernOriginKey, themes);
       const workflow = activeRun.workflowVersionId ? await resolveWorkflowConfiguration(activeRun.workflowVersionId) : null;
       parsed = validateConfiguredJson(local, workflow?.outputSchema?.schema ?? { contract: "@cnpaf/shared#aiOutputSchema" });
       raw = JSON.stringify(parsed);

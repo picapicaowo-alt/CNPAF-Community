@@ -20,6 +20,17 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
     await db.exec(await readFile(new URL("../sql/0005_audit_permission.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../sql/0006_record_occurrence_time.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../sql/0007_ai_output_schema_provenance.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../sql/0008_v4_1_foundation.sql", import.meta.url), "utf8"));
+
+    const sourcePolicies = await db.query<{ key: string; default_origin: string }>(`
+      SELECT item.key, item.metadata->'policy'->>'defaultConcernOriginKey' AS default_origin
+      FROM config_registry_items item
+      JOIN config_registries registry ON registry.id = item.registry_id
+      WHERE registry.key = 'source_kind' AND item.status = 'active'
+      ORDER BY item.key
+    `);
+    assert.equal(sourcePolicies.rows.length, 4);
+    assert.equal(sourcePolicies.rows.every((row) => Boolean(row.default_origin)), true);
 
     const role = await db.query<{ key: string }>(`SELECT r.key FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id WHERE ura.user_id = '00000000-0000-0000-0000-000000000002' AND ura.status = 'active'`);
     assert.deepEqual(role.rows.map((row) => row.key), ["operations_reviewer"]);
@@ -62,6 +73,8 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
     await assert.rejects(() => db.exec(`UPDATE record_versions SET occurred_at = '2026-01-03T03:04:05Z' WHERE id = '00000000-0000-0000-0000-000000000027'`), /immutable/);
     const aiRunColumns = await db.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_name = 'ai_runs' AND column_name = 'output_schema_version_id'`);
     assert.equal(aiRunColumns.rows.length, 1);
+    const requestFingerprintColumns = await db.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_name = 'record_versions' AND column_name = 'request_fingerprint'`);
+    assert.equal(requestFingerprintColumns.rows.length, 1);
 
     await db.exec(`
       INSERT INTO output_schema_versions (id, key, version, status, schema)
@@ -75,6 +88,49 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
 
     await db.exec(`INSERT INTO jobs (kind, idempotency_key) VALUES ('a', NULL), ('b', NULL), ('c', 'same-key')`);
     await assert.rejects(() => db.exec(`INSERT INTO jobs (kind, idempotency_key) VALUES ('d', 'same-key')`), /unique|duplicate/i);
+
+    await db.exec(`
+      INSERT INTO programs (id, organization_id, key, name_en, name_zh)
+      VALUES ('00000000-0000-0000-0000-000000000040', '00000000-0000-0000-0000-000000000001', 'program-a', 'Program A', '项目 A');
+      UPDATE programs SET status = 'completed' WHERE id = '00000000-0000-0000-0000-000000000040';
+      INSERT INTO tasks (id, program_id, organization_id, template_version_id, task_type_key, title, created_by_id)
+      VALUES ('00000000-0000-0000-0000-000000000043', '00000000-0000-0000-0000-000000000040', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000021', 'configured_task', 'Task A', '00000000-0000-0000-0000-000000000002');
+      INSERT INTO task_assignments (id, task_id, assignee_id, assigned_by_id, status, declined_at, decline_reason)
+      VALUES ('00000000-0000-0000-0000-000000000044', '00000000-0000-0000-0000-000000000043', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'declined', now(), 'Schedule conflict');
+      INSERT INTO users (id, email, name, password_hash, role, organization_id)
+      VALUES ('00000000-0000-0000-0000-000000000045', 'collector@example.org', 'Collector', 'hash', 'volunteer', '00000000-0000-0000-0000-000000000001');
+      INSERT INTO datasets (id, organization_id, name, created_by_id)
+      VALUES ('00000000-0000-0000-0000-000000000041', '00000000-0000-0000-0000-000000000001', 'Dataset A', '00000000-0000-0000-0000-000000000002');
+      INSERT INTO dataset_versions (id, dataset_id, version_number, status, content_hash, created_by_id)
+      VALUES ('00000000-0000-0000-0000-000000000042', '00000000-0000-0000-0000-000000000041', 1, 'building', 'hash-a', '00000000-0000-0000-0000-000000000002');
+      INSERT INTO dataset_records (dataset_version_id, record_id, record_version_id, ordinal)
+      VALUES ('00000000-0000-0000-0000-000000000042', '00000000-0000-0000-0000-000000000025', '00000000-0000-0000-0000-000000000027', 0);
+      UPDATE dataset_versions SET status = 'ready', record_count = 1 WHERE id = '00000000-0000-0000-0000-000000000042';
+    `);
+    const declinedAssignment = await db.query<{ status: string; decline_reason: string }>(`SELECT status, decline_reason FROM task_assignments WHERE id = '00000000-0000-0000-0000-000000000044'`);
+    assert.deepEqual(declinedAssignment.rows[0], { status: "declined", decline_reason: "Schedule conflict" });
+    await assert.rejects(
+      () => db.exec(`INSERT INTO task_assignments (task_id, assignee_id, assigned_by_id, status) VALUES ('00000000-0000-0000-0000-000000000043', '00000000-0000-0000-0000-000000000045', '00000000-0000-0000-0000-000000000002', 'declined')`),
+      /check constraint/i,
+    );
+    await assert.rejects(
+      () => db.exec(`UPDATE dataset_records SET included_fields = '{"changed":true}' WHERE dataset_version_id = '00000000-0000-0000-0000-000000000042'`),
+      /immutable/,
+    );
+
+    await db.exec(`
+      INSERT INTO reports (id, organization_id, title, created_by_id)
+      VALUES ('00000000-0000-0000-0000-000000000050', '00000000-0000-0000-0000-000000000001', 'Report A', '00000000-0000-0000-0000-000000000002');
+      INSERT INTO report_versions (id, report_id, version_number, title, status, created_by_id)
+      VALUES ('00000000-0000-0000-0000-000000000051', '00000000-0000-0000-0000-000000000050', 1, 'Report A', 'draft', '00000000-0000-0000-0000-000000000002');
+      INSERT INTO report_sections (id, report_version_id, section_key, title, content)
+      VALUES ('00000000-0000-0000-0000-000000000052', '00000000-0000-0000-0000-000000000051', 'summary', 'Summary', 'Human text');
+      UPDATE report_versions SET status = 'published', published_at = now() WHERE id = '00000000-0000-0000-0000-000000000051';
+    `);
+    await assert.rejects(
+      () => db.exec(`UPDATE report_sections SET content = 'AI overwrite' WHERE id = '00000000-0000-0000-0000-000000000052'`),
+      /immutable/,
+    );
   } finally {
     await db.close();
   }

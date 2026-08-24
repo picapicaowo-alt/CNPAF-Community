@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useI18n } from "./LocaleProvider";
 
-type Me = { id: string; name: string; role: string; email: string };
+type Me = { id: string; name: string; email: string; capabilities: string[] };
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const { t, locale, setLocale } = useI18n();
@@ -16,11 +16,11 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetch("/api/v1/auth/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setMe(d?.user ?? null))
+      .then((d) => setMe(d?.user ? { ...d.user, capabilities: d.capabilities ?? [] } : null))
       .catch(() => setMe(null));
   }, [pathname]);
 
-  const ops = me && (me.role === "coordinator" || me.role === "admin");
+  const ops = me && ["review.view", "safety.view", "analytics.view", "insights.view"].some((permission) => me.capabilities.includes(permission));
   const publicPage = pathname === "/login" || pathname.startsWith("/invite") || pathname === "/privacy";
 
   async function logout() {

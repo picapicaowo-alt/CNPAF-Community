@@ -3,6 +3,7 @@ import { replaceUserAccessBodySchema } from "@cnpaf/shared";
 import { requirePermission, jsonError } from "@/lib/http";
 import { getUserAccess, replaceUserAccess } from "@/lib/access-admin";
 import { authorize } from "@/lib/authorization";
+import { apiErrorResponse, requestId } from "@/lib/api-error";
 
 type Context = { params: Promise<{ userId: string }> };
 
@@ -16,15 +17,14 @@ export async function GET(_req: Request, { params }: Context) {
 }
 
 export async function PUT(req: Request, { params }: Context) {
-  const { user, error } = await requirePermission("permissions.assign");
-  if (error || !user) return error;
-  const parsed = replaceUserAccessBodySchema.safeParse(await req.json());
-  if (!parsed.success) return jsonError(parsed.error.message);
-  const { userId } = await params;
+  const traceId = requestId(req);
   try {
-    const access = await replaceUserAccess({ actorId: user.id, targetUserId: userId, body: parsed.data });
+    const { user, error } = await requirePermission("permissions.assign");
+    if (error || !user) return error;
+    const { userId } = await params;
+    const access = await replaceUserAccess({ actorId: user.id, targetUserId: userId, body: replaceUserAccessBodySchema.parse(await req.json()) });
     return NextResponse.json(access);
   } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Could not update access", 409);
+    return apiErrorResponse(error, traceId);
   }
 }

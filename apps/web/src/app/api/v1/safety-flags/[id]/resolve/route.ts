@@ -15,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const record = (await db.select({ record: records }).from(safetyFlags).innerJoin(records, eq(safetyFlags.recordId, records.id)).where(eq(safetyFlags.id, id)).limit(1))[0]?.record;
   if (!record) return jsonError("Safety flag not found", 404);
-  const decision = await authorize({ userId: user.id, permission: "safety.resolve", resource: { organizationId: record.organizationId, siteId: record.siteId, serviceKey: record.sourceKind } });
+  const decision = await authorize({ userId: user.id, permission: "safety.resolve", resource: { organizationId: record.organizationId, programId: record.programId, siteId: record.siteId, serviceKey: record.sourceKind } });
   if (!decision.allowed) return jsonError("Forbidden", 403);
   try {
     return NextResponse.json({ flag: await resolveSafetyFlag(id, user.id, parsed.data) });

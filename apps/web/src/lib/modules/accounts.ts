@@ -1,0 +1,312 @@
+import { randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
+import { and, eq, inArray, or } from "drizzle-orm";
+import {
+  auditEvents,
+  permissions,
+  permissionScopeAssignments,
+  programMemberships,
+  programs,
+  roles,
+  sessions,
+  userAffiliations,
+  userRoleAssignments,
+  users,
+} from "@cnpaf/db/schema";
+import type { z } from "zod";
+import type { affiliationBodySchema, manualAccountCreateBodySchema, resetPasswordBodySchema } from "@cnpaf/shared";
+import { db } from "../db";
+import { audit } from "../audit";
+import { ApiError } from "../api-error";
+import { authorize } from "../authorization";
+import { scopeAuthorizationResource } from "../access-admin";
+import { requireActiveRegistryItem } from "../registries";
+
+type AccountCreate = z.infer<typeof manualAccountCreateBodySchema>;
+type ResetPassword = z.infer<typeof resetPasswordBodySchema>;
+type AffiliationInput = z.infer<typeof affiliationBodySchema>;
+
+function temporaryPassword() {
+  return `${randomBytes(18).toString("base64url")}aA1!`;
+}
+
+async function requireUserInScope(actorId: string, targetUserId: string, permission: string) {
+  const target = (await db.select().from(users).where(eq(users.id, targetUserId)).limit(1))[0];
+  if (!target) throw new ApiError("NOT_FOUND", "User not found", 404);
+  if (!(await authorize({ userId: actorId, permission, resource: { organizationId: target.organizationId } })).allowed) {
+    throw new ApiError("FORBIDDEN", "User is outside the assigned scope", 403);
+  }
+  return target;
+}
+
+export async function createAccount(actorId: string, input: AccountCreate, requestId?: string) {
+  if (!(await authorize({ userId: actorId, permission: "people.create_account", resource: { organizationId: input.organizationId } })).allowed) {
+    throw new ApiError("FORBIDDEN", "Cannot create an account in this organization", 403);
+  }
+  const email = input.email.trim().toLowerCase();
+  if ((await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))[0]) {
+    throw new ApiError("CONFLICT", "An account already exists for this email", 409);
+  }
+
+  const roleIds = input.roleAssignments.map((assignment) => assignment.roleId).filter(Boolean) as string[];
+  const roleKeys = input.roleAssignments.map((assignment) => assignment.roleKey).filter(Boolean) as string[];
+  const roleRows = await db.select().from(roles).where(and(
+    eq(roles.status, "active"),
+    roleIds.length && roleKeys.length
+      ? or(inArray(roles.id, roleIds), inArray(roles.key, roleKeys))
+      : roleIds.length
+        ? inArray(roles.id, roleIds)
+        : inArray(roles.key, roleKeys),
+  ));
+  const roleById = new Map(roleRows.map((role) => [role.id, role]));
+  const resolveRole = (assignment: AccountCreate["roleAssignments"][number]) => {
+    if (assignment.roleId) return roleById.get(assignment.roleId);
+    return roleRows.find((role) => role.key === assignment.roleKey && (role.organizationId === input.organizationId || role.organizationId === null));
+  };
+  const resolvedRoles = input.roleAssignments.map(resolveRole);
+  if (resolvedRoles.some((role) => !role)) throw new ApiError("BAD_REQUEST", "One or more roles are invalid or archived", 400);
+  if (resolvedRoles.some((role) => role!.organizationId && role!.organizationId !== input.organizationId)) {
+    throw new ApiError("BAD_REQUEST", "One or more roles belong to another organization", 400);
+  }
+  for (const assignment of input.roleAssignments) {
+    if (assignment.organizationId && assignment.organizationId !== input.organizationId) {
+      throw new ApiError("BAD_REQUEST", "Role assignments must belong to the new account's organization", 400);
+    }
+    if (!(await authorize({ userId: actorId, permission: "roles.assign", resource: { organizationId: assignment.organizationId ?? input.organizationId } })).allowed) {
+      throw new ApiError("FORBIDDEN", "Cannot assign one or more requested roles", 403);
+    }
+  }
+  if (input.scopeAssignments.length && !(await authorize({ userId: actorId, permission: "permissions.assign", resource: { organizationId: input.organizationId } })).allowed) {
+    throw new ApiError("FORBIDDEN", "Cannot assign requested access scopes", 403);
+  }
+  for (const scope of input.scopeAssignments) {
+    let resource;
+    try {
+      resource = await scopeAuthorizationResource(scope);
+    } catch (error) {
+      throw new ApiError("BAD_REQUEST", error instanceof Error ? error.message : "Invalid scope assignment", 400);
+    }
+    if (!(await authorize({ userId: actorId, permission: "permissions.assign", resource })).allowed) {
+      throw new ApiError("FORBIDDEN", "Cannot assign one or more requested access scopes", 403);
+    }
+  }
+
+  const membershipProgramIds = [...new Set(input.programMemberships.map((membership) => membership.programId))];
+  const membershipPrograms = membershipProgramIds.length
+    ? await db.select().from(programs).where(inArray(programs.id, membershipProgramIds))
+    : [];
+  if (membershipPrograms.length !== membershipProgramIds.length || membershipPrograms.some((program) => program.organizationId !== input.organizationId)) {
+    throw new ApiError("BAD_REQUEST", "One or more program memberships are invalid", 400);
+  }
+  for (const program of membershipPrograms) {
+    if (!(await authorize({ userId: actorId, permission: "programs.manage_membership", resource: { organizationId: program.organizationId, programId: program.id } })).allowed) {
+      throw new ApiError("FORBIDDEN", "Cannot manage one or more requested programs", 403);
+    }
+  }
+  await Promise.all([...new Set(input.programMemberships.map((membership) => membership.membershipRoleKey))]
+    .map((key) => requireActiveRegistryItem("program_membership_role", key, input.organizationId)));
+  const affiliationProgramIds = [...new Set(input.affiliations.map((affiliation) => affiliation.programId).filter(Boolean))] as string[];
+  const affiliationPrograms = affiliationProgramIds.length ? await db.select().from(programs).where(inArray(programs.id, affiliationProgramIds)) : [];
+  if (affiliationPrograms.length !== affiliationProgramIds.length || affiliationPrograms.some((program) => program.organizationId !== input.organizationId) || input.affiliations.some((affiliation) => affiliation.organizationId && affiliation.organizationId !== input.organizationId)) {
+    throw new ApiError("BAD_REQUEST", "One or more affiliations belong to another organization", 400);
+  }
+  await Promise.all([...new Set(input.affiliations.map((affiliation) => affiliation.affiliationTypeKey))]
+    .map((key) => requireActiveRegistryItem("affiliation_type", key, input.organizationId)));
+
+  const generatedPassword = input.temporaryPassword ?? temporaryPassword();
+  const passwordHash = await bcrypt.hash(generatedPassword, 12);
+  const permissionKeys = input.scopeAssignments.map((scope) => scope.permissionKey).filter(Boolean) as string[];
+  const permissionRows = permissionKeys.length
+    ? await db.select().from(permissions).where(and(inArray(permissions.key, permissionKeys), eq(permissions.status, "active")))
+    : [];
+  const permissionByKey = new Map(permissionRows.map((permission) => [permission.key, permission]));
+  if (permissionRows.length !== new Set(permissionKeys).size) throw new ApiError("BAD_REQUEST", "Unknown permission in scope assignment", 400);
+
+  const account = await db.transaction(async (tx) => {
+    const primaryRole = resolvedRoles[0]!;
+    const [user] = await tx.insert(users).values({
+      email,
+      name: input.name,
+      passwordHash,
+      role: primaryRole!.key,
+      organizationId: input.organizationId,
+      locale: input.locale,
+      mustChangePassword: input.requirePasswordChange,
+      passwordChangedAt: null,
+    }).returning();
+    const publicUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      organizationId: user.organizationId,
+      locale: user.locale,
+      status: user.status,
+      mustChangePassword: user.mustChangePassword,
+      passwordChangedAt: user.passwordChangedAt,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+    const assignments = [];
+    for (let index = 0; index < input.roleAssignments.length; index += 1) {
+      const requested = input.roleAssignments[index]!;
+      const role = resolvedRoles[index]!;
+      const [assignment] = await tx.insert(userRoleAssignments).values({
+        userId: user.id,
+        roleId: role!.id,
+        organizationId: requested.organizationId ?? role!.organizationId ?? input.organizationId,
+        startsAt: requested.startsAt ? new Date(requested.startsAt) : null,
+        endsAt: requested.endsAt ? new Date(requested.endsAt) : null,
+        assignedById: actorId,
+      }).returning();
+      assignments.push(assignment);
+    }
+    for (const scope of input.scopeAssignments) {
+      await tx.insert(permissionScopeAssignments).values({
+        userId: user.id,
+        permissionId: scope.permissionKey ? permissionByKey.get(scope.permissionKey)?.id : null,
+        roleAssignmentId: null,
+        scopeType: scope.scopeType,
+        scopeId: scope.scopeId ?? null,
+        scopeKey: scope.scopeKey ?? null,
+        effect: scope.effect,
+        assignedById: actorId,
+        reason: scope.reason ?? "Initial account provisioning",
+      });
+    }
+    const affiliations = input.affiliations.length
+      ? await tx.insert(userAffiliations).values(input.affiliations.map((affiliation) => ({
+          ...affiliation,
+          userId: user.id,
+          startsAt: affiliation.startsAt ? new Date(affiliation.startsAt) : null,
+          endsAt: affiliation.endsAt ? new Date(affiliation.endsAt) : null,
+          createdById: actorId,
+        }))).returning()
+      : [];
+    const memberships = input.programMemberships.length
+      ? await tx.insert(programMemberships).values(input.programMemberships.map((membership) => ({
+          ...membership,
+          userId: user.id,
+          assignedById: actorId,
+        }))).returning()
+      : [];
+    await audit({
+      actorId,
+      action: "account.created",
+      entityType: "user",
+      entityId: user.id,
+      targetUserId: user.id,
+      afterState: publicUser,
+      metadata: { requestId, roleAssignmentIds: assignments.map((assignment) => assignment.id), affiliationIds: affiliations.map((affiliation) => affiliation.id), membershipIds: memberships.map((membership) => membership.id) },
+    }, (values) => tx.insert(auditEvents).values(values));
+    return { user: publicUser, roleAssignments: assignments, affiliations, programMemberships: memberships };
+  });
+  return { ...account, temporaryPassword: generatedPassword };
+}
+
+export async function resetUserPassword(actorId: string, targetUserId: string, input: ResetPassword, requestId?: string) {
+  const target = await requireUserInScope(actorId, targetUserId, "people.reset_password");
+  const generatedPassword = input.temporaryPassword ?? temporaryPassword();
+  const passwordHash = await bcrypt.hash(generatedPassword, 12);
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ passwordHash, mustChangePassword: true, passwordChangedAt: null, updatedAt: new Date() }).where(eq(users.id, targetUserId));
+    await tx.delete(sessions).where(eq(sessions.userId, targetUserId));
+    await audit({
+      actorId,
+      action: "account.password_reset",
+      entityType: "user",
+      entityId: targetUserId,
+      targetUserId,
+      reason: input.reason,
+      beforeState: { mustChangePassword: target.mustChangePassword, passwordChangedAt: target.passwordChangedAt },
+      afterState: { mustChangePassword: true, passwordChangedAt: null },
+      metadata: { requestId },
+    }, (values) => tx.insert(auditEvents).values(values));
+  });
+  return { temporaryPassword: generatedPassword, mustChangePassword: true };
+}
+
+export async function setAccountActive(actorId: string, targetUserId: string, active: boolean, requestId?: string) {
+  if (!active && actorId === targetUserId) {
+    throw new ApiError("BAD_REQUEST", "You cannot deactivate your own account", 400);
+  }
+  const before = await requireUserInScope(actorId, targetUserId, "users.deactivate");
+  const status = active ? "active" : "inactive";
+  if (before.status === status) return {
+    id: before.id,
+    email: before.email,
+    name: before.name,
+    organizationId: before.organizationId,
+    locale: before.locale,
+    status: before.status,
+    mustChangePassword: before.mustChangePassword,
+    passwordChangedAt: before.passwordChangedAt,
+    createdAt: before.createdAt,
+    updatedAt: before.updatedAt,
+  };
+  return db.transaction(async (tx) => {
+    const [after] = await tx.update(users).set({ status, updatedAt: new Date() }).where(eq(users.id, targetUserId)).returning({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      organizationId: users.organizationId,
+      locale: users.locale,
+      status: users.status,
+      mustChangePassword: users.mustChangePassword,
+      passwordChangedAt: users.passwordChangedAt,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    });
+    await tx.delete(sessions).where(eq(sessions.userId, targetUserId));
+    await audit({
+      actorId,
+      action: active ? "account.reactivated" : "account.deactivated",
+      entityType: "user",
+      entityId: targetUserId,
+      targetUserId,
+      beforeState: { status: before.status },
+      afterState: { status },
+      metadata: { requestId },
+    }, (values) => tx.insert(auditEvents).values(values));
+    return after;
+  });
+}
+
+export async function addUserAffiliation(actorId: string, targetUserId: string, input: AffiliationInput, requestId?: string) {
+  const target = await requireUserInScope(actorId, targetUserId, "people.edit_affiliation");
+  await requireActiveRegistryItem("affiliation_type", input.affiliationTypeKey, target.organizationId);
+  if (input.organizationId && input.organizationId !== target.organizationId) {
+    throw new ApiError("BAD_REQUEST", "Affiliation organization must match the target account", 400);
+  }
+  if (input.programId) {
+    const program = (await db.select().from(programs).where(eq(programs.id, input.programId)).limit(1))[0];
+    if (!program || program.organizationId !== target.organizationId || (input.organizationId && input.organizationId !== program.organizationId)) {
+      throw new ApiError("BAD_REQUEST", "Program affiliation must belong to the target account's organization", 400);
+    }
+    if (!(await authorize({ userId: actorId, permission: "people.edit_affiliation", resource: { organizationId: program.organizationId, programId: program.id } })).allowed) {
+      throw new ApiError("FORBIDDEN", "Program affiliation is outside the assigned scope", 403);
+    }
+  }
+  return db.transaction(async (tx) => {
+    if (input.isPrimary) await tx.update(userAffiliations).set({ isPrimary: false, updatedAt: new Date() }).where(and(eq(userAffiliations.userId, targetUserId), eq(userAffiliations.isPrimary, true)));
+    const [affiliation] = await tx.insert(userAffiliations).values({
+      ...input,
+      userId: targetUserId,
+      startsAt: input.startsAt ? new Date(input.startsAt) : null,
+      endsAt: input.endsAt ? new Date(input.endsAt) : null,
+      createdById: actorId,
+    }).returning();
+    await audit({ actorId, action: "person.affiliation_added", entityType: "user_affiliation", entityId: affiliation.id, targetUserId, afterState: affiliation, metadata: { requestId } }, (values) => tx.insert(auditEvents).values(values));
+    return affiliation;
+  });
+}
+
+export async function removeUserAffiliation(actorId: string, targetUserId: string, affiliationId: string, requestId?: string) {
+  await requireUserInScope(actorId, targetUserId, "people.edit_affiliation");
+  const before = (await db.select().from(userAffiliations).where(and(eq(userAffiliations.id, affiliationId), eq(userAffiliations.userId, targetUserId))).limit(1))[0];
+  if (!before) throw new ApiError("NOT_FOUND", "Affiliation not found", 404);
+  return db.transaction(async (tx) => {
+    const [after] = await tx.update(userAffiliations).set({ status: "inactive", endsAt: new Date(), isPrimary: false, updatedAt: new Date() }).where(eq(userAffiliations.id, affiliationId)).returning();
+    await audit({ actorId, action: "person.affiliation_removed", entityType: "user_affiliation", entityId: affiliationId, targetUserId, beforeState: before, afterState: after, metadata: { requestId } }, (values) => tx.insert(auditEvents).values(values));
+    return after;
+  });
+}

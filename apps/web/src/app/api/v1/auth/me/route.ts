@@ -14,6 +14,7 @@ export async function GET() {
       organizationId: user!.organizationId,
       locale: user!.locale,
       legacyRole: user!.role,
+      mustChangePassword: user!.mustChangePassword,
     },
     ...access,
     capabilities: access.permissions,

@@ -5,8 +5,11 @@ export const PERMISSION_KEYS = [
   "records.view_own",
   "records.view",
   "records.view_approved",
+  "records.view_restricted_pii",
   "records.review",
   "records.return",
+  "records.download",
+  "records.share",
   "privacy.view",
   "privacy.redact",
   "privacy.resolve",
@@ -29,8 +32,10 @@ export const PERMISSION_KEYS = [
   "analytics.view",
   "reports.view",
   "reports.generate",
+  "reports.edit",
   "reports.publish",
   "chat.ask_collect",
+  "ask_collect.use",
   "exports.create",
   "exports.download",
   "exports.research",
@@ -38,11 +43,39 @@ export const PERMISSION_KEYS = [
   "users.invite",
   "users.edit",
   "users.deactivate",
+  "people.view",
+  "people.create_account",
+  "people.reset_password",
+  "people.edit_profile",
+  "people.edit_affiliation",
   "roles.view",
   "roles.assign",
   "roles.manage",
   "permissions.assign",
   "sites.manage",
+  "locations.view",
+  "locations.manage",
+  "programs.view",
+  "programs.manage",
+  "programs.manage_membership",
+  "tasks.view",
+  "tasks.create",
+  "tasks.assign",
+  "tasks.edit",
+  "review.view",
+  "review.decide",
+  "findings.view",
+  "findings.review",
+  "insights.view",
+  "notifications.view",
+  "notifications.manage",
+  "datasets.create",
+  "datasets.download",
+  "datasets.share",
+  "datasets.refresh",
+  "data.download",
+  "data.share",
+  "ai.configure",
   "services.manage",
   "settings.manage",
   "audit.view",
@@ -56,10 +89,16 @@ export type PermissionEffect = "allow" | "deny";
 
 export type AuthorizationResource = {
   organizationId?: string | null;
+  programId?: string | null;
   siteId?: string | null;
+  locationId?: string | null;
   serviceId?: string | null;
   serviceKey?: string | null;
   templateId?: string | null;
+  formId?: string | null;
+  taskId?: string | null;
+  reportId?: string | null;
+  datasetId?: string | null;
   dataClassification?: string | null;
   researchUse?: string | null;
   ownerUserId?: string | null;

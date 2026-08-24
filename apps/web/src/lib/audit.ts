@@ -1,6 +1,9 @@
 import { auditEvents } from "@cnpaf/db/schema";
 import { db } from "./db";
 
+type AuditValues = typeof auditEvents.$inferInsert;
+export type AuditWriter = (values: AuditValues) => PromiseLike<unknown>;
+
 export async function audit(input: {
   actorId?: string | null;
   action: string;
@@ -11,8 +14,8 @@ export async function audit(input: {
   beforeState?: unknown;
   afterState?: unknown;
   reason?: string | null;
-}) {
-  await db.insert(auditEvents).values({
+}, writer: AuditWriter = (values) => db.insert(auditEvents).values(values)) {
+  await writer({
     actorId: input.actorId ?? null,
     action: input.action,
     entityType: input.entityType,

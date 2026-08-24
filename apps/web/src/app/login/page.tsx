@@ -7,8 +7,8 @@ import { useI18n } from "@/components/LocaleProvider";
 export default function LoginPage() {
   const { t } = useI18n();
   const router = useRouter();
-  const [email, setEmail] = useState("volunteer@cnpaf.local");
-  const [password, setPassword] = useState("cnpaf-dev-change-me");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   async function onSubmit(e: React.FormEvent) {
@@ -41,9 +41,6 @@ export default function LoginPage() {
       <button className="btn" type="submit">
         {t.signIn}
       </button>
-      <p className="muted">
-        Demo: volunteer@cnpaf.local · ops@cnpaf.local · admin@cnpaf.local
-      </p>
     </form>
   );
 }

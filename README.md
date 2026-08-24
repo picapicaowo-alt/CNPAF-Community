@@ -36,13 +36,15 @@ To run the web app in Docker as well:
 docker compose --profile app up --build
 ```
 
-Demo accounts (password from `SEED_PASSWORD`, default `cnpaf-dev-change-me`):
+The seed command does not create accounts or embed a default credential. For a
+local-only demo, set `SEED_DEMO_USERS_JSON` with an organization name, a unique
+12+ character password, and explicit `{ email, name, roleKey }` user rows before
+running `npm run db:seed`. Seeded users must change that password on first login.
 
-- `volunteer@cnpaf.local`
-- `ops@cnpaf.local`
-- `admin@cnpaf.local`
-
-Set `OPENAI_API_KEY` to use OpenAI structured JSON. Without it, analysis uses a local heuristic so the queue still runs.
+AI provider and model selection come from the published workflow version. The
+seeded development workflows use the deterministic local provider. To use
+OpenAI, set `OPENAI_API_KEY` and publish a workflow version that explicitly
+selects an active OpenAI provider/model configuration.
 
 Attachments default to local disk (`STORAGE_BACKEND=local`, `UPLOAD_DIR`). On AWS set `STORAGE_BACKEND=s3` plus `S3_BUCKET` / `S3_REGION`. For MinIO or other S3-compatible stores, also set `S3_ENDPOINT`. EC2 should use an instance role; do not put access keys in git.
 

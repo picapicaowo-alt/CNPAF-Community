@@ -6,44 +6,11 @@ import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
 import { audit } from "./audit";
 import { getObject, putObject } from "./storage";
+import { matchesEvidenceFilters } from "./evidence-filters";
 
 type ExportInput = z.infer<typeof exportJobBodySchema>;
-type ExportScope = { organizationIds?: string[]; siteIds?: string[]; serviceTypeKeys?: string[] };
+type ExportScope = ExportInput["scope"];
 type ExportFilters = ExportInput["filters"];
-
-function inRequestedScope(scope: ExportScope, record: { organizationId: string | null; siteId: string | null; sourceKind: string }) {
-  if (scope.organizationIds?.length && (!record.organizationId || !scope.organizationIds.includes(record.organizationId))) return false;
-  if (scope.siteIds?.length && (!record.siteId || !scope.siteIds.includes(record.siteId))) return false;
-  if (scope.serviceTypeKeys?.length && !scope.serviceTypeKeys.includes(record.sourceKind)) return false;
-  return true;
-}
-
-function stringValues(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(stringValues);
-  if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).flatMap(stringValues);
-  return [];
-}
-
-function matchesFilters(
-  filters: ExportFilters,
-  approved: typeof approvedFindings.$inferSelect,
-  version: typeof recordVersions.$inferSelect,
-) {
-  const evidenceDate = version.occurredAt ?? version.submittedAt ?? approved.createdAt;
-  if (filters.dateFrom && evidenceDate < new Date(filters.dateFrom)) return false;
-  if (filters.dateTo && evidenceDate > new Date(filters.dateTo)) return false;
-  if (filters.templateVersionIds?.length && (!version.templateVersionId || !filters.templateVersionIds.includes(version.templateVersionId))) return false;
-  if (filters.findingTypes?.length && !filters.findingTypes.includes(approved.findingType)) return false;
-  if (filters.themeOrConcernIds?.length && (!approved.canonicalRegistryItemId || !filters.themeOrConcernIds.includes(approved.canonicalRegistryItemId))) return false;
-  const origin = (approved.approvedValue as { origin?: string } | null)?.origin;
-  if (filters.sourceOrigins?.length && (!origin || !filters.sourceOrigins.includes(origin))) return false;
-  if (filters.populationKeys?.length) {
-    const values = stringValues({ approvedValue: approved.approvedValue, quantitative: version.quantitative, attribution: version.attribution });
-    if (!filters.populationKeys.some((key) => values.includes(key))) return false;
-  }
-  return true;
-}
 
 function csvCell(value: unknown) {
   const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
@@ -78,12 +45,13 @@ export async function runExportJob(exportJobId: string) {
     const scope = (job.scope ?? {}) as ExportScope;
     const filters = (job.filters ?? {}) as ExportFilters;
     const rows = candidates.filter(({ approved, version, record }) =>
-      inRequestedScope(scope, record) &&
-      matchesFilters(filters, approved, version) &&
+      matchesEvidenceFilters(scope, record, version, approved) &&
+      matchesEvidenceFilters(filters, record, version, approved) &&
       ["clear", "redacted"].includes(record.privacyStatus) &&
       record.researchUseStatus !== "restricted" &&
       evaluateAuthorization(access, "exports.create", {
         organizationId: record.organizationId,
+        programId: record.programId,
         siteId: record.siteId,
         serviceKey: record.sourceKind,
         researchUse: record.researchUseStatus,
@@ -91,6 +59,7 @@ export async function runExportJob(exportJobId: string) {
       }).allowed &&
       evaluateAuthorization(access, "records.view_approved", {
         organizationId: record.organizationId,
+        programId: record.programId,
         siteId: record.siteId,
         serviceKey: record.sourceKind,
         researchUse: record.researchUseStatus,
@@ -102,6 +71,7 @@ export async function runExportJob(exportJobId: string) {
       approvedValue: approved.approvedValue,
       evidence: approved.evidence,
       organizationId: record.organizationId,
+      programId: record.programId,
       siteId: record.siteId,
       serviceTypeKey: record.sourceKind,
       researchUseStatus: record.researchUseStatus,
@@ -157,8 +127,8 @@ export async function downloadExport(id: string, actorId: string) {
       approved.status !== "approved" ||
       !["clear", "redacted"].includes(record.privacyStatus) ||
       record.researchUseStatus === "restricted" ||
-      !evaluateAuthorization(access, "exports.download", { organizationId: record.organizationId, siteId: record.siteId, serviceKey: record.sourceKind, dataClassification: job.dataClassification }).allowed ||
-      !evaluateAuthorization(access, "records.view_approved", { organizationId: record.organizationId, siteId: record.siteId, serviceKey: record.sourceKind, researchUse: record.researchUseStatus, dataClassification: "approved_evidence" }).allowed
+      !evaluateAuthorization(access, "exports.download", { organizationId: record.organizationId, programId: record.programId, siteId: record.siteId, serviceKey: record.sourceKind, dataClassification: job.dataClassification }).allowed ||
+      !evaluateAuthorization(access, "records.view_approved", { organizationId: record.organizationId, programId: record.programId, siteId: record.siteId, serviceKey: record.sourceKind, researchUse: record.researchUseStatus, dataClassification: "approved_evidence" }).allowed
     )) throw new Error("Export access has changed; create a new export");
   }
   return { job, object: await getObject(job.storageKey) };

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CNPAF Collect API
-  version: 1.0.0-backend-contract
+  version: 1.1.0-v4.1
   description: Permission- and scope-aware API for CNPAF Collect. Exported Zod schemas in @cnpaf/shared are the canonical TypeScript request contracts.
 servers:
   - url: /api/v1
@@ -16,6 +16,10 @@ tags:
   - name: Reports
   - name: Ask Collect
   - name: Exports
+  - name: Programs
+  - name: Tasks
+  - name: Datasets
+  - name: Notifications
 paths:
   /health:
     get: { tags: [Session], operationId: health, security: [], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
@@ -25,6 +29,8 @@ paths:
     post: { tags: [Session], operationId: logout, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /auth/me:
     get: { tags: [Session], operationId: getLegacyAuthMe, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '401': { $ref: '#/components/responses/Unauthorized' } } }
+  /auth/password:
+    post: { tags: [Session], operationId: changePassword, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' } } }
   /account:
     get: { tags: [Session], operationId: getAccount, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     delete: { tags: [Session], operationId: deleteAccount, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
@@ -57,6 +63,7 @@ paths:
     get: { tags: [Access], operationId: listRoles, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /admin/users:
     get: { tags: [Access], operationId: adminListUsers, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Access], operationId: adminCreateUser, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /admin/users/{userId}:
     get: { tags: [Access], operationId: adminGetUser, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     patch: { tags: [Access], operationId: adminUpdateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
@@ -70,6 +77,12 @@ paths:
     post: { tags: [Access], operationId: deactivateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /admin/users/{userId}/reactivate:
     post: { tags: [Access], operationId: reactivateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users/{userId}/reset-password:
+    post: { tags: [Access], operationId: resetUserPassword, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users/{userId}/affiliations:
+    post: { tags: [Access], operationId: addUserAffiliation, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/users/{userId}/affiliations/{affiliationId}:
+    delete: { tags: [Access], operationId: removeUserAffiliation, parameters: [{ $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/AffiliationId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /admin/roles:
     get: { tags: [Access], operationId: adminListRoles, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     post: { tags: [Access], operationId: createRole, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
@@ -197,6 +210,7 @@ paths:
     get: { tags: [Reports], operationId: getAnalytics, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /reports:
     get: { tags: [Reports], operationId: listReports, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Reports], operationId: createEditableReport, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
   /report-runs:
     post: { tags: [Reports], operationId: createReportRun, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '202': { $ref: '#/components/responses/JsonSuccess' } } }
   /report-runs/{id}:
@@ -212,6 +226,7 @@ paths:
     post: { tags: [Reports], operationId: publishReportTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /reports/{id}:
     get: { tags: [Reports], operationId: getReport, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Reports], operationId: updateEditableReport, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /reports/{id}/approve:
     post: { tags: [Reports], operationId: approveReport, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /ask-collect/conversations:
@@ -231,6 +246,96 @@ paths:
     get: { tags: [Configuration], operationId: listInternalJobs, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     post: { tags: [Configuration], operationId: processInternalJobs, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     patch: { tags: [Configuration], operationId: retryInternalJob, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /programs:
+    get: { tags: [Programs], operationId: listPrograms, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Programs], operationId: createProgram, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /programs/{programId}:
+    get: { tags: [Programs], operationId: getProgram, parameters: [{ $ref: '#/components/parameters/ProgramId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Programs], operationId: updateProgram, parameters: [{ $ref: '#/components/parameters/ProgramId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /programs/{programId}/memberships:
+    post: { tags: [Programs], operationId: addProgramMembership, parameters: [{ $ref: '#/components/parameters/ProgramId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /programs/{programId}/memberships/{membershipId}:
+    delete: { tags: [Programs], operationId: removeProgramMembership, parameters: [{ $ref: '#/components/parameters/ProgramId' }, { $ref: '#/components/parameters/MembershipId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks:
+    get: { tags: [Tasks], operationId: listTasks, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Tasks], operationId: createTask, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/my:
+    get: { tags: [Tasks], operationId: listMyTasks, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/today:
+    get: { tags: [Tasks], operationId: listTodayTasks, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}:
+    get: { tags: [Tasks], operationId: getTask, parameters: [{ $ref: '#/components/parameters/TaskId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    patch: { tags: [Tasks], operationId: updateTask, parameters: [{ $ref: '#/components/parameters/TaskId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}/assignments:
+    post: { tags: [Tasks], operationId: assignTask, parameters: [{ $ref: '#/components/parameters/TaskId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}/assignments/{assignmentId}:
+    patch: { tags: [Tasks], operationId: transitionTaskAssignment, parameters: [{ $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AssignmentId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}/start:
+    post: { tags: [Tasks], operationId: startMyTask, parameters: [{ $ref: '#/components/parameters/TaskId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}/complete:
+    post: { tags: [Tasks], operationId: completeMyTask, parameters: [{ $ref: '#/components/parameters/TaskId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}/close:
+    post: { tags: [Tasks], operationId: closeTask, parameters: [{ $ref: '#/components/parameters/TaskId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}/package:
+    get: { tags: [Tasks], operationId: getOfflineTaskPackage, parameters: [{ $ref: '#/components/parameters/TaskId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /locations:
+    get: { tags: [Configuration], operationId: searchLocations, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Configuration], operationId: createLocation, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /locations/{locationId}/aliases:
+    post: { tags: [Configuration], operationId: addLocationAlias, parameters: [{ $ref: '#/components/parameters/LocationId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /locations/{locationId}/merge:
+    post: { tags: [Configuration], operationId: mergeLocation, parameters: [{ $ref: '#/components/parameters/LocationId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /notifications:
+    get: { tags: [Notifications], operationId: listNotifications, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /notifications/preferences:
+    get: { tags: [Notifications], operationId: getNotificationPreferences, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    put: { tags: [Notifications], operationId: saveNotificationPreference, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /notifications/{notificationId}/read:
+    post: { tags: [Notifications], operationId: markNotificationRead, parameters: [{ $ref: '#/components/parameters/NotificationId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /review/inbox:
+    get: { tags: [Records], operationId: getUnifiedReviewInbox, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /review/items/{id}:
+    get: { tags: [Records], operationId: getUnifiedReviewItem, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /review/items/{id}/decision:
+    post: { tags: [Records], operationId: decideUnifiedReviewItem, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /reports/{id}/versions:
+    post: { tags: [Reports], operationId: createReportVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-versions/{versionId}:
+    patch: { tags: [Reports], operationId: updateReportVersion, parameters: [{ $ref: '#/components/parameters/VersionId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-versions/{versionId}/publish:
+    post: { tags: [Reports], operationId: publishReportVersion, parameters: [{ $ref: '#/components/parameters/VersionId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /report-versions/{versionId}/sections:
+    post: { tags: [Reports], operationId: addReportSection, parameters: [{ $ref: '#/components/parameters/VersionId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-sections/{sectionId}:
+    patch: { tags: [Reports], operationId: updateReportSection, parameters: [{ $ref: '#/components/parameters/SectionId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    delete: { tags: [Reports], operationId: deleteReportSection, parameters: [{ $ref: '#/components/parameters/SectionId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /report-sections/{sectionId}/duplicate:
+    post: { tags: [Reports], operationId: duplicateReportSection, parameters: [{ $ref: '#/components/parameters/SectionId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-sections/{sectionId}/reorder:
+    post: { tags: [Reports], operationId: reorderReportSection, parameters: [{ $ref: '#/components/parameters/SectionId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-sections/{sectionId}/ai-draft:
+    post: { tags: [Reports], operationId: draftReportSectionWithAi, parameters: [{ $ref: '#/components/parameters/SectionId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /report-sections/{sectionId}/sources:
+    get: { tags: [Reports], operationId: getReportSectionSources, parameters: [{ $ref: '#/components/parameters/SectionId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /records/{id}/download:
+    post: { tags: [Datasets], operationId: downloadRecord, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { description: Record PDF, JSON, or CSV } } }
+  /records/{id}/share:
+    post: { tags: [Datasets], operationId: shareRecord, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /datasets:
+    get: { tags: [Datasets], operationId: listDatasets, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Datasets], operationId: createDataset, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /datasets/{datasetId}:
+    get: { tags: [Datasets], operationId: getDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /datasets/{datasetId}/refresh:
+    post: { tags: [Datasets], operationId: refreshDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /datasets/{datasetId}/download:
+    post: { tags: [Datasets], operationId: downloadDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { description: Dataset JSON or CSV } } }
+  /datasets/{datasetId}/share:
+    post: { tags: [Datasets], operationId: shareDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /dataset-shares/{shareId}/revoke:
+    post: { tags: [Datasets], operationId: revokeDatasetShare, parameters: [{ $ref: '#/components/parameters/ShareId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /shared-datasets/{token}:
+    get: { tags: [Datasets], operationId: accessSharedDataset, parameters: [{ $ref: '#/components/parameters/Token' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '404': { $ref: '#/components/responses/NotFound' } } }
 components:
   securitySchemes:
     cookieAuth: { type: apiKey, in: cookie, name: cnpaf_session }
@@ -240,6 +345,18 @@ components:
     RoleId: { name: roleId, in: path, required: true, schema: { type: string, format: uuid } }
     AttachmentId: { name: attachmentId, in: path, required: true, schema: { type: string, format: uuid } }
     RegistryKey: { name: registryKey, in: path, required: true, schema: { type: string } }
+    ProgramId: { name: programId, in: path, required: true, schema: { type: string, format: uuid } }
+    MembershipId: { name: membershipId, in: path, required: true, schema: { type: string, format: uuid } }
+    TaskId: { name: taskId, in: path, required: true, schema: { type: string, format: uuid } }
+    AssignmentId: { name: assignmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    DatasetId: { name: datasetId, in: path, required: true, schema: { type: string, format: uuid } }
+    ShareId: { name: shareId, in: path, required: true, schema: { type: string, format: uuid } }
+    LocationId: { name: locationId, in: path, required: true, schema: { type: string, format: uuid } }
+    NotificationId: { name: notificationId, in: path, required: true, schema: { type: string, format: uuid } }
+    VersionId: { name: versionId, in: path, required: true, schema: { type: string, format: uuid } }
+    SectionId: { name: sectionId, in: path, required: true, schema: { type: string, format: uuid } }
+    AffiliationId: { name: affiliationId, in: path, required: true, schema: { type: string, format: uuid } }
+    Token: { name: token, in: path, required: true, schema: { type: string, minLength: 32 } }
   requestBodies:
     JsonBody:
       required: true
@@ -253,6 +370,18 @@ components:
       properties:
         error: { type: string }
         authorization: { type: string }
+    TypedError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+            requestId: { type: string }
   responses:
     JsonSuccess:
       description: Successful JSON response; see the named Zod contract and backend API contract document.
@@ -269,3 +398,6 @@ components:
     Conflict:
       description: Immutable version or invalid state transition
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    BadRequest:
+      description: Invalid request payload
+      content: { application/json: { schema: { $ref: '#/components/schemas/TypedError' } } }

@@ -71,12 +71,16 @@ function scopeResourceValue(scopeType: string | null, resource: AuthorizationRes
       return "*";
     case "organization":
       return resource.organizationId ?? null;
+    case "program":
+      return resource.programId ?? null;
     case "site":
-      return resource.siteId ?? null;
+    case "location":
+      return resource.locationId ?? resource.siteId ?? null;
     case "service":
       return resource.serviceId ?? resource.serviceKey ?? null;
     case "template":
-      return resource.templateId ?? null;
+    case "form":
+      return resource.formId ?? resource.templateId ?? null;
     case "data_classification":
       return resource.dataClassification ?? null;
     case "research_use":
@@ -202,9 +206,12 @@ export function evaluateAuthorization(
 
     const resourceScopeTypes = [
       "organization",
+      "program",
       "site",
+      "location",
       "service",
       "template",
+      "form",
       "data_classification",
       "research_use",
     ].filter((type) => scopeResourceValue(type, resource));
@@ -390,10 +397,13 @@ export function serializeAccessContext(context: AccessContext) {
     permissions: [...permissionKeys].sort(),
     scopes: {
       organizationIds: ids("organization"),
+      programIds: ids("program"),
       siteIds: ids("site"),
+      locationIds: ids("location"),
       serviceIds: ids("service"),
       serviceKeys: keys("service"),
       templateIds: ids("template"),
+      formIds: ids("form"),
       dataClasses: keys("data_classification"),
       researchUse: keys("research_use"),
     },

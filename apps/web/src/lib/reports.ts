@@ -16,20 +16,9 @@ import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
 import { audit } from "./audit";
 import { executeConfiguredWorkflow } from "./ai";
+import { matchesEvidenceFilters } from "./evidence-filters";
 
 type ReportRunInput = z.infer<typeof reportRunBodySchema>;
-type ReportFilters = {
-  dateFrom?: string;
-  dateTo?: string;
-  organizationIds?: string[];
-  siteIds?: string[];
-  serviceTypeKeys?: string[];
-  populationKeys?: string[];
-  sourceOrigins?: string[];
-  templateVersionIds?: string[];
-  findingTypes?: string[];
-  themeOrConcernIds?: string[];
-};
 
 export async function listReportTemplates() {
   const [templates, versions] = await Promise.all([
@@ -87,39 +76,6 @@ export async function publishReportTemplateVersion(id: string, actorId: string) 
   return result.version;
 }
 
-function stringValues(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(stringValues);
-  if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).flatMap(stringValues);
-  return [];
-}
-
-function matchesFilters(
-  filters: ReportFilters,
-  row: { organizationId: string | null; siteId: string | null; sourceKind: string },
-  version: { occurredAt: Date | null; submittedAt: Date | null; templateVersionId: string | null; quantitative: unknown; attribution: unknown },
-  approved: { findingType: string; canonicalRegistryItemId: string | null; approvedValue: unknown; createdAt: Date },
-) {
-  if (filters.organizationIds?.length && (!row.organizationId || !filters.organizationIds.includes(row.organizationId))) return false;
-  if (filters.siteIds?.length && (!row.siteId || !filters.siteIds.includes(row.siteId))) return false;
-  if (filters.serviceTypeKeys?.length && !filters.serviceTypeKeys.includes(row.sourceKind)) return false;
-  const evidenceDate = version.occurredAt ?? version.submittedAt ?? approved.createdAt;
-  if (filters.dateFrom && evidenceDate < new Date(filters.dateFrom)) return false;
-  if (filters.dateTo && evidenceDate > new Date(filters.dateTo)) return false;
-  if (filters.templateVersionIds?.length && (!version.templateVersionId || !filters.templateVersionIds.includes(version.templateVersionId))) return false;
-  if (filters.findingTypes?.length && !filters.findingTypes.includes(approved.findingType)) return false;
-  if (filters.themeOrConcernIds?.length && (!approved.canonicalRegistryItemId || !filters.themeOrConcernIds.includes(approved.canonicalRegistryItemId))) return false;
-  if (filters.sourceOrigins?.length) {
-    const origin = (approved.approvedValue as { origin?: string } | null)?.origin;
-    if (!origin || !filters.sourceOrigins.includes(origin)) return false;
-  }
-  if (filters.populationKeys?.length) {
-    const populationValues = stringValues({ approvedValue: approved.approvedValue, quantitative: version.quantitative, attribution: version.attribution });
-    if (!filters.populationKeys.some((key) => populationValues.includes(key))) return false;
-  }
-  return true;
-}
-
 export async function createReportRun(input: ReportRunInput, actorId: string) {
   const template = (await db.select().from(reportTemplateVersions).where(eq(reportTemplateVersions.id, input.reportTemplateVersionId)).limit(1))[0];
   if (!template || template.status !== "published") throw new Error("Published report template version not found");
@@ -147,13 +103,14 @@ export async function runReportJob(reportRunId: string) {
       .innerJoin(records, eq(recordVersions.recordId, records.id))
       .where(eq(approvedFindings.status, "approved"));
     const access = await getAccessContext(run.requestedById);
-    const filters = (run.filters ?? {}) as ReportFilters;
+    const filters = (run.filters ?? {}) as ReportRunInput["filters"];
     const evidence = candidates.filter(({ approved, version, record }) =>
-      matchesFilters(filters, record, version, approved) &&
+      matchesEvidenceFilters(filters, record, version, approved) &&
       ["clear", "redacted"].includes(record.privacyStatus) &&
       record.researchUseStatus !== "restricted" &&
       evaluateAuthorization(access, "records.view_approved", {
         organizationId: record.organizationId,
+        programId: record.programId,
         siteId: record.siteId,
         serviceKey: record.sourceKind,
         researchUse: record.researchUseStatus,
@@ -279,11 +236,15 @@ export async function listReportsForUser(userId: string) {
   const access = await getAccessContext(userId);
   const evidenceAccess = await authorizedReportArtifactIds(userId, rows.map(({ artifact }) => artifact.id), access);
   return rows.filter(({ artifact, run }) => {
-    const filters = (run.filters ?? {}) as ReportFilters;
+    const filters = (run.filters ?? {}) as ReportRunInput["filters"];
     const resources = [
       ...(filters.organizationIds ?? []).map((organizationId) => ({ organizationId })),
+      ...(filters.programIds ?? []).map((programId) => ({ programId })),
       ...(filters.siteIds ?? []).map((siteId) => ({ siteId })),
+      ...(filters.locationIds ?? []).map((locationId) => ({ locationId })),
       ...(filters.serviceTypeKeys ?? []).map((serviceKey) => ({ serviceKey })),
+      ...(filters.templateVersionIds ?? []).map((templateId) => ({ templateId })),
+      ...(filters.formVersionIds ?? []).map((formId) => ({ formId })),
     ];
     return evidenceAccess.has(artifact.id) && (resources.length ? resources : [{}]).every((resource) => evaluateAuthorization(access, "reports.view", resource).allowed);
   });
@@ -307,6 +268,7 @@ async function authorizedReportArtifactIds(userId: string, artifactIds: string[]
     record.researchUseStatus !== "restricted" &&
     evaluateAuthorization(access, "records.view_approved", {
       organizationId: record.organizationId,
+      programId: record.programId,
       siteId: record.siteId,
       serviceKey: record.sourceKind,
       researchUse: record.researchUseStatus,
@@ -316,7 +278,8 @@ async function authorizedReportArtifactIds(userId: string, artifactIds: string[]
 }
 
 export async function canReadReportArtifact(userId: string, artifactId: string) {
-  return (await authorizedReportArtifactIds(userId, [artifactId])).has(artifactId);
+  const exists = (await db.select({ id: reportArtifacts.id }).from(reportArtifacts).where(eq(reportArtifacts.id, artifactId)).limit(1))[0];
+  return Boolean(exists) && (await authorizedReportArtifactIds(userId, [artifactId])).has(artifactId);
 }
 
 export async function canReadReportRun(userId: string, reportRunId: string) {

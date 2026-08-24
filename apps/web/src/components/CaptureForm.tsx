@@ -2,43 +2,51 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ActivityDefinitionSeed } from "@cnpaf/shared";
+import { sourceKindPolicySchema, type ActivityDefinitionSeed, type SourceKindPolicy } from "@cnpaf/shared";
 import { useI18n } from "./LocaleProvider";
 import { flushOutbox, getLocalDraft, newId, queueOutbox, saveLocalDraft } from "@/lib/offline";
 
 type Site = { id: string; name: string; siteType: string; region?: string | null; canonicalStatus: string };
 type Activity = { id: string; key: string; version: number; nameZh: string; nameEn: string; fields: ActivityDefinitionSeed["fields"] };
+type Lookup = { category: string; key: string; nameZh: string; nameEn: string; sortOrder: number };
+type SourceKind = { key: string; labelEn: string; labelZh: string; policy: SourceKindPolicy };
 
 const CAPTURE_LOCK = "cnpaf.capturing";
 
 export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
   const { t, locale } = useI18n();
   const router = useRouter();
-  const id = clientRecordId ?? newId();
-  const [sourceKind, setSourceKind] = useState("field_visit");
+  const [id] = useState(() => clientRecordId ?? newId());
+  const [sourceKind, setSourceKind] = useState("");
+  const [sourceKinds, setSourceKinds] = useState<SourceKind[]>([]);
+  const [lookups, setLookups] = useState<Lookup[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [siteQ, setSiteQ] = useState("");
   const [siteId, setSiteId] = useState<string | null>(null);
   const [siteName, setSiteName] = useState("");
-  const [siteType, setSiteType] = useState("adhc");
+  const [siteType, setSiteType] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityId, setActivityId] = useState<string>("");
   const [quantitative, setQuantitative] = useState<Record<string, { reason: string; value: number | null }>>({});
   const [qualitative, setQualitative] = useState("");
   const [attestation, setAttestation] = useState(false);
-  const [professorName, setProfessorName] = useState("");
-  const [affiliation, setAffiliation] = useState("");
-  const [attributionPermission, setAttributionPermission] = useState("internal_named");
-  const [quotePermission, setQuotePermission] = useState("internal");
-  const [title, setTitle] = useState("");
-  const [url, setUrl] = useState("");
-  const [authors, setAuthors] = useState("");
+  const [attribution, setAttribution] = useState<Record<string, string>>({});
   const [localVersion, setLocalVersion] = useState(1);
   const [status, setStatus] = useState<string>(t.saveDraft);
   const [error, setError] = useState("");
   const [online, setOnline] = useState(true);
 
   const activity = activities.find((a) => a.id === activityId);
+  const source = sourceKinds.find((item) => item.key === sourceKind);
+  const sourcePolicy = source?.policy;
+  const siteTypes = useMemo(
+    () => lookups.filter((item) => item.category === "site_type").sort((a, b) => a.sortOrder - b.sortOrder),
+    [lookups],
+  );
+  const missingReasons = useMemo(
+    () => lookups.filter((item) => item.category === "missing_reason").sort((a, b) => a.sortOrder - b.sortOrder),
+    [lookups],
+  );
 
   useEffect(() => {
     sessionStorage.setItem(CAPTURE_LOCK, "1");
@@ -50,12 +58,29 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
     const off = () => setOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
-    fetch("/api/v1/lookups")
-      .then((r) => r.json())
-      .then((d) => {
-        setActivities(d.activities ?? []);
-        if (d.activities?.[0]) setActivityId((cur) => cur || d.activities[0].id);
+    Promise.all([
+      fetch("/api/v1/lookups").then((response) => response.json()),
+      fetch("/api/v1/config/registries/source_kind?status=active").then((response) => response.json()),
+    ]).then(([lookupData, sourceData]) => {
+      const nextLookups = (lookupData.lookups ?? []) as Lookup[];
+      setLookups(nextLookups);
+      setActivities(lookupData.activities ?? []);
+      if (lookupData.activities?.[0]) setActivityId((current) => current || lookupData.activities[0].id);
+      const nextSiteType = nextLookups.filter((item) => item.category === "site_type")
+        .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+      if (nextSiteType) setSiteType((current) => current || nextSiteType.key);
+      const nextSourceKinds = (sourceData.items ?? []).flatMap((item: {
+        key: string;
+        labelEn: string;
+        labelZh: string;
+        metadata?: { policy?: unknown };
+      }) => {
+        const parsed = sourceKindPolicySchema.safeParse(item.metadata?.policy);
+        return parsed.success ? [{ key: item.key, labelEn: item.labelEn, labelZh: item.labelZh, policy: parsed.data }] : [];
       });
+      setSourceKinds(nextSourceKinds);
+      if (nextSourceKinds[0]) setSourceKind((current) => current || nextSourceKinds[0].key);
+    }).catch(() => setError("Configuration could not be loaded"));
     getLocalDraft(id).then((draft) => {
       if (!draft) return;
       const p = draft.payload as Record<string, string>;
@@ -64,9 +89,9 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       setSiteId((p.siteId as string) || null);
       setActivityId(String(p.activityDefinitionId ?? ""));
       if (p.quantitative) setQuantitative(JSON.parse(String(p.quantitative)));
-      setProfessorName(String(p.professorName ?? ""));
-      setTitle(String(p.title ?? ""));
-      setUrl(String(p.url ?? ""));
+      if (p.attribution) {
+        try { setAttribution(JSON.parse(String(p.attribution))); } catch { setAttribution({}); }
+      }
       setLocalVersion(draft.localVersion);
     });
     return () => {
@@ -77,15 +102,14 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
   }, [id]);
 
   useEffect(() => {
+    if (!sourceKind || !sourcePolicy) return;
     const handle = setTimeout(async () => {
       const payload = {
         qualitative,
         siteId,
         activityDefinitionId: activityId,
         quantitative: JSON.stringify(quantitative),
-        professorName,
-        title,
-        url,
+        attribution: JSON.stringify(attribution),
       };
       const next = localVersion + 1;
       setLocalVersion(next);
@@ -115,7 +139,7 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       }
     }, 900);
     return () => clearTimeout(handle);
-  }, [qualitative, quantitative, sourceKind, siteId, activityId, professorName, title, url]);
+  }, [qualitative, quantitative, sourceKind, sourcePolicy, siteId, activityId, attribution]);
 
   useEffect(() => {
     if (!siteQ) return;
@@ -127,23 +151,9 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
     return () => clearTimeout(h);
   }, [siteQ]);
 
-  const missingOptions = useMemo(
-    () => [
-      ["not_recorded", locale === "zh" ? "未记录" : "Not recorded"],
-      ["not_applicable", locale === "zh" ? "不适用" : "Not applicable"],
-      ["unknown", locale === "zh" ? "不知道" : "Unknown"],
-      ["refused", locale === "zh" ? "拒绝回答" : "Refused"],
-    ],
-    [locale],
-  );
-
   function buildBody(submit: boolean, version = localVersion) {
-    const attribution =
-      sourceKind === "professor_interview"
-        ? { professorName, affiliation, attributionPermission, quotePermission }
-        : sourceKind === "literature"
-          ? { title, url, authors }
-          : {};
+    const permittedAttribution = Object.fromEntries((sourcePolicy?.allowedIdentifierFields ?? [])
+      .flatMap((field) => attribution[field]?.trim() ? [[field, attribution[field].trim()]] : []));
     return {
       clientRecordId: id,
       idempotencyKey: submit ? `${id}-submit-${version}` : `${id}-draft-${version}`,
@@ -153,16 +163,17 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       activityDefinitionId: activityId || null,
       qualitative,
       quantitative,
-      attribution,
+      attribution: permittedAttribution,
       contentLanguage: locale,
-      ...(submit ? { piiAttestation: attestation } : {}),
+      ...(submit && sourcePolicy?.requiresPiiAttestation ? { piiAttestation: attestation } : {}),
     };
   }
 
   async function ensureSite(): Promise<string | null> {
-    if (sourceKind !== "field_visit") return siteId;
+    if (!sourcePolicy?.requiresSite) return siteId;
     if (siteId) return siteId;
     if (!siteName.trim()) throw new Error("Site required");
+    if (!siteType) throw new Error("Site type configuration is unavailable");
     const res = await fetch("/api/v1/sites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -179,6 +190,7 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
   async function onSubmit() {
     setError("");
     try {
+      if (!sourcePolicy) throw new Error("Source configuration is unavailable");
       const sid = await ensureSite();
       const body = { ...buildBody(true, localVersion + 1), siteId: sid };
       const send = async () =>
@@ -202,20 +214,34 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
     }
   }
 
+  const attributionLabels: Record<string, string> = {
+    professorName: t.professorName,
+    affiliation: t.affiliation,
+    attributionPermission: t.attributionPermission,
+    quotePermission: t.quotePermission,
+    title: t.title,
+    url: t.url,
+    authors: t.authors,
+    year: locale === "zh" ? "年份" : "Year",
+  };
+  const attributionLookupCategory: Record<string, string> = {
+    attributionPermission: "attribution_permission",
+    quotePermission: "quote_permission",
+  };
+
   return (
     <div className="stack">
       {!online ? <div className="banner">{t.offlineHint}</div> : null}
       <label>
         {t.sourceKind}
-        <select value={sourceKind} onChange={(e) => setSourceKind(e.target.value)}>
-          <option value="field_visit">{t.fieldVisit}</option>
-          <option value="professor_interview">{t.professorInterview}</option>
-          <option value="literature">{t.literature}</option>
-          <option value="other">{t.other}</option>
+        <select value={sourceKind} onChange={(e) => setSourceKind(e.target.value)} disabled={!sourceKinds.length}>
+          {sourceKinds.map((item) => (
+            <option key={item.key} value={item.key}>{locale === "zh" ? item.labelZh : item.labelEn}</option>
+          ))}
         </select>
       </label>
 
-      {sourceKind === "field_visit" ? (
+      {sourcePolicy?.requiresSite ? (
         <div className="card stack">
           <label>
             {t.searchSite}
@@ -225,7 +251,7 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
                 setSiteQ(e.target.value);
                 setSiteName(e.target.value);
               }}
-              placeholder="Sunny Day ADHC"
+              placeholder={locale === "zh" ? "搜索或输入地点" : "Search or enter a location"}
             />
           </label>
           {sites.map((s) => (
@@ -245,13 +271,16 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
           <label>
             Site type
             <select value={siteType} onChange={(e) => setSiteType(e.target.value)}>
-              <option value="adhc">ADHC</option>
-              <option value="nursing_home">Nursing home 养老院</option>
-              <option value="school">School 学校</option>
-              <option value="university">University 大学</option>
-              <option value="other">Other</option>
+              {siteTypes.map((item) => (
+                <option key={item.key} value={item.key}>{locale === "zh" ? item.nameZh : item.nameEn}</option>
+              ))}
             </select>
           </label>
+        </div>
+      ) : null}
+
+      {sourcePolicy?.requiresActivity ? (
+        <div className="card stack">
           <label>
             {t.activity}
             <select value={activityId} onChange={(e) => setActivityId(e.target.value)}>
@@ -265,53 +294,41 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
         </div>
       ) : null}
 
-      {sourceKind === "professor_interview" ? (
+      {sourcePolicy?.allowedIdentifierFields.length ? (
         <div className="card stack">
-          <label>
-            {t.professorName}
-            <input value={professorName} onChange={(e) => setProfessorName(e.target.value)} />
-          </label>
-          <label>
-            {t.affiliation}
-            <input value={affiliation} onChange={(e) => setAffiliation(e.target.value)} />
-          </label>
-          <label>
-            {t.attributionPermission}
-            <select value={attributionPermission} onChange={(e) => setAttributionPermission(e.target.value)}>
-              <option value="internal_named">Internal named 内部可署名</option>
-              <option value="public_named">Public named 公开可署名</option>
-              <option value="anonymous">Anonymous 匿名</option>
-            </select>
-          </label>
-          <label>
-            {t.quotePermission}
-            <select value={quotePermission} onChange={(e) => setQuotePermission(e.target.value)}>
-              <option value="internal">Internal 仅内部</option>
-              <option value="public">Public 可公开</option>
-              <option value="no_quote">No quote 不可引用</option>
-            </select>
-          </label>
+          {sourcePolicy.allowedIdentifierFields.map((field) => {
+            const category = attributionLookupCategory[field];
+            const options = category ? lookups.filter((item) => item.category === category).sort((a, b) => a.sortOrder - b.sortOrder) : [];
+            const required = sourcePolicy.requiredAttributionFields.includes(field);
+            return (
+              <label key={field}>
+                {attributionLabels[field] ?? field}
+                {options.length ? (
+                  <select
+                    value={attribution[field] ?? ""}
+                    required={required}
+                    onChange={(event) => setAttribution((current) => ({ ...current, [field]: event.target.value }))}
+                  >
+                    <option value="">{locale === "zh" ? "请选择" : "Select"}</option>
+                    {options.map((option) => (
+                      <option key={option.key} value={option.key}>{locale === "zh" ? option.nameZh : option.nameEn}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={field === "url" ? "url" : field === "year" ? "number" : "text"}
+                    value={attribution[field] ?? ""}
+                    required={required}
+                    onChange={(event) => setAttribution((current) => ({ ...current, [field]: event.target.value }))}
+                  />
+                )}
+              </label>
+            );
+          })}
         </div>
       ) : null}
 
-      {sourceKind === "literature" ? (
-        <div className="card stack">
-          <label>
-            {t.title}
-            <input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </label>
-          <label>
-            {t.url}
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" />
-          </label>
-          <label>
-            {t.authors}
-            <input value={authors} onChange={(e) => setAuthors(e.target.value)} />
-          </label>
-        </div>
-      ) : null}
-
-      {activity && sourceKind === "field_visit" ? (
+      {activity && sourcePolicy?.requiresActivity ? (
         <div className="card stack">
           <h3>{t.quantitative}</h3>
           {activity.fields.map((field) => (
@@ -346,10 +363,9 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
                       }))
                     }
                   >
-                    <option value="recorded">{locale === "zh" ? "已记录" : "Recorded"}</option>
-                    {missingOptions.map(([k, label]) => (
-                      <option key={k} value={k}>
-                        {label}
+                    {missingReasons.map((reason) => (
+                      <option key={reason.key} value={reason.key}>
+                        {locale === "zh" ? reason.nameZh : reason.nameEn}
                       </option>
                     ))}
                   </select>
@@ -374,7 +390,7 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
         <textarea value={qualitative} onChange={(e) => setQualitative(e.target.value)} />
       </label>
 
-      {sourceKind === "field_visit" ? (
+      {sourcePolicy?.requiresPiiAttestation ? (
         <label className="row">
           <input type="checkbox" checked={attestation} onChange={(e) => setAttestation(e.target.checked)} />
           <span>{t.deidentifyAttest}</span>
@@ -383,7 +399,7 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
 
       <div className="muted">{status}</div>
       {error ? <div className="chip bad">{error}</div> : null}
-      <button className="btn" type="button" onClick={onSubmit}>
+      <button className="btn" type="button" onClick={onSubmit} disabled={!sourcePolicy}>
         {t.submit}
       </button>
     </div>

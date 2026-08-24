@@ -68,10 +68,10 @@ export async function publishAiWorkflowVersion(id: string, actorId: string) {
       existing.providerConfigId ? tx.select().from(aiProviderConfigs).where(eq(aiProviderConfigs.id, existing.providerConfigId)).limit(1).then((rows) => rows[0]) : Promise.resolve(null),
       existing.modelConfigId ? tx.select().from(aiModelConfigs).where(eq(aiModelConfigs.id, existing.modelConfigId)).limit(1).then((rows) => rows[0]) : Promise.resolve(null),
     ]);
-    if (existing.promptVersionId && (!prompt || prompt.status !== "active")) throw new Error("Workflow prompt version must be active");
-    if (existing.outputSchemaVersionId && (!outputSchema || outputSchema.status !== "published")) throw new Error("Workflow output schema version must be published");
-    if (existing.providerConfigId && (!provider || provider.status !== "active")) throw new Error("Workflow provider must be active");
-    if (existing.modelConfigId && (!model || model.status !== "active" || model.providerConfigId !== existing.providerConfigId)) throw new Error("Workflow model must be active and belong to the selected provider");
+    if (!existing.promptVersionId || !prompt || prompt.status !== "active") throw new Error("Workflow requires an active prompt version");
+    if (!existing.outputSchemaVersionId || !outputSchema || outputSchema.status !== "published") throw new Error("Workflow requires a published output schema version");
+    if (!existing.providerConfigId || !provider || provider.status !== "active") throw new Error("Workflow requires an active provider");
+    if (!existing.modelConfigId || !model || model.status !== "active" || model.providerConfigId !== existing.providerConfigId) throw new Error("Workflow requires an active model belonging to the selected provider");
     const [version] = await tx.update(aiWorkflowVersions).set({ status: "published", publishedAt: new Date(), updatedAt: new Date() }).where(eq(aiWorkflowVersions.id, id)).returning();
     await tx.update(aiWorkflows).set({ status: "active", currentPublishedVersionId: id, updatedAt: new Date() }).where(eq(aiWorkflows.id, existing.workflowId));
     return { existing, version };

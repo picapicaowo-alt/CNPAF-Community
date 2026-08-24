@@ -12,7 +12,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; at
   const { id, attachmentId } = await ctx.params;
   const record = (await db.select().from(records).where(eq(records.id, id)).limit(1))[0];
   if (!record?.headVersionId) return jsonError("Record not found", 404);
-  const decision = await authorizeAny({ userId: user!.id, permissions: ["records.view", "records.view_own"], resource: { organizationId: record.organizationId, siteId: record.siteId, serviceKey: record.sourceKind, ownerUserId: record.createdById } });
+  const decision = await authorizeAny({ userId: user!.id, permissions: ["records.view", "records.view_own"], resource: { organizationId: record.organizationId, programId: record.programId, siteId: record.siteId, serviceKey: record.sourceKind, ownerUserId: record.createdById } });
   if (!decision.allowed) return jsonError("Forbidden", 403);
 
   const file = (

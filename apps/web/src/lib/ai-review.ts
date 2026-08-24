@@ -1,9 +1,11 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import {
   aiFindings,
   aiRuns,
   approvedFindings,
+  auditEvents,
   findingReviews,
+  jobs,
   records,
   recordVersions,
 } from "@cnpaf/db/schema";
@@ -11,9 +13,10 @@ import type { z } from "zod";
 import type { aiFindingReviewBodySchema } from "@cnpaf/shared";
 import { db } from "./db";
 import { audit } from "./audit";
-import { createQueuedAiRun } from "./ai";
+import { assertPreparedAiRun, createQueuedAiRun, prepareQueuedAiRun } from "./ai";
 import { enqueueAnalyze } from "./jobs";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
+import { ApiError } from "./api-error";
 
 type FindingReviewInput = z.infer<typeof aiFindingReviewBodySchema>;
 
@@ -39,6 +42,7 @@ export async function listAiRuns(userId: string) {
   const canManageAll = evaluateAuthorization(access, "settings.manage").allowed;
   return rows.filter(({ run, record }) => record ? evaluateAuthorization(access, "ai.view_runs", {
     organizationId: record.organizationId,
+    programId: record.programId,
     siteId: record.siteId,
     serviceKey: record.sourceKind,
     researchUse: record.researchUseStatus,
@@ -64,6 +68,7 @@ export async function canViewAiRun(userId: string, runId: string) {
   const access = await getAccessContext(userId);
   const allowed = bundle.record ? evaluateAuthorization(access, "ai.view_runs", {
     organizationId: bundle.record.organizationId,
+    programId: bundle.record.programId,
     siteId: bundle.record.siteId,
     serviceKey: bundle.record.sourceKind,
     researchUse: bundle.record.researchUseStatus,
@@ -108,13 +113,42 @@ export async function retryAiRun(runId: string, actorId: string) {
 
 export async function reviewAiFinding(findingId: string, actorId: string, input: FindingReviewInput) {
   const row = (await db
-    .select({ finding: aiFindings, run: aiRuns })
+    .select({ finding: aiFindings, run: aiRuns, record: records })
     .from(aiFindings)
     .innerJoin(aiRuns, eq(aiFindings.aiRunId, aiRuns.id))
+    .innerJoin(recordVersions, eq(aiRuns.recordVersionId, recordVersions.id))
+    .innerJoin(records, eq(recordVersions.recordId, records.id))
     .where(eq(aiFindings.id, findingId))
     .limit(1))[0];
-  if (!row) throw new Error("AI finding not found");
+  if (!row || !row.run.recordVersionId) throw new ApiError("NOT_FOUND", "AI finding not found", 404);
+  const access = await getAccessContext(actorId);
+  const findingResource = {
+    organizationId: row.record.organizationId,
+    programId: row.record.programId,
+    siteId: row.record.siteId,
+    serviceKey: row.record.sourceKind,
+    researchUse: row.record.researchUseStatus,
+  };
+  const mayReview = evaluateAuthorization(access, "ai.review_findings", findingResource).allowed
+    || evaluateAuthorization(access, "findings.review", findingResource).allowed;
+  if (!mayReview) throw new ApiError("FORBIDDEN", "AI finding is outside the assigned review scope", 403);
+  if (input.decision === "re_run_requested"
+    && !evaluateAuthorization(access, "ai.request_reclassification", findingResource).allowed) {
+    throw new ApiError("FORBIDDEN", "Reclassification permission is required", 403);
+  }
+  const preparedReanalysis = input.decision === "re_run_requested" ? await prepareQueuedAiRun({
+    recordVersionId: row.run.recordVersionId,
+    parentAiRunId: row.run.id,
+    reviewerInstruction: input.reviewerNotes!.trim(),
+    workflowVersionId: row.run.workflowVersionId,
+    createdByUserId: actorId,
+    idempotencyKey: `finding-re-run:${findingId}`,
+  }) : null;
   const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`select id from ai_findings where id = ${findingId} for update`);
+    const existing = (await tx.select({ id: findingReviews.id }).from(findingReviews)
+      .where(eq(findingReviews.aiFindingId, findingId)).limit(1))[0];
+    if (existing) throw new ApiError("CONFLICT", "AI finding has already been reviewed", 409);
     const [review] = await tx.insert(findingReviews).values({
       aiFindingId: findingId,
       reviewerId: actorId,
@@ -140,8 +174,41 @@ export async function reviewAiFinding(findingId: string, actorId: string, input:
         approvedById: actorId,
       }).returning();
     }
-    return { review, approved };
+    let reanalysisRun = null as typeof aiRuns.$inferSelect | null;
+    if (preparedReanalysis) {
+      reanalysisRun = preparedReanalysis.existingRun;
+      if (!reanalysisRun) {
+        [reanalysisRun] = await tx.insert(aiRuns).values(preparedReanalysis.values)
+          .onConflictDoNothing({ target: aiRuns.idempotencyKey }).returning();
+        reanalysisRun ??= (await tx.select().from(aiRuns)
+          .where(eq(aiRuns.idempotencyKey, preparedReanalysis.input.idempotencyKey)).limit(1))[0];
+      }
+      if (!reanalysisRun) throw new ApiError("INTERNAL_ERROR", "Could not create AI reanalysis run", 500);
+      assertPreparedAiRun(reanalysisRun, preparedReanalysis);
+      await tx.insert(jobs).values({
+        kind: "analyze_record_version",
+        recordVersionId: row.run.recordVersionId,
+        status: "queued",
+        idempotencyKey: `ai-run:${reanalysisRun.id}`,
+        payload: { aiRunId: reanalysisRun.id },
+      }).onConflictDoNothing({ target: jobs.idempotencyKey });
+      await audit({
+        actorId,
+        action: "ai_run.queued",
+        entityType: "ai_run",
+        entityId: reanalysisRun.id,
+        afterState: reanalysisRun,
+      }, (values) => tx.insert(auditEvents).values(values));
+    }
+    await audit({
+      actorId,
+      action: `ai_finding.${input.decision}`,
+      entityType: "ai_finding",
+      entityId: findingId,
+      afterState: { review, approved, reanalysisRun },
+      reason: input.reviewerNotes ?? null,
+    }, (values) => tx.insert(auditEvents).values(values));
+    return { review, approved, reanalysisRun };
   });
-  await audit({ actorId, action: `ai_finding.${input.decision}`, entityType: "ai_finding", entityId: findingId, afterState: result, reason: input.reviewerNotes ?? null });
   return result;
 }

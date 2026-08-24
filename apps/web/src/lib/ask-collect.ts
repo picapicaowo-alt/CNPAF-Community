@@ -13,9 +13,10 @@ import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
 import { executeConfiguredWorkflow } from "./ai";
 import { scanPrivacy } from "./pii";
+import { matchesEvidenceFilters } from "./evidence-filters";
 
 type ConversationInput = z.infer<typeof askConversationBodySchema>;
-type AskScope = { organizationIds?: string[]; siteIds?: string[]; serviceTypeKeys?: string[] };
+type AskScope = ConversationInput["scope"];
 
 function searchableStatement(value: unknown) {
   return (value as { statement?: string } | null)?.statement?.trim() ?? "";
@@ -34,21 +35,19 @@ export async function createAskConversation(actorId: string, input: Conversation
   return conversation;
 }
 
-function inRequestedScope(scope: AskScope, record: { organizationId: string | null; siteId: string | null; sourceKind: string }) {
-  if (scope.organizationIds?.length && (!record.organizationId || !scope.organizationIds.includes(record.organizationId))) return false;
-  if (scope.siteIds?.length && (!record.siteId || !scope.siteIds.includes(record.siteId))) return false;
-  if (scope.serviceTypeKeys?.length && !scope.serviceTypeKeys.includes(record.sourceKind)) return false;
-  return true;
-}
-
 export async function addAskMessage(conversationId: string, actorId: string, content: string) {
   const conversation = (await db.select().from(askConversations).where(eq(askConversations.id, conversationId)).limit(1))[0];
   if (!conversation || conversation.userId !== actorId || conversation.status !== "active") throw new Error("Conversation not found");
-  const questionPrivacy = scanPrivacy({ sourceKind: "ask_collect", qualitative: content, attribution: {} });
+  const questionPrivacy = scanPrivacy({
+    sourceKind: "ask_collect",
+    qualitative: content,
+    attribution: {},
+    policy: { allowedIdentifierFields: [], privacyDisposition: "flag" },
+  });
   if (questionPrivacy.status === "flagged") throw new Error("Question contains possible personal information and cannot be sent to the configured AI provider");
   const [question] = await db.insert(askMessages).values({ conversationId, role: "user", content }).returning();
   const candidates = await db
-    .select({ approved: approvedFindings, record: records })
+    .select({ approved: approvedFindings, version: recordVersions, record: records })
     .from(approvedFindings)
     .innerJoin(recordVersions, eq(approvedFindings.recordVersionId, recordVersions.id))
     .innerJoin(records, eq(recordVersions.recordId, records.id))
@@ -56,12 +55,13 @@ export async function addAskMessage(conversationId: string, actorId: string, con
   const access = await getAccessContext(actorId);
   const requestedScope = (conversation.scope ?? {}) as AskScope;
   const authorized = candidates
-    .filter(({ record }) =>
-      inRequestedScope(requestedScope, record) &&
+    .filter(({ approved, version, record }) =>
+      matchesEvidenceFilters(requestedScope, record, version, approved) &&
       ["clear", "redacted"].includes(record.privacyStatus) &&
       record.researchUseStatus !== "restricted" &&
       evaluateAuthorization(access, "records.view_approved", {
         organizationId: record.organizationId,
+        programId: record.programId,
         siteId: record.siteId,
         serviceKey: record.sourceKind,
         researchUse: record.researchUseStatus,
@@ -139,6 +139,7 @@ export async function getAskConversation(id: string, actorId: string) {
     record.researchUseStatus !== "restricted" &&
     evaluateAuthorization(access, "records.view_approved", {
       organizationId: record.organizationId,
+      programId: record.programId,
       siteId: record.siteId,
       serviceKey: record.sourceKind,
       researchUse: record.researchUseStatus,

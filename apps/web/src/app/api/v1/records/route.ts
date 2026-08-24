@@ -4,6 +4,7 @@ import { draftBodySchema, submitBodySchema } from "@cnpaf/shared";
 import { requirePermission, requireUser, jsonError } from "@/lib/http";
 import { listRecordsForUser, submitRecord, upsertDraft } from "@/lib/records";
 import { processJobs } from "@/lib/jobs";
+import { apiErrorResponse, requestId } from "@/lib/api-error";
 
 export async function GET() {
   const { user, error } = await requireUser();
@@ -13,23 +14,25 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const traceId = requestId(req);
   const json = await req.json();
   const parsed = draftBodySchema.safeParse(json);
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid draft");
-  const { user, error } = await requirePermission("records.create", { siteId: parsed.data.siteId, serviceKey: parsed.data.sourceKind });
+  const { user, error } = await requirePermission("records.create", { organizationId: undefined, programId: parsed.data.programId, siteId: parsed.data.siteId, serviceKey: parsed.data.sourceKind });
   if (error || !user) return error;
   try {
     const result = await upsertDraft(user!, parsed.data);
     return NextResponse.json(result);
   } catch (err) {
-    return jsonError(err instanceof Error ? err.message : "Draft failed", 400);
+    return apiErrorResponse(err, traceId);
   }
 }
 
 export async function PUT(req: Request) {
+  const traceId = requestId(req);
   const parsed = submitBodySchema.safeParse(await req.json());
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid submit");
-  const { user, error } = await requirePermission("records.submit", { siteId: parsed.data.siteId, serviceKey: parsed.data.sourceKind });
+  const { user, error } = await requirePermission("records.submit", { programId: parsed.data.programId, siteId: parsed.data.siteId, serviceKey: parsed.data.sourceKind });
   if (error || !user) return error;
   try {
     const result = await submitRecord(user!, parsed.data);
@@ -42,6 +45,6 @@ export async function PUT(req: Request) {
     });
     return NextResponse.json(result);
   } catch (err) {
-    return jsonError(err instanceof Error ? err.message : "Submit failed", 400);
+    return apiErrorResponse(err, traceId);
   }
 }

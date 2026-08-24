@@ -16,7 +16,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const finding = (await db.select().from(aiFindings).where(eq(aiFindings.id, id)).limit(1))[0];
   const resource = finding ? await aiRunResource(finding.aiRunId) : null;
   if (!resource) return jsonError("AI finding not found", 404);
-  const decision = await authorize({ userId: user.id, permission: "ai.review_findings", resource: { organizationId: resource.record.organizationId, siteId: resource.record.siteId, serviceKey: resource.record.sourceKind } });
+  const decision = await authorize({ userId: user.id, permission: "ai.review_findings", resource: { organizationId: resource.record.organizationId, programId: resource.record.programId, siteId: resource.record.siteId, serviceKey: resource.record.sourceKind } });
   if (!decision.allowed) return jsonError("Forbidden", 403);
   return NextResponse.json(await reviewAiFinding(id, user.id, parsed.data), { status: 201 });
 }

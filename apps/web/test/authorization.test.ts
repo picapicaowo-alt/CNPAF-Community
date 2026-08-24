@@ -62,3 +62,24 @@ test("approved-evidence role does not imply raw record access", () => {
   assert.equal(evaluateAuthorization(access, "records.view_approved", { organizationId: "org-a", dataClassification: "approved_evidence" }).allowed, true);
   assert.equal(evaluateAuthorization(access, "records.view", { organizationId: "org-a", dataClassification: "raw_operational" }).allowed, false);
 });
+
+test("program scope restricts records even inside the same organization", () => {
+  const scoped = context({
+    grants: [grant("records.review")],
+    scopes: [{ id: "scope-program", roleAssignmentId: "assignment-a", permissionId: null, permissionKey: null, scopeType: "program", scopeId: "program-a", scopeKey: null, effect: "allow" }],
+  });
+  assert.equal(evaluateAuthorization(scoped, "records.review", { organizationId: "org-a", programId: "program-a" }).allowed, true);
+  assert.equal(evaluateAuthorization(scoped, "records.review", { organizationId: "org-a", programId: "program-b" }).allowed, false);
+});
+
+test("location and form aliases are evaluated as first-class scopes", () => {
+  const scoped = context({
+    grants: [grant("records.create")],
+    scopes: [
+      { id: "location", roleAssignmentId: "assignment-a", permissionId: null, permissionKey: null, scopeType: "location", scopeId: "site-a", scopeKey: null, effect: "allow" },
+      { id: "form", roleAssignmentId: "assignment-a", permissionId: null, permissionKey: null, scopeType: "form", scopeId: "template-a", scopeKey: null, effect: "allow" },
+    ],
+  });
+  assert.equal(evaluateAuthorization(scoped, "records.create", { organizationId: "org-a", locationId: "site-a", formId: "template-a" }).allowed, true);
+  assert.equal(evaluateAuthorization(scoped, "records.create", { organizationId: "org-a", locationId: "site-a", formId: "template-b" }).allowed, false);
+});
