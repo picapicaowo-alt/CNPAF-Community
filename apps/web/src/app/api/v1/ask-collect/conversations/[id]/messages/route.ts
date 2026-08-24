@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { askMessageBodySchema } from "@cnpaf/shared";
 import { addAskMessage } from "@/lib/ask-collect";
-import { jsonError, requirePermission } from "@/lib/http";
+import { jsonError, requireAnyPermission } from "@/lib/http";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { user, error } = await requirePermission("chat.ask_collect");
+  const { user, error } = await requireAnyPermission(["chat.ask_collect", "ask_collect.use"]);
   if (error || !user) return error;
   const parsed = askMessageBodySchema.safeParse(await req.json());
   if (!parsed.success) return jsonError(parsed.error.message);

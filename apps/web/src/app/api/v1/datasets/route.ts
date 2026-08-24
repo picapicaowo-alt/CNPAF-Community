@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { datasetCreateBodySchema } from "@cnpaf/shared";
-import { requirePermission } from "@/lib/http";
+import { requireAnyPermission, requirePermission } from "@/lib/http";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { createDataset, listDatasets } from "@/lib/modules/datasets";
 
 export async function GET() {
-  const { user, error } = await requirePermission("datasets.download");
+  const { user, error } = await requireAnyPermission(["datasets.download", "datasets.create"]);
   if (error || !user) return error;
   return NextResponse.json({ datasets: await listDatasets(user.id) });
 }

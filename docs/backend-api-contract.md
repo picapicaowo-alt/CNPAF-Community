@@ -231,7 +231,7 @@ Classification output is validated against the selected versioned JSON Schema. T
 
 | Method | Path | Permission | Request contract |
 |---|---|---|---|
-| GET | `/analytics` | scoped `analytics.view` | origin-separated aggregates |
+| GET | `/analytics` | scoped `analytics.view` or canonical `insights.view` | origin-separated aggregates |
 | GET | `/reports` | scoped `reports.view` | authorized editable reports plus legacy generated artifacts |
 | POST | `/report-runs` | `reports.generate` | `reportRunBodySchema`; returns `202` |
 | GET | `/report-runs/:id` | `reports.view` plus current evidence access | — |
@@ -252,9 +252,9 @@ Classification output is validated against the selected versioned JSON Schema. T
 | POST | `/report-templates/:id/versions` | `reports.publish` | `reportTemplateVersionBodySchema` |
 | PATCH | `/report-template-versions/:id` | `reports.publish` | `reportTemplateVersionUpdateBodySchema` |
 | POST | `/report-template-versions/:id/publish` | `reports.publish` | — |
-| POST | `/ask-collect/conversations` | `chat.ask_collect` | `askConversationBodySchema` |
-| POST | `/ask-collect/conversations/:id/messages` | `chat.ask_collect` | `askMessageBodySchema` |
-| GET | `/ask-collect/conversations/:id` | owner + `chat.ask_collect` | messages and structured sources |
+| POST | `/ask-collect/conversations` | `chat.ask_collect` or canonical `ask_collect.use` | `askConversationBodySchema` |
+| POST | `/ask-collect/conversations/:id/messages` | `chat.ask_collect` or canonical `ask_collect.use` | `askMessageBodySchema` |
+| GET | `/ask-collect/conversations/:id` | owner + either Ask Collect permission | messages and structured sources |
 | POST | `/export-jobs` | scoped `exports.create` | `exportJobBodySchema`; returns `202` |
 | GET | `/export-jobs` | `exports.create` | current user's jobs |
 | GET | `/export-jobs/:id` | owner + `exports.create` | — |
@@ -281,7 +281,7 @@ Ask Collect performs permission, requested-scope, privacy, and research-use filt
 |---|---|---|---|
 | POST | `/records/:id/download` | scoped `records.download` | `dataDownloadBodySchema`; current approved version only; JSON/CSV/PDF |
 | POST | `/records/:id/share` | scoped `records.share` | `recordShareBodySchema`; creates an immutable one-record dataset version |
-| GET/POST | `/datasets` | scoped `datasets.download` / `datasets.create` | `datasetCreateBodySchema` on POST |
+| GET/POST | `/datasets` | scoped `datasets.download` or `datasets.create` / `datasets.create` | `datasetCreateBodySchema` on POST |
 | GET | `/datasets/:datasetId` | scoped `datasets.download` | dataset and immutable version history |
 | POST | `/datasets/:datasetId/refresh` | `datasets.refresh` | `datasetRefreshBodySchema`; creates the next frozen version |
 | POST | `/datasets/:datasetId/download` | `datasets.download` plus current record access | `dataDownloadBodySchema`; JSON/CSV |
