@@ -6,20 +6,29 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CNPAF Collect",
-  description: "Field intelligence for CNPAF and Winston Lab",
+  description:
+    "Secure field collection, review, and research evidence workflows for CNPAF.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "CNPAF Collect", statusBarStyle: "default" },
+  appleWebApp: {
+    capable: true,
+    title: "CNPAF Collect",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f5c4c",
+  themeColor: "#073b70",
   width: "device-width",
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="zh">
+    <html lang="zh" suppressHydrationWarning>
       <body>
         <LocaleProvider>
           <ServiceWorkerRegistrar />

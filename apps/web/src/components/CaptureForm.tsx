@@ -2,14 +2,49 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { sourceKindPolicySchema, type ActivityDefinitionSeed, type SourceKindPolicy } from "@cnpaf/shared";
+import {
+  sourceKindPolicySchema,
+  type ActivityDefinitionSeed,
+  type SourceKindPolicy,
+} from "@cnpaf/shared";
 import { useI18n } from "./LocaleProvider";
-import { flushOutbox, getLocalDraft, newId, queueOutbox, saveLocalDraft } from "@/lib/offline";
+import {
+  flushOutbox,
+  getLocalDraft,
+  newId,
+  queueOutbox,
+  saveLocalDraft,
+} from "@/lib/offline";
+import { apiFetch, ClientApiError, errorMessage } from "@/lib/api-client";
 
-type Site = { id: string; name: string; siteType: string; region?: string | null; canonicalStatus: string };
-type Activity = { id: string; key: string; version: number; nameZh: string; nameEn: string; fields: ActivityDefinitionSeed["fields"] };
-type Lookup = { category: string; key: string; nameZh: string; nameEn: string; sortOrder: number };
-type SourceKind = { key: string; labelEn: string; labelZh: string; policy: SourceKindPolicy };
+type Site = {
+  id: string;
+  name: string;
+  siteType: string;
+  region?: string | null;
+  canonicalStatus: string;
+};
+type Activity = {
+  id: string;
+  key: string;
+  version: number;
+  nameZh: string;
+  nameEn: string;
+  fields: ActivityDefinitionSeed["fields"];
+};
+type Lookup = {
+  category: string;
+  key: string;
+  nameZh: string;
+  nameEn: string;
+  sortOrder: number;
+};
+type SourceKind = {
+  key: string;
+  labelEn: string;
+  labelZh: string;
+  policy: SourceKindPolicy;
+};
 
 const CAPTURE_LOCK = "cnpaf.capturing";
 
@@ -27,7 +62,9 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
   const [siteType, setSiteType] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityId, setActivityId] = useState<string>("");
-  const [quantitative, setQuantitative] = useState<Record<string, { reason: string; value: number | null }>>({});
+  const [quantitative, setQuantitative] = useState<
+    Record<string, { reason: string; value: number | null }>
+  >({});
   const [qualitative, setQualitative] = useState("");
   const [attestation, setAttestation] = useState(false);
   const [attribution, setAttribution] = useState<Record<string, string>>({});
@@ -40,11 +77,17 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
   const source = sourceKinds.find((item) => item.key === sourceKind);
   const sourcePolicy = source?.policy;
   const siteTypes = useMemo(
-    () => lookups.filter((item) => item.category === "site_type").sort((a, b) => a.sortOrder - b.sortOrder),
+    () =>
+      lookups
+        .filter((item) => item.category === "site_type")
+        .sort((a, b) => a.sortOrder - b.sortOrder),
     [lookups],
   );
   const missingReasons = useMemo(
-    () => lookups.filter((item) => item.category === "missing_reason").sort((a, b) => a.sortOrder - b.sortOrder),
+    () =>
+      lookups
+        .filter((item) => item.category === "missing_reason")
+        .sort((a, b) => a.sortOrder - b.sortOrder),
     [lookups],
   );
 
@@ -60,27 +103,47 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
     window.addEventListener("offline", off);
     Promise.all([
       fetch("/api/v1/lookups").then((response) => response.json()),
-      fetch("/api/v1/config/registries/source_kind?status=active").then((response) => response.json()),
-    ]).then(([lookupData, sourceData]) => {
-      const nextLookups = (lookupData.lookups ?? []) as Lookup[];
-      setLookups(nextLookups);
-      setActivities(lookupData.activities ?? []);
-      if (lookupData.activities?.[0]) setActivityId((current) => current || lookupData.activities[0].id);
-      const nextSiteType = nextLookups.filter((item) => item.category === "site_type")
-        .sort((a, b) => a.sortOrder - b.sortOrder)[0];
-      if (nextSiteType) setSiteType((current) => current || nextSiteType.key);
-      const nextSourceKinds = (sourceData.items ?? []).flatMap((item: {
-        key: string;
-        labelEn: string;
-        labelZh: string;
-        metadata?: { policy?: unknown };
-      }) => {
-        const parsed = sourceKindPolicySchema.safeParse(item.metadata?.policy);
-        return parsed.success ? [{ key: item.key, labelEn: item.labelEn, labelZh: item.labelZh, policy: parsed.data }] : [];
-      });
-      setSourceKinds(nextSourceKinds);
-      if (nextSourceKinds[0]) setSourceKind((current) => current || nextSourceKinds[0].key);
-    }).catch(() => setError("Configuration could not be loaded"));
+      fetch("/api/v1/config/registries/source_kind?status=active").then(
+        (response) => response.json(),
+      ),
+    ])
+      .then(([lookupData, sourceData]) => {
+        const nextLookups = (lookupData.lookups ?? []) as Lookup[];
+        setLookups(nextLookups);
+        setActivities(lookupData.activities ?? []);
+        if (lookupData.activities?.[0])
+          setActivityId((current) => current || lookupData.activities[0].id);
+        const nextSiteType = nextLookups
+          .filter((item) => item.category === "site_type")
+          .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+        if (nextSiteType) setSiteType((current) => current || nextSiteType.key);
+        const nextSourceKinds = (sourceData.items ?? []).flatMap(
+          (item: {
+            key: string;
+            labelEn: string;
+            labelZh: string;
+            metadata?: { policy?: unknown };
+          }) => {
+            const parsed = sourceKindPolicySchema.safeParse(
+              item.metadata?.policy,
+            );
+            return parsed.success
+              ? [
+                  {
+                    key: item.key,
+                    labelEn: item.labelEn,
+                    labelZh: item.labelZh,
+                    policy: parsed.data,
+                  },
+                ]
+              : [];
+          },
+        );
+        setSourceKinds(nextSourceKinds);
+        if (nextSourceKinds[0])
+          setSourceKind((current) => current || nextSourceKinds[0].key);
+      })
+      .catch(() => setError("Configuration could not be loaded"));
     getLocalDraft(id).then((draft) => {
       if (!draft) return;
       const p = draft.payload as Record<string, string>;
@@ -90,7 +153,11 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       setActivityId(String(p.activityDefinitionId ?? ""));
       if (p.quantitative) setQuantitative(JSON.parse(String(p.quantitative)));
       if (p.attribution) {
-        try { setAttribution(JSON.parse(String(p.attribution))); } catch { setAttribution({}); }
+        try {
+          setAttribution(JSON.parse(String(p.attribution)));
+        } catch {
+          setAttribution({});
+        }
       }
       setLocalVersion(draft.localVersion);
     });
@@ -125,21 +192,51 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       const body = buildBody(false, next);
       if (navigator.onLine) {
         try {
-          await fetch("/api/v1/records", {
+          await apiFetch("/api/v1/records", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
-        } catch {
-          await queueOutbox({ id: `${id}-draft-${next}`, method: "POST", url: "/api/v1/records", body });
+        } catch (caught) {
+          if (!(caught instanceof ClientApiError) || caught.status >= 500) {
+            await queueOutbox({
+              id: `${id}-draft-${next}`,
+              method: "POST",
+              url: "/api/v1/records",
+              body,
+            });
+            setStatus(t.pendingSync);
+          } else {
+            await saveLocalDraft({
+              clientRecordId: id,
+              localVersion: next,
+              sourceKind,
+              payload,
+              updatedAt: new Date().toISOString(),
+              syncStatus: "conflict",
+            });
+            setError(errorMessage(caught));
+          }
         }
       } else {
-        await queueOutbox({ id: `${id}-draft-${next}`, method: "POST", url: "/api/v1/records", body });
+        await queueOutbox({
+          id: `${id}-draft-${next}`,
+          method: "POST",
+          url: "/api/v1/records",
+          body,
+        });
         setStatus(t.pendingSync);
       }
     }, 900);
     return () => clearTimeout(handle);
-  }, [qualitative, quantitative, sourceKind, sourcePolicy, siteId, activityId, attribution]);
+  }, [
+    qualitative,
+    quantitative,
+    sourceKind,
+    sourcePolicy,
+    siteId,
+    activityId,
+    attribution,
+  ]);
 
   useEffect(() => {
     if (!siteQ) return;
@@ -152,11 +249,16 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
   }, [siteQ]);
 
   function buildBody(submit: boolean, version = localVersion) {
-    const permittedAttribution = Object.fromEntries((sourcePolicy?.allowedIdentifierFields ?? [])
-      .flatMap((field) => attribution[field]?.trim() ? [[field, attribution[field].trim()]] : []));
+    const permittedAttribution = Object.fromEntries(
+      (sourcePolicy?.allowedIdentifierFields ?? []).flatMap((field) =>
+        attribution[field]?.trim() ? [[field, attribution[field].trim()]] : [],
+      ),
+    );
     return {
       clientRecordId: id,
-      idempotencyKey: submit ? `${id}-submit-${version}` : `${id}-draft-${version}`,
+      idempotencyKey: submit
+        ? `${id}-submit-${version}`
+        : `${id}-draft-${version}`,
       localVersion: version,
       sourceKind,
       siteId,
@@ -165,7 +267,9 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       quantitative,
       attribution: permittedAttribution,
       contentLanguage: locale,
-      ...(submit && sourcePolicy?.requiresPiiAttestation ? { piiAttestation: attestation } : {}),
+      ...(submit && sourcePolicy?.requiresPiiAttestation
+        ? { piiAttestation: attestation }
+        : {}),
     };
   }
 
@@ -174,15 +278,27 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
     if (siteId) return siteId;
     if (!siteName.trim()) throw new Error("Site required");
     if (!siteType) throw new Error("Site type configuration is unavailable");
-    const res = await fetch("/api/v1/sites", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: siteName, siteType }),
-    });
-    const data = await res.json();
+    const data = await apiFetch<{ site?: Site; suggestions?: Site[] }>(
+      "/api/v1/sites",
+      {
+        method: "POST",
+        body: JSON.stringify({ name: siteName, siteType }),
+      },
+    );
     if (data.suggestions?.length && !data.site) {
       setSites(data.suggestions);
+      throw new Error(
+        locale === "zh"
+          ? "请选择一个建议地点，或修改地点名称。"
+          : "Choose a suggested location or revise the location name.",
+      );
     }
+    if (!data.site)
+      throw new Error(
+        locale === "zh"
+          ? "无法创建地点。"
+          : "The location could not be created.",
+      );
     setSiteId(data.site.id);
     return data.site.id;
   }
@@ -193,24 +309,24 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       if (!sourcePolicy) throw new Error("Source configuration is unavailable");
       const sid = await ensureSite();
       const body = { ...buildBody(true, localVersion + 1), siteId: sid };
-      const send = async () =>
-        fetch("/api/v1/records", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
       if (!navigator.onLine) {
-        await queueOutbox({ id: body.idempotencyKey, method: "PUT", url: "/api/v1/records", body });
+        await queueOutbox({
+          id: body.idempotencyKey,
+          method: "PUT",
+          url: "/api/v1/records",
+          body,
+        });
         setStatus(t.offlineHint);
         router.push("/records");
         return;
       }
-      const res = await send();
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Submit failed");
+      await apiFetch("/api/v1/records", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
       router.push("/records");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
+      setError(errorMessage(err));
     }
   }
 
@@ -234,9 +350,15 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
       {!online ? <div className="banner">{t.offlineHint}</div> : null}
       <label>
         {t.sourceKind}
-        <select value={sourceKind} onChange={(e) => setSourceKind(e.target.value)} disabled={!sourceKinds.length}>
+        <select
+          value={sourceKind}
+          onChange={(e) => setSourceKind(e.target.value)}
+          disabled={!sourceKinds.length}
+        >
           {sourceKinds.map((item) => (
-            <option key={item.key} value={item.key}>{locale === "zh" ? item.labelZh : item.labelEn}</option>
+            <option key={item.key} value={item.key}>
+              {locale === "zh" ? item.labelZh : item.labelEn}
+            </option>
           ))}
         </select>
       </label>
@@ -251,7 +373,11 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
                 setSiteQ(e.target.value);
                 setSiteName(e.target.value);
               }}
-              placeholder={locale === "zh" ? "搜索或输入地点" : "Search or enter a location"}
+              placeholder={
+                locale === "zh"
+                  ? "搜索或输入地点"
+                  : "Search or enter a location"
+              }
             />
           </label>
           {sites.map((s) => (
@@ -270,9 +396,14 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
           ))}
           <label>
             Site type
-            <select value={siteType} onChange={(e) => setSiteType(e.target.value)}>
+            <select
+              value={siteType}
+              onChange={(e) => setSiteType(e.target.value)}
+            >
               {siteTypes.map((item) => (
-                <option key={item.key} value={item.key}>{locale === "zh" ? item.nameZh : item.nameEn}</option>
+                <option key={item.key} value={item.key}>
+                  {locale === "zh" ? item.nameZh : item.nameEn}
+                </option>
               ))}
             </select>
           </label>
@@ -283,7 +414,10 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
         <div className="card stack">
           <label>
             {t.activity}
-            <select value={activityId} onChange={(e) => setActivityId(e.target.value)}>
+            <select
+              value={activityId}
+              onChange={(e) => setActivityId(e.target.value)}
+            >
               {activities.map((a) => (
                 <option key={a.id} value={a.id}>
                   {locale === "zh" ? a.nameZh : a.nameEn} v{a.version}
@@ -298,8 +432,13 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
         <div className="card stack">
           {sourcePolicy.allowedIdentifierFields.map((field) => {
             const category = attributionLookupCategory[field];
-            const options = category ? lookups.filter((item) => item.category === category).sort((a, b) => a.sortOrder - b.sortOrder) : [];
-            const required = sourcePolicy.requiredAttributionFields.includes(field);
+            const options = category
+              ? lookups
+                  .filter((item) => item.category === category)
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+              : [];
+            const required =
+              sourcePolicy.requiredAttributionFields.includes(field);
             return (
               <label key={field}>
                 {attributionLabels[field] ?? field}
@@ -307,19 +446,39 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
                   <select
                     value={attribution[field] ?? ""}
                     required={required}
-                    onChange={(event) => setAttribution((current) => ({ ...current, [field]: event.target.value }))}
+                    onChange={(event) =>
+                      setAttribution((current) => ({
+                        ...current,
+                        [field]: event.target.value,
+                      }))
+                    }
                   >
-                    <option value="">{locale === "zh" ? "请选择" : "Select"}</option>
+                    <option value="">
+                      {locale === "zh" ? "请选择" : "Select"}
+                    </option>
                     {options.map((option) => (
-                      <option key={option.key} value={option.key}>{locale === "zh" ? option.nameZh : option.nameEn}</option>
+                      <option key={option.key} value={option.key}>
+                        {locale === "zh" ? option.nameZh : option.nameEn}
+                      </option>
                     ))}
                   </select>
                 ) : (
                   <input
-                    type={field === "url" ? "url" : field === "year" ? "number" : "text"}
+                    type={
+                      field === "url"
+                        ? "url"
+                        : field === "year"
+                          ? "number"
+                          : "text"
+                    }
                     value={attribution[field] ?? ""}
                     required={required}
-                    onChange={(event) => setAttribution((current) => ({ ...current, [field]: event.target.value }))}
+                    onChange={(event) =>
+                      setAttribution((current) => ({
+                        ...current,
+                        [field]: event.target.value,
+                      }))
+                    }
                   />
                 )}
               </label>
@@ -340,11 +499,21 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
                     type="number"
                     min={field.min}
                     max={field.max}
-                    value={quantitative[field.key]?.reason === "recorded" ? (quantitative[field.key]?.value ?? "") : ""}
+                    value={
+                      quantitative[field.key]?.reason === "recorded"
+                        ? (quantitative[field.key]?.value ?? "")
+                        : ""
+                    }
                     onChange={(e) =>
                       setQuantitative((q) => ({
                         ...q,
-                        [field.key]: { reason: "recorded", value: e.target.value === "" ? null : Number(e.target.value) },
+                        [field.key]: {
+                          reason: "recorded",
+                          value:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
+                        },
                       }))
                     }
                   />
@@ -358,7 +527,10 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
                         ...q,
                         [field.key]: {
                           reason: e.target.value,
-                          value: e.target.value === "recorded" ? q[field.key]?.value ?? null : null,
+                          value:
+                            e.target.value === "recorded"
+                              ? (q[field.key]?.value ?? null)
+                              : null,
                         },
                       }))
                     }
@@ -387,19 +559,31 @@ export function CaptureForm({ clientRecordId }: { clientRecordId?: string }) {
 
       <label>
         {t.qualitative}
-        <textarea value={qualitative} onChange={(e) => setQualitative(e.target.value)} />
+        <textarea
+          value={qualitative}
+          onChange={(e) => setQualitative(e.target.value)}
+        />
       </label>
 
       {sourcePolicy?.requiresPiiAttestation ? (
         <label className="row">
-          <input type="checkbox" checked={attestation} onChange={(e) => setAttestation(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={attestation}
+            onChange={(e) => setAttestation(e.target.checked)}
+          />
           <span>{t.deidentifyAttest}</span>
         </label>
       ) : null}
 
       <div className="muted">{status}</div>
       {error ? <div className="chip bad">{error}</div> : null}
-      <button className="btn" type="button" onClick={onSubmit} disabled={!sourcePolicy}>
+      <button
+        className="btn"
+        type="button"
+        onClick={onSubmit}
+        disabled={!sourcePolicy}
+      >
         {t.submit}
       </button>
     </div>

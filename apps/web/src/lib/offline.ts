@@ -16,15 +16,21 @@ function openDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(DRAFTS)) db.createObjectStore(DRAFTS, { keyPath: "clientRecordId" });
-      if (!db.objectStoreNames.contains(OUTBOX)) db.createObjectStore(OUTBOX, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(DRAFTS))
+        db.createObjectStore(DRAFTS, { keyPath: "clientRecordId" });
+      if (!db.objectStoreNames.contains(OUTBOX))
+        db.createObjectStore(OUTBOX, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-async function withStore<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>) {
+async function withStore<T>(
+  store: string,
+  mode: IDBTransactionMode,
+  fn: (s: IDBObjectStore) => IDBRequest<T>,
+) {
   const db = await openDb();
   return new Promise<T>((resolve, reject) => {
     const tx = db.transaction(store, mode);
@@ -39,23 +45,30 @@ export async function saveLocalDraft(draft: LocalDraft) {
 }
 
 export async function getLocalDraft(id: string) {
-  return withStore<LocalDraft | undefined>(DRAFTS, "readonly", (s) => s.get(id));
+  return withStore<LocalDraft | undefined>(DRAFTS, "readonly", (s) =>
+    s.get(id),
+  );
 }
 
 export async function listLocalDrafts() {
   return withStore<LocalDraft[]>(DRAFTS, "readonly", (s) => s.getAll());
 }
 
-export async function queueOutbox(item: { id: string; method: string; url: string; body: unknown }) {
-  await withStore(OUTBOX, "readwrite", (s) => s.put({ ...item, createdAt: Date.now() }));
+export async function queueOutbox(item: {
+  id: string;
+  method: string;
+  url: string;
+  body: unknown;
+}) {
+  await withStore(OUTBOX, "readwrite", (s) =>
+    s.put({ ...item, createdAt: Date.now() }),
+  );
 }
 
 export async function flushOutbox() {
-  const items = await withStore<{ id: string; method: string; url: string; body: unknown }[]>(
-    OUTBOX,
-    "readonly",
-    (s) => s.getAll(),
-  );
+  const items = await withStore<
+    { id: string; method: string; url: string; body: unknown }[]
+  >(OUTBOX, "readonly", (s) => s.getAll());
   for (const item of items ?? []) {
     try {
       const res = await fetch(item.url, {
@@ -65,11 +78,37 @@ export async function flushOutbox() {
       });
       if (res.ok) {
         await withStore(OUTBOX, "readwrite", (s) => s.delete(item.id));
+        await updateDraftAfterSync(item.body, "synced");
+      } else if ([400, 403, 404, 409, 422].includes(res.status)) {
+        await withStore(OUTBOX, "readwrite", (s) => s.delete(item.id));
+        await updateDraftAfterSync(item.body, "conflict");
+      } else {
+        break;
       }
     } catch {
       break;
     }
   }
+}
+
+async function updateDraftAfterSync(
+  body: unknown,
+  syncStatus: LocalDraft["syncStatus"],
+) {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    !("clientRecordId" in body) ||
+    typeof body.clientRecordId !== "string"
+  )
+    return;
+  const draft = await getLocalDraft(body.clientRecordId);
+  if (!draft) return;
+  await saveLocalDraft({
+    ...draft,
+    syncStatus,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function newId() {
