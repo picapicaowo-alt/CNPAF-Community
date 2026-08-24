@@ -15,6 +15,7 @@ import type {
   templateVersionCreateBodySchema,
 } from "@cnpaf/shared";
 import { db } from "./db";
+import { requireActiveRegistryItem } from "./registries";
 
 export type TemplateCreateInput = z.infer<typeof templateCreateBodySchema>;
 export type TemplateVersionCreateInput = z.infer<typeof templateVersionCreateBodySchema>;
@@ -73,6 +74,7 @@ export async function getTemplateVersionBundle(versionId: string) {
 }
 
 export async function createTemplate(input: TemplateCreateInput, actorId: string) {
+  await requireActiveRegistryItem("template_type", input.templateTypeKey, input.organizationId);
   return db.transaction(async (tx) => {
     const [template] = await tx.insert(templates).values({
       key: input.key,
@@ -191,6 +193,9 @@ export async function addTemplateSection(versionId: string, input: TemplateSecti
 }
 
 export async function addTemplateField(sectionId: string, input: TemplateFieldInput) {
+  const resource = await getTemplateAuthorizationResource("section", sectionId);
+  if (!resource) throw new Error("Template section not found");
+  await requireActiveRegistryItem("collection_field_type", input.fieldTypeKey, resource.organizationId);
   const [field] = await db.insert(templateFields).values({ templateSectionId: sectionId, ...input }).returning();
   return field;
 }

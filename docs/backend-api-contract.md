@@ -315,6 +315,7 @@ SHA-256 hashes; access is logged and revalidated on every request.
 | `0006_record_occurrence_time.sql` | persisted/indexed record occurrence timestamp |
 | `0007_ai_output_schema_provenance.sql` | direct `AiRun` foreign-key provenance to the selected output schema version |
 | `0008_v4_1_foundation.sql` | first-login credentials, programs/memberships/affiliations, tasks, location aliases/merges/coordinates, notifications, human report versions, immutable datasets/shares/access logs, V4.1 permissions and source-kind policy registry data |
+| `0009_collection_field_type_registry.sql` | active collection field controls and renderer metadata used by versioned form builders and pinned task packages |
 
 ## Durable states
 

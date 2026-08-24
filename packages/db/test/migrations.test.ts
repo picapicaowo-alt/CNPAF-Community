@@ -21,6 +21,24 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
     await db.exec(await readFile(new URL("../sql/0006_record_occurrence_time.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../sql/0007_ai_output_schema_provenance.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../sql/0008_v4_1_foundation.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../sql/0009_collection_field_type_registry.sql", import.meta.url), "utf8"));
+
+    const fieldTypes = await db.query<{ key: string; control: string }>(`
+      SELECT item.key, item.metadata->>'control' AS control
+      FROM config_registry_items item
+      JOIN config_registries registry ON registry.id = item.registry_id
+      WHERE registry.key = 'collection_field_type' AND item.status = 'active'
+      ORDER BY item.sort_order
+    `);
+    assert.deepEqual(fieldTypes.rows, [
+      { key: "short_text", control: "text" },
+      { key: "long_text", control: "textarea" },
+      { key: "number", control: "number" },
+      { key: "date_time", control: "date" },
+      { key: "single_select", control: "single" },
+      { key: "multi_select", control: "multi" },
+      { key: "boolean", control: "boolean" },
+    ]);
 
     const sourcePolicies = await db.query<{ key: string; default_origin: string }>(`
       SELECT item.key, item.metadata->'policy'->>'defaultConcernOriginKey' AS default_origin
