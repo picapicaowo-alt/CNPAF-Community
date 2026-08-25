@@ -9,6 +9,7 @@ import {
   datasetRecords,
   datasets,
   datasetVersions,
+  exportJobs,
   organizations,
   privacyFlags,
   programs,
@@ -16,6 +17,7 @@ import {
   recordFieldAnswers,
   recordStructuredSelections,
   recordVersions,
+  reportVersions,
   sharedDatasetAccessLogs,
   sharedDatasets,
   sites,
@@ -928,6 +930,68 @@ export async function archiveDataset(actorId: string, datasetId: string, input: 
       metadata: { requestId },
     }, (values) => tx.insert(auditEvents).values(values));
     return { dataset: after, revokedShareCount: revoked.length };
+  });
+}
+
+export async function restoreDataset(actorId: string, datasetId: string, requestId?: string) {
+  const before = await requireDataset(actorId, datasetId, "datasets.archive");
+  if (before.status !== "archived") throw new ApiError("CONFLICT", "Only archived datasets can be restored", 409);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select id from datasets where id = ${datasetId} for update`);
+    const now = new Date();
+    const [after] = await tx.update(datasets).set({ status: "active", updatedAt: now })
+      .where(and(eq(datasets.id, datasetId), eq(datasets.status, "archived")))
+      .returning();
+    if (!after) throw new ApiError("CONFLICT", "Dataset changed concurrently", 409);
+    await audit({
+      actorId,
+      action: "dataset.restored",
+      entityType: "dataset",
+      entityId: datasetId,
+      beforeState: { status: before.status },
+      afterState: { status: after.status },
+      metadata: { requestId },
+    }, (values) => tx.insert(auditEvents).values(values));
+    return after;
+  });
+}
+
+export async function deleteArchivedDataset(actorId: string, datasetId: string, requestId?: string) {
+  const before = await requireDataset(actorId, datasetId, "datasets.archive");
+  if (before.status !== "archived") throw new ApiError("CONFLICT", "Archive the dataset before deleting it", 409);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select id from datasets where id = ${datasetId} for update`);
+    const locked = (await tx.select().from(datasets).where(eq(datasets.id, datasetId)).limit(1))[0];
+    if (!locked || locked.status !== "archived") throw new ApiError("CONFLICT", "Dataset is no longer archived", 409);
+    const versionRows = await tx.select({ id: datasetVersions.id }).from(datasetVersions).where(eq(datasetVersions.datasetId, datasetId));
+    const versionIds = versionRows.map((version) => version.id);
+    if (versionIds.length) {
+      const reportReference = await tx.select({ id: reportVersions.id }).from(reportVersions).where(inArray(reportVersions.sourceDatasetVersionId, versionIds)).limit(1);
+      const exportReference = await tx.select({ id: exportJobs.id }).from(exportJobs).where(inArray(exportJobs.datasetVersionId, versionIds)).limit(1);
+      if (reportReference.length || exportReference.length) {
+        throw new ApiError("CONFLICT", "This dataset is referenced by a report or export and must remain archived", 409);
+      }
+      const shareRows = await tx.select({ id: sharedDatasets.id }).from(sharedDatasets).where(inArray(sharedDatasets.datasetVersionId, versionIds));
+      const shareIds = shareRows.map((share) => share.id);
+      if (shareIds.length) await tx.delete(sharedDatasetAccessLogs).where(inArray(sharedDatasetAccessLogs.sharedDatasetId, shareIds));
+      await tx.delete(sharedDatasets).where(inArray(sharedDatasets.datasetVersionId, versionIds));
+      await tx.delete(datasetRecords).where(inArray(datasetRecords.datasetVersionId, versionIds));
+      await tx.delete(datasetVersions).where(inArray(datasetVersions.id, versionIds));
+    }
+    const [deleted] = await tx.delete(datasets)
+      .where(and(eq(datasets.id, datasetId), eq(datasets.status, "archived")))
+      .returning({ id: datasets.id });
+    if (!deleted) throw new ApiError("CONFLICT", "Dataset changed concurrently", 409);
+    await audit({
+      actorId,
+      action: "dataset.deleted",
+      entityType: "dataset",
+      entityId: datasetId,
+      beforeState: { ...before, versionIds },
+      afterState: { deleted: true },
+      metadata: { requestId },
+    }, (values) => tx.insert(auditEvents).values(values));
+    return deleted;
   });
 }
 

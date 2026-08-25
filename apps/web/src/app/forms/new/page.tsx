@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FORM_PRESETS, getFormPreset } from "@cnpaf/shared";
@@ -98,6 +97,20 @@ export default function NewFormPage() {
               })),
           ),
         );
+        const search = new URLSearchParams(window.location.search);
+        const initialPreset = getFormPreset(search.get("preset"));
+        if (initialPreset) {
+          setPresetKey(initialPreset.key);
+          setNameEn(initialPreset.nameEn);
+          setNameZh(initialPreset.nameZh);
+          setDescriptionEn(initialPreset.descriptionEn);
+          setDescriptionZh(initialPreset.descriptionZh);
+          setType(initialPreset.templateTypeKey);
+          setKey(`${initialPreset.key}-${Date.now().toString(36)}`);
+          setStep("name");
+        } else if (search.get("blank") === "1") {
+          setStep("name");
+        }
       })
       .catch((caught) => setError(errorMessage(caught)));
   }, []);
@@ -181,12 +194,6 @@ export default function NewFormPage() {
           locale === "zh"
             ? "先选一个贴近业务的起点，几分钟内即可得到可编辑草稿。"
             : "Start from a common workflow and get an editable draft in minutes."
-        }
-        actions={
-          <Link className="button button-secondary" href="/forms">
-            <AppIcon name="back" />
-            {locale === "zh" ? "返回表单" : "Back to forms"}
-          </Link>
         }
       />
       {error ? <ErrorState message={error} /> : null}

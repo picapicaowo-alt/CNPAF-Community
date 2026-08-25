@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/components/LocaleProvider";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
@@ -34,10 +35,12 @@ export default function InvitePage() {
   return (
     <div className="auth-page">
       <section className="auth-brand-panel">
-        <div className="auth-brand-lockup">
-          <span className="brand-mark">C</span>CNPAF Collect
-        </div>
-        <div>
+        <div className="auth-story">
+          <BrandLogo
+            className="auth-brand-logo"
+            label="Chinese Psychological Assistance Foundation"
+            priority
+          />
           <h1>
             {locale === "zh"
               ? "欢迎加入社区证据协作。"
@@ -52,9 +55,9 @@ export default function InvitePage() {
         <span className="auth-footnote">Secure · Scoped · Auditable</span>
       </section>
       <section className="auth-form-panel">
+        <div className="auth-product-name">CNPAF Community</div>
         <form className="card auth-card stack" onSubmit={onSubmit}>
           <div>
-            <div className="eyebrow">CNPAF</div>
             <h1>{t.invite}</h1>
           </div>
           <label>

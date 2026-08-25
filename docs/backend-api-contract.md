@@ -320,6 +320,8 @@ Ask Collect performs permission, requested-scope, privacy, and research-use filt
 | POST | `/datasets/:datasetId/share` | `datasets.share` plus current record access | `datasetShareBodySchema`; returns the bearer token once |
 | POST | `/dataset-shares/:shareId/revoke` | scoped `datasets.share` | atomically revokes an active grant |
 | POST | `/datasets/:datasetId/archive` | scoped `datasets.archive` | reason required; retains versions and atomically revokes every active share |
+| POST | `/datasets/:datasetId/restore` | scoped `datasets.archive` | restores an archived dataset to active; revoked shares stay revoked |
+| DELETE | `/datasets/:datasetId` | scoped `datasets.archive` | archived datasets only; permanent deletion is blocked while a report or export references any version |
 | GET | `/shared-datasets/:token` | authenticated, scoped recipient | re-checks share scope, expiry, dataset permission, and every frozen record |
 
 `POST /reports` accepts one optional `sourceDatasetVersionId`. When present it

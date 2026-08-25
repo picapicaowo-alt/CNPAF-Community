@@ -100,3 +100,17 @@ export async function archiveDataset(datasetId: string, reason: string) {
     { method: "POST", body: JSON.stringify({ reason }) },
   );
 }
+
+export async function restoreDataset(datasetId: string) {
+  return apiFetch<{ dataset: DatasetSummary }>(
+    `/api/v1/datasets/${datasetId}/restore`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function deleteDataset(datasetId: string) {
+  return apiFetch<{ deleted: { id: string } }>(
+    `/api/v1/datasets/${datasetId}`,
+    { method: "DELETE" },
+  );
+}

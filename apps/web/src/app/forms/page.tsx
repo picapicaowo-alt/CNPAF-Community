@@ -1,5 +1,6 @@
 "use client";
 
+import { FORM_PRESETS } from "@cnpaf/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,6 +15,10 @@ import {
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { FormPreviewPopover } from "@/features/forms/components/FormPreviewPopover";
+import {
+  TemplateLaunchModal,
+  type TemplateChoice,
+} from "@/features/forms/components/TemplateLaunchModal";
 
 type Template = {
   id: string;
@@ -34,6 +39,7 @@ type Version = {
   usageCount?: number;
   sectionCount?: number;
   fieldCount?: number;
+  configuration?: Record<string, unknown>;
   updatedAt?: string;
 };
 type FormCard = { template: Template; versions: Version[] };
@@ -47,6 +53,11 @@ export default function FormsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [permissions, setPermissions] = useState<string[]>([]);
   const [workingId, setWorkingId] = useState("");
+  const [showTemplateLauncher, setShowTemplateLauncher] = useState(false);
+  const [quickIds, setQuickIds] = useState<string[]>(
+    FORM_PRESETS.slice(0, 3).map((preset) => `preset:${preset.key}`),
+  );
+  const [quickReady, setQuickReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -77,9 +88,95 @@ export default function FormsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("cnpaf-form-quick-add");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const ids = Array.isArray(parsed) ? parsed : parsed?.version === 1 ? parsed.ids : null;
+        if (Array.isArray(ids) && ids.every((value) => typeof value === "string")) {
+          setQuickIds(ids);
+        }
+      }
+    } catch {
+      // Keep the default Quick Add choices if local storage is unavailable.
+    } finally {
+      setQuickReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!quickReady) return;
+    try {
+      window.localStorage.setItem(
+        "cnpaf-form-quick-add",
+        JSON.stringify({ version: 1, ids: quickIds }),
+      );
+    } catch {
+      // Quick Add remains usable for this session without persistence.
+    }
+  }, [quickIds, quickReady]);
+
+  const reusableForms = useMemo(
+    () =>
+      forms.filter(({ versions }) =>
+        versions.some(
+          (version) => version.configuration?.savedAsReusableTemplate === true,
+        ),
+      ),
+    [forms],
+  );
+  const managedForms = useMemo(
+    () =>
+      forms.filter(({ versions }) =>
+        versions.every(
+          (version) => version.configuration?.savedAsReusableTemplate !== true,
+        ),
+      ),
+    [forms],
+  );
+
+  const templateChoices = useMemo<TemplateChoice[]>(() => {
+    const presetChoices: TemplateChoice[] = FORM_PRESETS.map((preset) => ({
+      id: `preset:${preset.key}`,
+      kind: "preset",
+      sourceId: preset.key,
+      title: locale === "zh" ? preset.nameZh : preset.nameEn,
+      description: locale === "zh" ? preset.descriptionZh : preset.descriptionEn,
+      meta: `${locale === "zh" ? preset.useCaseZh : preset.useCaseEn} · ${preset.estimatedMinutes} ${locale === "zh" ? "分钟" : "min"}`,
+      recommended: preset.recommended,
+    }));
+    const libraryChoices: TemplateChoice[] = reusableForms.flatMap((card) => {
+      const version = card.versions.find(
+        (item) => item.configuration?.savedAsReusableTemplate === true,
+      );
+      if (!version) return [];
+      return [{
+        id: `library:${card.template.id}`,
+        kind: "library" as const,
+        sourceId: card.template.id,
+        title: locale === "zh" ? version.nameZh : version.nameEn,
+        description:
+          (locale === "zh" ? version.descriptionZh : version.descriptionEn) ||
+          (locale === "zh" ? "团队保存的可复用表单结构。" : "A reusable form structure saved by your team."),
+        meta: `${version.sectionCount ?? 0} ${locale === "zh" ? "个章节" : "sections"} · ${version.fieldCount ?? 0} ${locale === "zh" ? "个问题" : "questions"}`,
+      }];
+    });
+    return [...libraryChoices, ...presetChoices];
+  }, [locale, reusableForms]);
+
+  const quickChoices = useMemo(
+    () =>
+      quickIds
+        .map((id) => templateChoices.find((choice) => choice.id === id))
+        .filter((choice): choice is TemplateChoice => Boolean(choice))
+        .slice(0, 4),
+    [quickIds, templateChoices],
+  );
+
   const visible = useMemo(
     () =>
-      forms.filter(({ template, versions }) => {
+      managedForms.filter(({ template, versions }) => {
         const hasDraft = versions.some((version) => version.status === "draft");
         const hasPublished = Boolean(template.currentPublishedVersionId);
         const matchesStatus =
@@ -97,18 +194,47 @@ export default function FormsPage() {
             ].some((part) => part?.toLocaleLowerCase().includes(value)))
         );
       }),
-    [forms, query, statusFilter],
+    [managedForms, query, statusFilter],
   );
 
   const summary = useMemo(
     () => ({
-      published: forms.filter(({ template }) => template.currentPublishedVersionId).length,
-      drafts: forms.filter(({ versions }) =>
+      published: managedForms.filter(({ template }) => template.currentPublishedVersionId).length,
+      drafts: managedForms.filter(({ versions }) =>
         versions.some((version) => version.status === "draft"),
       ).length,
     }),
-    [forms],
+    [managedForms],
   );
+
+  function chooseTemplate(choice: TemplateChoice) {
+    if (choice.kind === "preset") {
+      router.push(`/forms/new?preset=${encodeURIComponent(choice.sourceId)}`);
+      return;
+    }
+    const card = reusableForms.find(
+      (item) => item.template.id === choice.sourceId,
+    );
+    if (card) void duplicateForm(card, "form");
+  }
+
+  function toggleQuick(choiceId: string) {
+    setQuickIds((current) =>
+      current.includes(choiceId)
+        ? current.filter((id) => id !== choiceId)
+        : [...current, choiceId],
+    );
+  }
+
+  async function deleteReusableTemplate(choice: TemplateChoice) {
+    const card = reusableForms.find(
+      (item) => item.template.id === choice.sourceId,
+    );
+    if (!card) return;
+    if (await removeForm(card, choice.title, "template")) {
+      setQuickIds((current) => current.filter((id) => id !== choice.id));
+    }
+  }
 
   async function editForm(card: FormCard) {
     const draft = card.versions.find((version) => version.status === "draft");
@@ -137,13 +263,21 @@ export default function FormsPage() {
     }
   }
 
-  async function removeForm(card: FormCard, name: string) {
+  async function removeForm(
+    card: FormCard,
+    name: string,
+    itemKind: "form" | "template" = "form",
+  ) {
     const confirmed = window.confirm(
-      locale === "zh"
-        ? `从表单列表删除“${name}”？已发布版本、历史任务和记录会继续保留。`
-        : `Remove “${name}” from the form list? Published versions, historical tasks, and records will remain available.`,
+      itemKind === "template"
+        ? locale === "zh"
+          ? `删除模板“${name}”？使用它创建的表单和历史记录不会受影响。`
+          : `Delete the template “${name}”? Forms created from it and historical records will not be affected.`
+        : locale === "zh"
+          ? `从表单列表删除“${name}”？已发布版本、历史任务和记录会继续保留。`
+          : `Remove “${name}” from the form list? Published versions, historical tasks, and records will remain available.`,
     );
-    if (!confirmed) return;
+    if (!confirmed) return false;
     setWorkingId(card.template.id);
     setError("");
     try {
@@ -151,8 +285,10 @@ export default function FormsPage() {
       setForms((current) =>
         current.filter((item) => item.template.id !== card.template.id),
       );
+      return true;
     } catch (caught) {
       setError(errorMessage(caught));
+      return false;
     } finally {
       setWorkingId("");
     }
@@ -217,16 +353,41 @@ export default function FormsPage() {
         }
         actions={
           canCreate ? (
-            <Link className="button" href="/forms/new">
+            <button className="button" onClick={() => setShowTemplateLauncher(true)} type="button">
               <AppIcon name="plus" />
               {locale === "zh" ? "新建表单" : "New form"}
-            </Link>
+            </button>
           ) : undefined
         }
       />
+      {canCreate ? (
+        <section className="form-quick-add" aria-label="Quick Add">
+          <div className="form-quick-add-label">
+            <span className="eyebrow">Quick Add</span>
+            <span>{locale === "zh" ? "常用模板" : "Favorite templates"}</span>
+          </div>
+          <div className="form-quick-add-items">
+            {quickChoices.map((choice) => (
+              <button
+                disabled={workingId === choice.sourceId}
+                key={choice.id}
+                onClick={() => chooseTemplate(choice)}
+                type="button"
+              >
+                <AppIcon name={choice.kind === "library" ? "template" : "plus"} />
+                <span>{choice.title}</span>
+              </button>
+            ))}
+            <button className="form-quick-add-manage" onClick={() => setShowTemplateLauncher(true)} type="button">
+              <AppIcon name="settings" />
+              <span>{locale === "zh" ? "设置" : "Customize"}</span>
+            </button>
+          </div>
+        </section>
+      ) : null}
       {!loading ? (
         <div className="form-summary-strip">
-          <div><strong>{forms.length}</strong><span>{locale === "zh" ? "全部表单" : "All forms"}</span></div>
+          <div><strong>{managedForms.length}</strong><span>{locale === "zh" ? "全部表单" : "All forms"}</span></div>
           <div><strong>{summary.published}</strong><span>{locale === "zh" ? "已发布" : "Published"}</span></div>
           <div><strong>{summary.drafts}</strong><span>{locale === "zh" ? "待完成草稿" : "Drafts to finish"}</span></div>
         </div>
@@ -445,9 +606,9 @@ export default function FormsPage() {
         <EmptyState
           action={
             canCreate ? (
-              <Link className="button" href="/forms/new">
+              <button className="button" onClick={() => setShowTemplateLauncher(true)} type="button">
                 {locale === "zh" ? "新建表单" : "New form"}
-              </Link>
+              </button>
             ) : undefined
           }
           icon="forms"
@@ -459,6 +620,19 @@ export default function FormsPage() {
           }
         />
       )}
+      {showTemplateLauncher ? (
+        <TemplateLaunchModal
+          choices={templateChoices}
+          locale={locale}
+          onChoose={chooseTemplate}
+          onClose={() => setShowTemplateLauncher(false)}
+          onDelete={deleteReusableTemplate}
+          onStartBlank={() => router.push("/forms/new?blank=1")}
+          onToggleQuick={toggleQuick}
+          quickIds={quickIds}
+          workingId={workingId}
+        />
+      ) : null}
     </div>
   );
 }

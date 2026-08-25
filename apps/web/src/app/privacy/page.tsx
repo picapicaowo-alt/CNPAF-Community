@@ -12,11 +12,11 @@ export default function PrivacyPage() {
         style={{ padding: "clamp(22px, 5vw, 48px)" }}
       >
         <a className="inline-link" href="/login">
-          ← Back to CNPAF Collect
+          ← Back to CNPAF Community
         </a>
         <h1>Privacy Policy 隐私政策</h1>
         <p>
-          CNPAF Collect is an operational field-intelligence system for CNPAF
+          CNPAF Community is an operational field-intelligence system for CNPAF
           volunteers and coordinators. It is not claimed to be HIPAA compliant.
           Whether health-privacy law applies depends on organizational role and
           data.

@@ -149,15 +149,15 @@ export default function DashboardPage() {
         />
         {currentTask ? (
           <Link
-            className="card card-interactive"
+            className="current-task-card card card-interactive"
             href={`/tasks/${currentTask.id}`}
           >
-            <div className="row-between mobile-stack">
-              <div className="stack-sm">
+            <div className="current-task-layout">
+              <div className="current-task-copy">
                 <StatusPill tone="blue">
                   {taskDate(currentTask.dueAt ?? currentTask.opensAt, locale)}
                 </StatusPill>
-                <div>
+                <div className="current-task-heading">
                   <h2>{currentTask.location?.name ?? currentTask.title}</h2>
                   <p className="muted">{currentTask.title}</p>
                 </div>
@@ -166,14 +166,15 @@ export default function DashboardPage() {
                     currentTask.form[locale === "zh" ? "nameZh" : "nameEn"]}
                 </div>
               </div>
-              <span className="button">
+              <span className="current-task-action button">
                 {currentTask.myAssignment?.status === "in_progress"
                   ? locale === "zh"
-                    ? "继续"
-                    : "Continue"
+                    ? "继续任务"
+                    : "Continue task"
                   : locale === "zh"
-                    ? "开始"
-                    : "Start"}
+                    ? "开始任务"
+                    : "Start task"}
+                <AppIcon name="arrow" />
               </span>
             </div>
           </Link>

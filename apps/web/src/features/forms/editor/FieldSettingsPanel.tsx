@@ -227,48 +227,56 @@ export function FieldSettingsPanel({
         </button>
       </div>
       <div className="builder-settings-scroll stack-sm">
-        <div className="form-grid">
-          <label>
-            中文题目
-            <input
-              value={labelZh}
-              onChange={(event) => setLabelZh(event.target.value)}
-            />
-          </label>
-          <label>
-            English question
-            <input
-              value={labelEn}
-              onChange={(event) => setLabelEn(event.target.value)}
-            />
-          </label>
-          <label>
-            {locale === "zh" ? "题型" : "Field type"}
-            <select
-              value={fieldTypeKey}
-              onChange={(event) => changeFieldType(event.target.value)}
-            >
-              {fieldTypes.map((item) => (
-                <option key={item.key} value={item.key}>
-                  {locale === "zh" ? item.labelZh : item.labelEn}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {locale === "zh" ? "所在章节" : "Section"}
-            <select
-              value={sectionId}
-              onChange={(event) => setSectionId(event.target.value)}
-            >
-              {sections.map((section) => (
-                <option key={section.id} value={section.id}>
-                  {locale === "zh" ? section.labelZh : section.labelEn}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <details className="settings-accordion">
+          <summary>
+            <span>{locale === "zh" ? "题目基本信息" : "Question details"}</span>
+            <span className="caption builder-question-summary">
+              {locale === "zh" ? labelZh : labelEn}
+            </span>
+          </summary>
+          <div className="settings-accordion-body form-grid">
+            <label>
+              中文题目
+              <input
+                value={labelZh}
+                onChange={(event) => setLabelZh(event.target.value)}
+              />
+            </label>
+            <label>
+              English question
+              <input
+                value={labelEn}
+                onChange={(event) => setLabelEn(event.target.value)}
+              />
+            </label>
+            <label>
+              {locale === "zh" ? "题型" : "Field type"}
+              <select
+                value={fieldTypeKey}
+                onChange={(event) => changeFieldType(event.target.value)}
+              >
+                {fieldTypes.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {locale === "zh" ? item.labelZh : item.labelEn}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {locale === "zh" ? "所在章节" : "Section"}
+              <select
+                value={sectionId}
+                onChange={(event) => setSectionId(event.target.value)}
+              >
+                {sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {locale === "zh" ? section.labelZh : section.labelEn}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </details>
         <details className="settings-accordion">
           <summary>
             <span>{locale === "zh" ? "说明与占位文字" : "Help and placeholder"}</span>
@@ -314,17 +322,10 @@ export function FieldSettingsPanel({
           </div>
         </details>
         {!displayField ? (
-          <section className="builder-settings-group stack-sm">
-            <div className="builder-settings-group-heading">
-              <div>
-                <h3>{locale === "zh" ? "作答设置" : "Response settings"}</h3>
-                <p className="caption">
-                  {locale === "zh"
-                    ? "设置是否必答、允许的输入范围与特殊回答。"
-                    : "Set requirements, accepted values, and special responses."}
-                </p>
-              </div>
-              <span className="status-pill status-neutral">
+          <details className="settings-accordion">
+            <summary>
+              <span>{locale === "zh" ? "作答设置" : "Response settings"}</span>
+              <span className="caption">
                 {required
                   ? locale === "zh"
                     ? "必答"
@@ -333,48 +334,54 @@ export function FieldSettingsPanel({
                     ? "选答"
                     : "Optional"}
               </span>
-            </div>
-            <div className="builder-choice-grid">
-              <label className="choice">
-                <input
-                  checked={required}
-                  onChange={(event) => setRequired(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>{locale === "zh" ? "必须回答本题" : "Require an answer"}</span>
-              </label>
-              <label className="choice">
-                <input
-                  checked={allowMissingReason}
-                  onChange={(event) =>
-                    setAllowMissingReason(event.target.checked)
-                  }
-                  type="checkbox"
-                />
-                <span>
-                  {locale === "zh"
-                    ? "允许选择“无法记录的原因”"
-                    : "Allow a reason instead of an answer"}
-                </span>
-              </label>
-              {choiceField ? (
+            </summary>
+            <div className="settings-accordion-body stack-sm">
+              <p className="caption builder-settings-disclosure-copy">
+                {locale === "zh"
+                  ? "设置是否必答、允许的输入范围与特殊回答。"
+                  : "Set requirements, accepted values, and special responses."}
+              </p>
+              <div className="builder-choice-grid">
                 <label className="choice">
                   <input
-                    checked={allowCustomEntry}
+                    checked={required}
+                    onChange={(event) => setRequired(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>{locale === "zh" ? "必须回答本题" : "Require an answer"}</span>
+                </label>
+                <label className="choice">
+                  <input
+                    checked={allowMissingReason}
                     onChange={(event) =>
-                      setAllowCustomEntry(event.target.checked)
+                      setAllowMissingReason(event.target.checked)
                     }
                     type="checkbox"
                   />
                   <span>
                     {locale === "zh"
-                      ? "增加“其他（请说明）”"
-                      : "Add an Other response"}
+                      ? "允许选择“无法记录的原因”"
+                      : "Allow a reason instead of an answer"}
                   </span>
                 </label>
-              ) : null}
-            </div>
-            {selectedControl === "rating" ? (
+                {choiceField ? (
+                  <label className="choice">
+                    <input
+                      checked={allowCustomEntry}
+                      onChange={(event) =>
+                        setAllowCustomEntry(event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>
+                      {locale === "zh"
+                        ? "增加“其他（请说明）”"
+                        : "Add an Other response"}
+                    </span>
+                  </label>
+                ) : null}
+              </div>
+              {selectedControl === "rating" ? (
               <div className="builder-rating-settings stack-sm">
                 <div className="row-between">
                   <div>
@@ -509,8 +516,9 @@ export function FieldSettingsPanel({
                   </p>
                 ) : null}
               </div>
-            ) : null}
-          </section>
+              ) : null}
+            </div>
+          </details>
         ) : (
           <div className="builder-info-note">
             <strong>{locale === "zh" ? "信息说明题" : "Information-only field"}</strong>

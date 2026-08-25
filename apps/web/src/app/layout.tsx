@@ -5,13 +5,13 @@ import { InstallBanner, ServiceWorkerRegistrar } from "@/components/PwaBits";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CNPAF Collect",
+  title: "CNPAF Community",
   description:
     "Secure field collection, review, and research evidence workflows for CNPAF.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "CNPAF Collect",
+    title: "CNPAF Community",
     statusBarStyle: "default",
   },
 };

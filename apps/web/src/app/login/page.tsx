@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/components/LocaleProvider";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
@@ -33,10 +34,12 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <section className="auth-brand-panel">
-        <div className="auth-brand-lockup">
-          <span className="brand-mark">C</span>CNPAF Collect
-        </div>
-        <div>
+        <div className="auth-story">
+          <BrandLogo
+            className="auth-brand-logo"
+            label="Chinese Psychological Assistance Foundation"
+            priority
+          />
           <h1>
             {locale === "zh"
               ? "让每一份社区声音都有清晰去向。"
@@ -53,10 +56,10 @@ export default function LoginPage() {
         </span>
       </section>
       <section className="auth-form-panel">
+        <div className="auth-product-name">CNPAF Community</div>
         <form className="card auth-card stack" onSubmit={onSubmit}>
           <div className="row-between">
             <div>
-              <div className="eyebrow">CNPAF</div>
               <h1>{t.login}</h1>
             </div>
             <button

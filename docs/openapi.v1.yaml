@@ -370,6 +370,7 @@ paths:
     get: { tags: [Datasets], operationId: getDatasetBuilderOptions, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /datasets/{datasetId}:
     get: { tags: [Datasets], operationId: getDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    delete: { tags: [Datasets], operationId: deleteArchivedDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /datasets/{datasetId}/attachments/{attachmentId}:
     get:
       tags: [Datasets]
@@ -389,6 +390,8 @@ paths:
     post: { tags: [Datasets], operationId: shareDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
   /datasets/{datasetId}/archive:
     post: { tags: [Datasets], operationId: archiveDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /datasets/{datasetId}/restore:
+    post: { tags: [Datasets], operationId: restoreDataset, parameters: [{ $ref: '#/components/parameters/DatasetId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /dataset-shares/{shareId}/revoke:
     post: { tags: [Datasets], operationId: revokeDatasetShare, parameters: [{ $ref: '#/components/parameters/ShareId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /shared-datasets/{token}:

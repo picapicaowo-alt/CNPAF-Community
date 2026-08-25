@@ -1,5 +1,5 @@
 {
-  "name": "CNPAF Collect",
+  "name": "CNPAF Community",
   "short_name": "CNPAF",
   "description": "Secure field collection, review, and research evidence workflows for CNPAF",
   "start_url": "/dashboard",
@@ -10,9 +10,9 @@
   "lang": "zh",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/cnpaf-logo.webp",
+      "sizes": "640x640",
+      "type": "image/webp",
       "purpose": "any"
     },
     {

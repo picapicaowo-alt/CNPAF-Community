@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, ClientApiError, errorMessage } from "@/lib/api-client";
 import { AppIcon, type AppIconName } from "./AppIcon";
+import { BrandLogo } from "./BrandLogo";
 import { useI18n } from "./LocaleProvider";
 
 type Role = { id: string; key: string; nameEn: string; nameZh: string };
@@ -78,6 +79,25 @@ const navItems: NavItem[] = [
   { href: "/more", labelEn: "More", labelZh: "更多", icon: "more" },
 ];
 
+const parentRoutes: Array<{
+  match: (pathname: string) => boolean;
+  href: string;
+  labelEn: string;
+  labelZh: string;
+}> = [
+  { match: (path) => path.startsWith("/insights/"), href: "/insights", labelEn: "Insights", labelZh: "洞察" },
+  { match: (path) => path.startsWith("/reports/"), href: "/insights", labelEn: "Insights", labelZh: "洞察" },
+  { match: (path) => path.startsWith("/data/"), href: "/data", labelEn: "Datasets", labelZh: "数据集" },
+  { match: (path) => path.startsWith("/forms/"), href: "/forms", labelEn: "Forms", labelZh: "表单" },
+  { match: (path) => path.startsWith("/records/"), href: "/records", labelEn: "Records", labelZh: "记录" },
+  { match: (path) => path.startsWith("/review/"), href: "/review", labelEn: "Review", labelZh: "审核" },
+  { match: (path) => path.startsWith("/tasks/"), href: "/tasks", labelEn: "Tasks", labelZh: "任务" },
+  { match: (path) => path.startsWith("/people/"), href: "/people", labelEn: "People", labelZh: "人员" },
+  { match: (path) => path.startsWith("/programs/"), href: "/programs", labelEn: "Programs", labelZh: "项目" },
+  { match: (path) => path.startsWith("/locations/"), href: "/locations", labelEn: "Locations", labelZh: "地点" },
+  { match: () => true, href: "/dashboard", labelEn: "Home", labelZh: "首页" },
+];
+
 function initials(name: string) {
   return (
     name
@@ -123,10 +143,12 @@ function PasswordChangeGate({ locale }: { locale: "zh" | "en" }) {
   return (
     <main className="auth-page">
       <section className="auth-brand-panel">
-        <div className="auth-brand-lockup">
-          <span className="brand-mark">C</span>CNPAF Collect
-        </div>
-        <div>
+        <div className="auth-story">
+          <BrandLogo
+            className="auth-brand-logo"
+            label="Chinese Psychological Assistance Foundation"
+            priority
+          />
           <h1>
             {locale === "zh"
               ? "先保护好你的账号。"
@@ -143,6 +165,7 @@ function PasswordChangeGate({ locale }: { locale: "zh" | "en" }) {
         </span>
       </section>
       <section className="auth-form-panel">
+        <div className="auth-product-name">CNPAF Community</div>
         <form className="card auth-card stack" onSubmit={submit}>
           <div>
             <div className="eyebrow">
@@ -294,6 +317,9 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     : locale === "zh"
       ? "成员"
       : "Member";
+  const parentRoute = pathname === "/dashboard"
+    ? null
+    : parentRoutes.find((route) => route.match(pathname)) ?? null;
 
   function isActive(item: NavItem) {
     const paths = [item.href, ...(item.aliases ?? [])];
@@ -321,9 +347,11 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         aria-label={locale === "zh" ? "主导航" : "Primary navigation"}
       >
         <Link className="app-brand" href="/dashboard">
-          <span className="brand-mark">C</span>
+          <span className="brand-mark">
+            <BrandLogo className="brand-logo-nav" label="" sizes="38px" />
+          </span>
           <span>
-            <span className="brand-name">CNPAF Collect</span>
+            <span className="brand-name">CNPAF Community</span>
             <span className="brand-role">{roleLabel}</span>
           </span>
         </Link>
@@ -389,9 +417,11 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       <div className="app-content">
         <header className="mobile-app-header">
           <Link className="mobile-brand" href="/dashboard">
-            <span className="brand-mark">C</span>
+            <span className="brand-mark">
+              <BrandLogo className="brand-logo-nav" label="" sizes="32px" />
+            </span>
             <span className="mobile-brand-copy">
-              <strong>CNPAF Collect</strong>
+              <strong>CNPAF Community</strong>
               <span>{me?.user.name ?? roleLabel}</span>
             </span>
           </Link>
@@ -399,7 +429,17 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             <span className="status-pill status-green">{roleLabel}</span>
           </div>
         </header>
-        <main className="app-main">{children}</main>
+        <main className="app-main">
+          {parentRoute ? (
+            <Link className="context-back-control" href={parentRoute.href}>
+              <AppIcon name="back" />
+              <span>
+                {locale === "zh" ? "返回" : "Back to"} {locale === "zh" ? parentRoute.labelZh : parentRoute.labelEn}
+              </span>
+            </Link>
+          ) : null}
+          {children}
+        </main>
       </div>
 
       <nav

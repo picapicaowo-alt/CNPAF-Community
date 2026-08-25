@@ -25,27 +25,32 @@ export function NotificationPanel({
 }) {
   if (!notifications.length) return null;
   return (
-    <section className="stack-sm">
+    <section className="notification-panel stack-sm">
       <div className="section-title">
         <h2>{locale === "zh" ? "通知" : "Notifications"}</h2>
         <StatusPill tone="amber">{notifications.length}</StatusPill>
       </div>
       {notifications.slice(0, 5).map((notification) => (
         <Link
-          className="card card-compact card-interactive row-between mobile-stack"
+          className="notification-row card card-compact card-interactive"
           href={notificationHref(notification)}
           key={notification.id}
           onClick={() => onOpen(notification.id)}
         >
-          <span>
+          <span className="notification-copy">
             <strong>{notificationTitle(notification, locale)}</strong>
-            <span className="caption" style={{ display: "block" }}>
+            <span className="caption">
               {notification.body}
             </span>
           </span>
-          <span className="row">
-            <span className="caption">{taskDate(notification.createdAt, locale)}</span>
-            <AppIcon name="arrow" />
+          <span className="notification-meta">
+            <span className="caption">
+              {taskDate(notification.createdAt, locale)}
+            </span>
+            <span className="notification-action">
+              {locale === "zh" ? "查看" : "View"}
+              <AppIcon name="arrow" />
+            </span>
           </span>
         </Link>
       ))}
