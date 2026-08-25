@@ -20,6 +20,29 @@ export const attributionSchema = z
   })
   .partial();
 
+export const recordFieldAnswerSchema = z
+  .object({
+    templateFieldId: uuidSchema,
+    value: z
+      .union([
+        z.string().max(100_000),
+        z.number(),
+        z.boolean(),
+        z.array(z.string().min(1).max(160)).max(1000),
+      ])
+      .nullable()
+      .default(null),
+    missingReasonKey: z.string().min(1).max(120).nullable().optional(),
+    customText: z.string().max(20_000).nullable().optional(),
+  })
+  .refine(
+    (answer) =>
+      answer.value !== null ||
+      Boolean(answer.missingReasonKey) ||
+      Boolean(answer.customText?.trim()),
+    "A value, missing reason, or custom answer is required",
+  );
+
 export const draftBodySchema = z.object({
   clientRecordId: uuidSchema,
   idempotencyKey: z.string().min(8).max(80),
@@ -32,6 +55,7 @@ export const draftBodySchema = z.object({
   visitId: uuidSchema.nullable().optional(),
   activityDefinitionId: uuidSchema.nullable().optional(),
   templateVersionId: uuidSchema.nullable().optional(),
+  fieldAnswers: z.array(recordFieldAnswerSchema).max(5000).default([]),
   structuredSelections: z.array(z.object({
     templateFieldId: uuidSchema,
     optionId: uuidSchema,
@@ -111,6 +135,7 @@ export const siteCreateBodySchema = z.object({
 export const reviewBodySchema = z.object({
   action: z.enum(["approve", "needs_completion"]),
   annotation: z.string().max(4000).optional(),
+  correctionFieldIds: z.array(uuidSchema).max(200).default([]),
   researchUseStatus: z.string().min(1).max(120).optional(),
   findings: z
     .array(
@@ -120,10 +145,17 @@ export const reviewBodySchema = z.object({
         editedStatement: z.string().optional(),
         canonicalThemeId: uuidSchema.nullable().optional(),
         origin: z.string().min(1).optional(),
-      }),
+      }).strict(),
     )
     .default([]),
-});
+}).strict().refine(
+  (value) =>
+    value.action !== "needs_completion" || Boolean(value.annotation?.trim()),
+  {
+    message: "A correction reason is required when returning a record",
+    path: ["annotation"],
+  },
+);
 
 export const evidenceSchema = z.object({
   text: z.string(),

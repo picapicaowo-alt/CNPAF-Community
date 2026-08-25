@@ -73,6 +73,7 @@ export const PERMISSION_KEYS = [
   "datasets.download",
   "datasets.share",
   "datasets.refresh",
+  "datasets.archive",
   "data.download",
   "data.share",
   "ai.configure",

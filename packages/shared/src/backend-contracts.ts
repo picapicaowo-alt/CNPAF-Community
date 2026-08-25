@@ -110,6 +110,7 @@ export const templateCreateBodySchema = z.object({
   descriptionEn: z.string().max(4000).nullable().optional(),
   descriptionZh: z.string().max(4000).nullable().optional(),
   configuration: z.record(z.unknown()).default({}),
+  presetKey: z.string().max(120).nullable().optional(),
 });
 
 export const templateVersionCreateBodySchema = z.object({
@@ -129,6 +130,11 @@ export const templateVersionUpdateBodySchema = z.object({
   configuration: z.record(z.unknown()).optional(),
 });
 
+export const templateVersionCompareQuerySchema = z.object({
+  fromVersionId: uuidSchema,
+  toVersionId: uuidSchema,
+}).strict();
+
 export const templateSectionBodySchema = z.object({
   key: z.string().min(1).max(160),
   labelEn: z.string().min(1).max(240),
@@ -137,6 +143,70 @@ export const templateSectionBodySchema = z.object({
   helpTextZh: z.string().max(4000).nullable().optional(),
   sortOrder: z.number().int().default(0),
   configuration: z.record(z.unknown()).default({}),
+}).strict();
+
+export const templateSectionUpdateBodySchema = templateSectionBodySchema.partial();
+
+export const formVisibilityConditionSchema = z.object({
+  fieldKey: z.string().min(1).max(160),
+  operator: z.enum([
+    "equals",
+    "not_equals",
+    "includes",
+    "not_includes",
+    "answered",
+    "not_answered",
+  ]),
+  value: z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(z.string()),
+  ]).optional(),
+}).strict();
+
+export const formBranchRuleSchema = z.object({
+  operator: z.enum([
+    "equals",
+    "not_equals",
+    "includes",
+    "not_includes",
+    "answered",
+    "not_answered",
+  ]),
+  value: z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(z.string()),
+  ]).optional(),
+  action: z.enum(["go_to_section", "end_form"]),
+  targetSectionKey: z.string().min(1).max(160).optional(),
+}).strict().superRefine((rule, context) => {
+  if (rule.action === "go_to_section" && !rule.targetSectionKey) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "targetSectionKey is required for go_to_section",
+      path: ["targetSectionKey"],
+    });
+  }
+  if (rule.action === "end_form" && rule.targetSectionKey) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "targetSectionKey is not allowed for end_form",
+      path: ["targetSectionKey"],
+    });
+  }
+  if (
+    !["answered", "not_answered"].includes(rule.operator) &&
+    rule.value === undefined
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "value is required for comparison operators",
+      path: ["value"],
+    });
+  }
 });
 
 export const templateFieldBodySchema = z.object({
@@ -153,10 +223,14 @@ export const templateFieldBodySchema = z.object({
   allowCustomEntry: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
   validation: z.record(z.unknown()).default({}),
-  visibilityConditions: z.array(z.unknown()).default([]),
-  branchingLogic: z.array(z.unknown()).default([]),
+  visibilityConditions: z.array(formVisibilityConditionSchema).default([]),
+  branchingLogic: z.array(formBranchRuleSchema).default([]),
   canonicalMapping: z.record(z.unknown()).default({}),
   configuration: z.record(z.unknown()).default({}),
+}).strict();
+
+export const templateFieldUpdateBodySchema = templateFieldBodySchema.partial().extend({
+  templateSectionId: uuidSchema.optional(),
 });
 
 export const templateFieldOptionBodySchema = z.object({
@@ -169,7 +243,22 @@ export const templateFieldOptionBodySchema = z.object({
   sortOrder: z.number().int().default(0),
   canonicalRegistryItemId: uuidSchema.nullable().optional(),
   configuration: z.record(z.unknown()).default({}),
-});
+}).strict();
+
+export const templateFieldOptionUpdateBodySchema = templateFieldOptionBodySchema.partial();
+
+export const templateOrderBodySchema = z
+  .object({ orderedIds: z.array(uuidSchema).min(1).max(1000) })
+  .strict()
+  .superRefine(({ orderedIds }, context) => {
+    if (new Set(orderedIds).size !== orderedIds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "orderedIds cannot contain duplicates",
+        path: ["orderedIds"],
+      });
+    }
+  });
 
 export const privacyResolveBodySchema = z.object({
   resolution: z.enum(["clear", "redacted", "dismissed"]),
@@ -332,7 +421,12 @@ export const reportTemplateVersionUpdateBodySchema = reportTemplateVersionBodySc
 export const askConversationBodySchema = z.object({
   title: z.string().max(240).nullable().optional(),
   scope: reportFiltersSchema.default({}),
-}).strict();
+  datasetVersionId: uuidSchema.optional(),
+  includeMedia: z.boolean().default(false),
+}).strict().refine((value) => !value.includeMedia || Boolean(value.datasetVersionId), {
+  message: "includeMedia requires a pinned datasetVersionId",
+  path: ["includeMedia"],
+});
 
 export const askMessageBodySchema = z.object({
   content: z.string().min(1).max(40_000),
@@ -377,6 +471,24 @@ export const programMembershipBodySchema = z.object({
   { message: "endsAt must be after startsAt", path: ["endsAt"] },
 );
 
+export const programMembershipBulkBodySchema = z.object({
+  userIds: z.array(uuidSchema).min(1).max(250),
+  membershipRoleKey: z.string().min(1).max(120),
+  startsAt: z.string().datetime().nullable().optional(),
+  endsAt: z.string().datetime().nullable().optional(),
+}).strict().refine(
+  (value) => new Set(value.userIds).size === value.userIds.length,
+  { message: "userIds cannot contain duplicates", path: ["userIds"] },
+).refine(
+  (value) => !value.startsAt || !value.endsAt || Date.parse(value.startsAt) < Date.parse(value.endsAt),
+  { message: "endsAt must be after startsAt", path: ["endsAt"] },
+);
+
+export const programMembershipRequestBodySchema = z.union([
+  programMembershipBodySchema,
+  programMembershipBulkBodySchema,
+]);
+
 export const affiliationBodySchema = z.object({
   organizationId: uuidSchema.nullable().optional(),
   programId: uuidSchema.nullable().optional(),
@@ -391,6 +503,33 @@ export const affiliationBodySchema = z.object({
   endsAt: z.string().datetime().nullable().optional(),
 }).strict();
 
+const personGroupUserIdsSchema = z
+  .array(uuidSchema)
+  .max(500)
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "userIds cannot contain duplicates",
+  });
+
+export const personGroupCreateBodySchema = z.object({
+  key: z.string().min(1).max(160).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  nameEn: z.string().min(1).max(240),
+  nameZh: z.string().min(1).max(240),
+  descriptionEn: z.string().max(4000).nullable().optional(),
+  descriptionZh: z.string().max(4000).nullable().optional(),
+  userIds: personGroupUserIdsSchema.default([]),
+}).strict();
+
+export const personGroupUpdateBodySchema = z.object({
+  nameEn: z.string().min(1).max(240).optional(),
+  nameZh: z.string().min(1).max(240).optional(),
+  descriptionEn: z.string().max(4000).nullable().optional(),
+  descriptionZh: z.string().max(4000).nullable().optional(),
+  status: z.enum(["active", "archived"]).optional(),
+  userIds: personGroupUserIdsSchema.optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: "At least one group field must be provided",
+});
+
 const taskBodyBaseSchema = z.object({
   programId: uuidSchema,
   templateVersionId: uuidSchema,
@@ -404,7 +543,10 @@ const taskBodyBaseSchema = z.object({
   closesAt: z.string().datetime().nullable().optional(),
   configuration: z.record(z.unknown()).default({}),
 }).strict();
-export const taskCreateBodySchema = taskBodyBaseSchema.refine(
+export const taskCreateBodySchema = taskBodyBaseSchema.extend({
+  assigneeIds: z.array(uuidSchema).min(1).max(500),
+  status: z.enum(["draft", "open"]).default("draft"),
+}).refine(
   (value) => !value.opensAt || !value.closesAt || Date.parse(value.opensAt) < Date.parse(value.closesAt),
   { message: "closesAt must be after opensAt", path: ["closesAt"] },
 );
@@ -415,8 +557,21 @@ export const taskAssignmentBodySchema = z.object({
   assigneeIds: z.array(uuidSchema).min(1).max(500),
   notes: z.string().max(4000).nullable().optional(),
 }).strict();
+const taskBulkIdsSchema = z.array(uuidSchema).min(1).max(200);
+export const taskBulkActionBodySchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("assign"),
+    taskIds: taskBulkIdsSchema,
+    assigneeIds: z.array(uuidSchema).min(1).max(200),
+    notes: z.string().max(4000).nullable().optional(),
+  }).strict(),
+  z.object({ action: z.literal("open"), taskIds: taskBulkIdsSchema }).strict(),
+  z.object({ action: z.literal("close"), taskIds: taskBulkIdsSchema }).strict(),
+  z.object({ action: z.literal("archive"), taskIds: taskBulkIdsSchema }).strict(),
+  z.object({ action: z.literal("remind"), taskIds: taskBulkIdsSchema }).strict(),
+]);
 export const taskAssignmentTransitionBodySchema = z.object({
-  status: z.enum(["in_progress", "completed", "declined", "cancelled"]),
+  status: z.enum(["assigned", "in_progress", "completed", "declined", "cancelled"]),
   recordId: uuidSchema.nullable().optional(),
   declineReason: z.string().max(4000).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
@@ -470,6 +625,7 @@ export const editableReportCreateBodySchema = z.object({
   programId: uuidSchema.nullable().optional(),
   reportTemplateVersionId: uuidSchema.nullable().optional(),
   sourceReportArtifactId: uuidSchema.nullable().optional(),
+  sourceDatasetVersionId: uuidSchema.nullable().optional(),
   title: z.string().min(1).max(500),
   filters: reportFiltersSchema.default({}),
   evidencePolicy: reportEvidencePolicySchema.default({ approvedOnly: true, researchUseEligible: true }),
@@ -477,6 +633,9 @@ export const editableReportCreateBodySchema = z.object({
 }).strict().refine((value) => new Set(value.sections.map((section) => section.sectionKey)).size === value.sections.length, {
   message: "sectionKey values must be unique",
   path: ["sections"],
+}).refine((value) => !(value.sourceReportArtifactId && value.sourceDatasetVersionId), {
+  message: "Choose either sourceReportArtifactId or sourceDatasetVersionId",
+  path: ["sourceDatasetVersionId"],
 });
 export const editableReportUpdateBodySchema = z.object({
   title: z.string().min(1).max(500).optional(),
@@ -507,6 +666,7 @@ export const reportSectionAiDraftBodySchema = z.object({
   instruction: z.string().min(1).max(10_000),
   workflowVersionId: uuidSchema.nullable().optional(),
   idempotencyKey: z.string().min(8).max(160),
+  includeMedia: z.boolean().default(false),
 }).strict();
 export const reportSectionReorderBodySchema = z.object({
   sortOrder: z.number().int(),
@@ -519,6 +679,7 @@ export const datasetFieldKeySchema = z.enum([
   "collector_notes",
   "form_version_information",
   "audit_metadata",
+  "media_attachments",
   "personal_fields",
 ]);
 export const datasetFieldPolicySchema = z.object({
@@ -544,6 +705,9 @@ export const datasetCreateBodySchema = z.object({
 export const datasetRefreshBodySchema = z.object({
   selection: datasetSelectionSchema.optional(),
   fieldPolicy: datasetFieldPolicySchema.optional(),
+}).strict();
+export const datasetArchiveBodySchema = z.object({
+  reason: z.string().min(1).max(2000),
 }).strict();
 export const datasetShareBodySchema = z.object({
   datasetVersionId: uuidSchema.nullable().optional(),
@@ -571,6 +735,9 @@ export const locationCreateBodySchema = z.object({
   siteType: z.string().min(1).max(120),
   region: z.string().max(240).nullable().optional(),
   address: z.string().max(1000).nullable().optional(),
+  city: z.string().max(240).nullable().optional(),
+  state: z.string().max(240).nullable().optional(),
+  country: z.string().max(240).nullable().optional(),
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   aliases: z.array(z.object({
@@ -581,6 +748,27 @@ export const locationCreateBodySchema = z.object({
   message: "latitude and longitude must be provided together",
   path: ["latitude"],
 });
+export const locationUpdateBodySchema = z.object({
+  name: z.string().min(1).max(500).optional(),
+  siteType: z.string().min(1).max(120).optional(),
+  region: z.string().max(240).nullable().optional(),
+  address: z.string().max(1000).nullable().optional(),
+  city: z.string().max(240).nullable().optional(),
+  state: z.string().max(240).nullable().optional(),
+  country: z.string().max(240).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  canonicalStatus: z.enum(["canonical", "archived"]).optional(),
+}).strict().refine(
+  (value) =>
+    (value.latitude === undefined && value.longitude === undefined) ||
+    (value.latitude === null && value.longitude === null) ||
+    (typeof value.latitude === "number" && typeof value.longitude === "number"),
+  {
+    message: "latitude and longitude must be updated together",
+    path: ["latitude"],
+  },
+);
 export const locationAliasBodySchema = z.object({
   displayAlias: z.string().min(1).max(500),
   language: z.string().max(20).nullable().optional(),

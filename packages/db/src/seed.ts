@@ -24,13 +24,17 @@ import {
   lookups,
   organizations,
   outputSchemaVersions,
+  personGroupMemberships,
+  personGroups,
   promptVersions,
   reportTemplateVersions,
   reportTemplates,
   roles,
   users,
+  userAffiliations,
   userRoleAssignments,
 } from "./schema";
+import { seedRuntimeConfig } from "./runtime-config";
 
 const require = createRequire(import.meta.url);
 const bcrypt = require("bcryptjs") as { hash: (s: string, n: number) => Promise<string> };
@@ -41,6 +45,7 @@ config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/w
 await applyMigrations();
 await readyDb();
 const db = getDb();
+const seedConfig = seedRuntimeConfig();
 
 async function upsertLookup() {
   const existing = await db.select().from(lookups);
@@ -268,7 +273,7 @@ async function seed() {
     await db.insert(featureFlags).values(flag);
   }
 
-  const demoJson = process.env.SEED_DEMO_USERS_JSON;
+  const demoJson = seedConfig.demoUsersJson;
   if (demoJson) {
     const demo = JSON.parse(demoJson) as {
       organizationName: string;
@@ -289,6 +294,368 @@ async function seed() {
       if (!user) [user] = await db.insert(users).values({ email: configured.email.toLowerCase(), name: configured.name, role: role.key, passwordHash, organizationId: organization.id, mustChangePassword: true }).returning();
       const assignment = await db.select().from(userRoleAssignments).where(and(eq(userRoleAssignments.userId, user.id), eq(userRoleAssignments.roleId, role.id), eq(userRoleAssignments.status, "active"))).limit(1);
       if (!assignment[0]) await db.insert(userRoleAssignments).values({ userId: user.id, roleId: role.id, organizationId: organization.id, status: "active" });
+    }
+  }
+
+  const testAccountPassword = seedConfig.password;
+  if (testAccountPassword) {
+    if (testAccountPassword.length < 12) {
+      throw new Error("SEED_PASSWORD must be at least 12 characters");
+    }
+    let organization = (
+      await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.name, "CNPAF"))
+        .limit(1)
+    )[0];
+    if (!organization) {
+      [organization] = await db
+        .insert(organizations)
+        .values({ name: "CNPAF", collectionPurpose: "operational" })
+        .returning();
+    }
+    const passwordHash = await bcrypt.hash(testAccountPassword, 12);
+    const roleAccountSeeds = [
+      {
+        email: "admin@cnpaf.local",
+        name: "CNPAF Administrator",
+        roleKey: "admin",
+        locale: "zh",
+      },
+      {
+        email: "ops@cnpaf.local",
+        name: "CNPAF Operations Reviewer",
+        roleKey: "operations_reviewer",
+        locale: "zh",
+      },
+      {
+        email: "research@cnpaf.local",
+        name: "CNPAF Research Lead",
+        roleKey: "research_lead",
+        locale: "zh",
+      },
+      {
+        email: "stakeholder@cnpaf.local",
+        name: "Approved Data Stakeholder",
+        roleKey: "winston_research",
+        locale: "en",
+      },
+      {
+        email: "volunteer@cnpaf.local",
+        name: "General Volunteer",
+        roleKey: "volunteer",
+        locale: "zh",
+      },
+    ] as const;
+    const roleAccountByEmail = new Map<string, typeof users.$inferSelect>();
+    for (const configured of roleAccountSeeds) {
+      const role = (
+        await db
+          .select()
+          .from(roles)
+          .where(eq(roles.key, configured.roleKey))
+          .limit(1)
+      )[0];
+      if (!role || role.status !== "active") {
+        throw new Error(`Required demo role is not active: ${configured.roleKey}`);
+      }
+      let user = (
+        await db
+          .select()
+          .from(users)
+          .where(eq(users.email, configured.email))
+          .limit(1)
+      )[0];
+      const accountValues = {
+        name: configured.name,
+        passwordHash,
+        role: role.key,
+        organizationId: organization.id,
+        locale: configured.locale,
+        status: "active",
+        mustChangePassword: false,
+        passwordChangedAt: new Date(),
+        updatedAt: new Date(),
+      } as const;
+      if (user) {
+        [user] = await db
+          .update(users)
+          .set(accountValues)
+          .where(eq(users.id, user.id))
+          .returning();
+      } else {
+        [user] = await db
+          .insert(users)
+          .values({ email: configured.email, ...accountValues })
+          .returning();
+      }
+      roleAccountByEmail.set(configured.email, user);
+      const assignment = (
+        await db
+          .select()
+          .from(userRoleAssignments)
+          .where(
+            and(
+              eq(userRoleAssignments.userId, user.id),
+              eq(userRoleAssignments.roleId, role.id),
+              eq(userRoleAssignments.status, "active"),
+            ),
+          )
+          .limit(1)
+      )[0];
+      if (!assignment) {
+        await db.insert(userRoleAssignments).values({
+          userId: user.id,
+          roleId: role.id,
+          organizationId: organization.id,
+          status: "active",
+          assignedById: roleAccountByEmail.get("admin@cnpaf.local")?.id,
+        });
+      }
+    }
+    const volunteerRole = (
+      await db.select().from(roles).where(eq(roles.key, "volunteer")).limit(1)
+    )[0];
+    if (!volunteerRole) throw new Error("Volunteer role is required for USC test accounts");
+    const creator = roleAccountByEmail.get("admin@cnpaf.local");
+    const uscPeople = [
+      {
+        email: "usc.gerontology.alex@cnpaf.local",
+        name: "Alex Chen",
+        department: "USC Leonard Davis School of Gerontology",
+      },
+      {
+        email: "usc.gerontology.maya@cnpaf.local",
+        name: "Maya Rodriguez",
+        department: "USC Leonard Davis School of Gerontology",
+      },
+      {
+        email: "usc.socialwork.jordan@cnpaf.local",
+        name: "Jordan Lee",
+        department: "USC Suzanne Dworak-Peck School of Social Work",
+      },
+      {
+        email: "usc.publicpolicy.priya@cnpaf.local",
+        name: "Priya Patel",
+        department: "USC Sol Price School of Public Policy",
+      },
+      {
+        email: "usc.engineering.ethan@cnpaf.local",
+        name: "Ethan Kim",
+        department: "USC Viterbi School of Engineering",
+      },
+      {
+        email: "usc.medicine.sofia@cnpaf.local",
+        name: "Sofia Nguyen",
+        department: "USC Keck School of Medicine",
+      },
+      {
+        email: "usc.dornsife.noah@cnpaf.local",
+        name: "Noah Williams",
+        department: "USC Dornsife College of Letters, Arts and Sciences",
+      },
+    ] as const;
+    const userByEmail = new Map<string, typeof users.$inferSelect>();
+    for (const configured of uscPeople) {
+      let user = (
+        await db
+          .select()
+          .from(users)
+          .where(eq(users.email, configured.email))
+          .limit(1)
+      )[0];
+      if (user) {
+        [user] = await db
+          .update(users)
+          .set({
+            name: configured.name,
+            passwordHash,
+            role: volunteerRole.key,
+            organizationId: organization.id,
+            status: "active",
+            mustChangePassword: false,
+            passwordChangedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.id))
+          .returning();
+      } else {
+        [user] = await db
+          .insert(users)
+          .values({
+            email: configured.email,
+            name: configured.name,
+            passwordHash,
+            role: volunteerRole.key,
+            organizationId: organization.id,
+            locale: "en",
+            mustChangePassword: false,
+            passwordChangedAt: new Date(),
+          })
+          .returning();
+      }
+      userByEmail.set(configured.email, user);
+      const assignment = (
+        await db
+          .select()
+          .from(userRoleAssignments)
+          .where(
+            and(
+              eq(userRoleAssignments.userId, user.id),
+              eq(userRoleAssignments.roleId, volunteerRole.id),
+              eq(userRoleAssignments.status, "active"),
+            ),
+          )
+          .limit(1)
+      )[0];
+      if (!assignment) {
+        await db.insert(userRoleAssignments).values({
+          userId: user.id,
+          roleId: volunteerRole.id,
+          organizationId: organization.id,
+          status: "active",
+          assignedById: creator?.id,
+        });
+      }
+      const affiliation = (
+        await db
+          .select()
+          .from(userAffiliations)
+          .where(
+            and(
+              eq(userAffiliations.userId, user.id),
+              eq(userAffiliations.institutionName, "University of Southern California"),
+              eq(userAffiliations.departmentName, configured.department),
+            ),
+          )
+          .limit(1)
+      )[0];
+      if (affiliation) {
+        await db
+          .update(userAffiliations)
+          .set({
+            affiliationTypeKey: "student",
+            title: "Student",
+            status: "active",
+            isPrimary: true,
+            endsAt: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(userAffiliations.id, affiliation.id));
+      } else {
+        await db.insert(userAffiliations).values({
+          userId: user.id,
+          organizationId: organization.id,
+          affiliationTypeKey: "student",
+          institutionName: "University of Southern California",
+          institutionTypeKey: "university",
+          departmentName: configured.department,
+          title: "Student",
+          metadata: { testAccount: true },
+          isPrimary: true,
+          createdById: creator?.id,
+        });
+      }
+    }
+
+    const groupSeeds = [
+      {
+        key: "usc-gerontology-students",
+        nameEn: "USC Gerontology Students",
+        nameZh: "USC 老年学学生组",
+        descriptionEn: "Students from the USC Leonard Davis School of Gerontology.",
+        descriptionZh: "USC Leonard Davis 老年学学院学生。",
+        emails: [
+          "usc.gerontology.alex@cnpaf.local",
+          "usc.gerontology.maya@cnpaf.local",
+        ],
+      },
+      {
+        key: "usc-interdisciplinary-community-team",
+        nameEn: "USC Interdisciplinary Community Team",
+        nameZh: "USC 跨学院社区小组",
+        descriptionEn: "A mixed team across gerontology, social work, public policy, and engineering.",
+        descriptionZh: "来自老年学、社会工作、公共政策与工程学院的跨学科小组。",
+        emails: [
+          "usc.gerontology.maya@cnpaf.local",
+          "usc.socialwork.jordan@cnpaf.local",
+          "usc.publicpolicy.priya@cnpaf.local",
+          "usc.engineering.ethan@cnpaf.local",
+        ],
+      },
+      {
+        key: "usc-health-and-aging-team",
+        nameEn: "USC Health and Aging Team",
+        nameZh: "USC 健康与老龄化小组",
+        descriptionEn: "A cross-school team focused on health and aging.",
+        descriptionZh: "聚焦健康与老龄化的跨学院小组。",
+        emails: [
+          "usc.gerontology.alex@cnpaf.local",
+          "usc.medicine.sofia@cnpaf.local",
+          "usc.dornsife.noah@cnpaf.local",
+        ],
+      },
+    ] as const;
+    for (const configured of groupSeeds) {
+      let group = (
+        await db
+          .select()
+          .from(personGroups)
+          .where(
+            and(
+              eq(personGroups.organizationId, organization.id),
+              eq(personGroups.key, configured.key),
+            ),
+          )
+          .limit(1)
+      )[0];
+      if (group) {
+        [group] = await db
+          .update(personGroups)
+          .set({
+            nameEn: configured.nameEn,
+            nameZh: configured.nameZh,
+            descriptionEn: configured.descriptionEn,
+            descriptionZh: configured.descriptionZh,
+            status: "active",
+            updatedAt: new Date(),
+          })
+          .where(eq(personGroups.id, group.id))
+          .returning();
+      } else {
+        [group] = await db
+          .insert(personGroups)
+          .values({
+            organizationId: organization.id,
+            key: configured.key,
+            nameEn: configured.nameEn,
+            nameZh: configured.nameZh,
+            descriptionEn: configured.descriptionEn,
+            descriptionZh: configured.descriptionZh,
+            createdById: creator?.id,
+          })
+          .returning();
+      }
+      await db
+        .update(personGroupMemberships)
+        .set({ status: "inactive", updatedAt: new Date() })
+        .where(eq(personGroupMemberships.groupId, group.id));
+      const memberIds = configured.emails.map((email) => userByEmail.get(email)!.id);
+      await db
+        .insert(personGroupMemberships)
+        .values(
+          memberIds.map((userId) => ({
+            groupId: group.id,
+            userId,
+            status: "active",
+            addedById: creator?.id,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [personGroupMemberships.groupId, personGroupMemberships.userId],
+          set: { status: "active", addedById: creator?.id, updatedAt: new Date() },
+        });
     }
   }
 

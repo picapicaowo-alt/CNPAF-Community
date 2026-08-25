@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -52,6 +53,8 @@ export const users = pgTable(
     status: text("status").notNull().default("active"),
     mustChangePassword: boolean("must_change_password").notNull().default(false),
     passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
+    avatarStorageKey: text("avatar_storage_key"),
+    avatarMimeType: text("avatar_mime_type"),
     ...timestamps,
   },
   (t) => [uniqueIndex("users_email").on(t.email)],
@@ -212,6 +215,9 @@ export const sites = pgTable(
     siteType: text("site_type").notNull(),
     region: text("region"),
     address: text("address"),
+    city: text("city"),
+    state: text("state"),
+    country: text("country"),
     latitude: numeric("latitude", { precision: 9, scale: 6 }),
     longitude: numeric("longitude", { precision: 9, scale: 6 }),
     canonicalStatus: text("canonical_status").notNull().default("unverified"),
@@ -445,6 +451,43 @@ export const userAffiliations = pgTable(
     index("user_affiliations_user_status").on(t.userId, t.status),
     index("user_affiliations_organization").on(t.organizationId),
     index("user_affiliations_program").on(t.programId),
+  ],
+);
+
+export const personGroups = pgTable(
+  "person_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    key: text("key").notNull(),
+    nameEn: text("name_en").notNull(),
+    nameZh: text("name_zh").notNull(),
+    descriptionEn: text("description_en"),
+    descriptionZh: text("description_zh"),
+    status: text("status").notNull().default("active"),
+    createdById: uuid("created_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("person_groups_org_key").on(t.organizationId, t.key),
+    index("person_groups_org_status").on(t.organizationId, t.status, t.nameEn),
+  ],
+);
+
+export const personGroupMemberships = pgTable(
+  "person_group_memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id").notNull().references(() => personGroups.id),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    status: text("status").notNull().default("active"),
+    addedById: uuid("added_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("person_group_memberships_group_user").on(t.groupId, t.userId),
+    index("person_group_memberships_user_status").on(t.userId, t.status),
+    index("person_group_memberships_group_status").on(t.groupId, t.status),
   ],
 );
 
@@ -713,6 +756,7 @@ export const attachments = pgTable("attachments", {
   storageKey: text("storage_key").notNull(),
   mimeType: text("mime_type").notNull(),
   byteSize: integer("byte_size").notNull().default(0),
+  contentSha256: text("content_sha256"),
   exifStripped: boolean("exif_stripped").notNull().default(true),
   sentToAi: boolean("sent_to_ai").notNull().default(false),
   ...timestamps,
@@ -753,6 +797,52 @@ export const recordCustomEntries = pgTable(
     index("record_custom_entries_status_created").on(t.mappingStatus, t.createdAt),
     index("record_custom_entries_record_version").on(t.recordVersionId),
     index("record_custom_entries_template_field").on(t.templateFieldId),
+  ],
+);
+
+export const recordFieldAnswers = pgTable(
+  "record_field_answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recordVersionId: uuid("record_version_id")
+      .notNull()
+      .references(() => recordVersions.id),
+    templateVersionId: uuid("template_version_id")
+      .notNull()
+      .references(() => templateVersions.id),
+    templateSectionId: uuid("template_section_id")
+      .notNull()
+      .references(() => templateSections.id),
+    templateFieldId: uuid("template_field_id")
+      .notNull()
+      .references(() => templateFields.id),
+    sectionKey: text("section_key").notNull(),
+    sectionLabelEn: text("section_label_en").notNull(),
+    sectionLabelZh: text("section_label_zh").notNull(),
+    sectionSortOrder: integer("section_sort_order").notNull().default(0),
+    fieldKey: text("field_key").notNull(),
+    fieldSortOrder: integer("field_sort_order").notNull().default(0),
+    fieldTypeKey: text("field_type_key").notNull(),
+    labelEn: text("label_en").notNull(),
+    labelZh: text("label_zh").notNull(),
+    value: jsonb("value"),
+    missingReasonKey: text("missing_reason_key"),
+    customText: text("custom_text"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("record_field_answers_version_field").on(
+      t.recordVersionId,
+      t.templateFieldId,
+    ),
+    index("record_field_answers_record_version").on(t.recordVersionId),
+    index("record_field_answers_template_field").on(
+      t.templateVersionId,
+      t.fieldKey,
+    ),
+    index("record_field_answers_missing_reason").on(t.missingReasonKey),
   ],
 );
 
@@ -992,6 +1082,7 @@ export const reviewDecisions = pgTable("review_decisions", {
     .references(() => users.id),
   action: text("action").notNull(),
   annotation: text("annotation"),
+  correctionFieldIds: jsonb("correction_field_ids").notNull().default([]),
   findingDecisions: jsonb("finding_decisions").notNull().default([]),
   ...timestamps,
 });
@@ -1196,6 +1287,7 @@ export const reportVersions = pgTable(
     filters: jsonb("filters").notNull().default({}),
     evidencePolicy: jsonb("evidence_policy").notNull().default({}),
     sourceReportArtifactId: uuid("source_report_artifact_id").references(() => reportArtifacts.id),
+    sourceDatasetVersionId: uuid("source_dataset_version_id").references(() => datasetVersions.id),
     createdById: uuid("created_by_id").notNull().references(() => users.id),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     ...timestamps,
@@ -1204,6 +1296,7 @@ export const reportVersions = pgTable(
     uniqueIndex("report_versions_report_number").on(t.reportId, t.versionNumber),
     index("report_versions_report_status").on(t.reportId, t.status),
     index("report_versions_source_artifact").on(t.sourceReportArtifactId),
+    index("report_versions_source_dataset_version").on(t.sourceDatasetVersionId),
   ],
 );
 
@@ -1441,6 +1534,51 @@ export const exportJobs = pgTable(
   ],
 );
 
+/**
+ * Operational ledger for resumable object-storage migrations. Application
+ * records continue to store backend-neutral storage keys; this ledger records
+ * immutable source checksums and destination verification independently.
+ */
+export const storageMigrationRuns = pgTable(
+  "storage_migration_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceBackend: text("source_backend").notNull(),
+    targetBackend: text("target_backend").notNull(),
+    status: text("status").notNull().default("manifested"),
+    manifestHash: text("manifest_hash").notNull(),
+    totalObjects: integer("total_objects").notNull().default(0),
+    totalBytes: bigint("total_bytes", { mode: "number" }).notNull().default(0),
+    completedObjects: integer("completed_objects").notNull().default(0),
+    verifiedObjects: integer("verified_objects").notNull().default(0),
+    failedObjects: integer("failed_objects").notNull().default(0),
+    metadata: jsonb("metadata").notNull().default({}),
+    ...timestamps,
+  },
+  (t) => [index("storage_migration_runs_status_created").on(t.status, t.createdAt)],
+);
+
+export const storageMigrationObjects = pgTable(
+  "storage_migration_objects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    migrationRunId: uuid("migration_run_id").notNull().references(() => storageMigrationRuns.id),
+    storageKey: text("storage_key").notNull(),
+    byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+    sha256: text("sha256").notNull(),
+    status: text("status").notNull().default("pending"),
+    targetEtag: text("target_etag"),
+    lastError: text("last_error"),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("storage_migration_objects_run_key").on(t.migrationRunId, t.storageKey),
+    index("storage_migration_objects_run_status").on(t.migrationRunId, t.status),
+  ],
+);
+
 export const auditEvents = pgTable(
   "audit_events",
   {
@@ -1509,6 +1647,7 @@ export const schema = {
   attachments,
   recordStructuredSelections,
   recordCustomEntries,
+  recordFieldAnswers,
   customEntryReviews,
   themeMappings,
   outputSchemaVersions,
@@ -1544,6 +1683,8 @@ export const schema = {
   askMessageSources,
   jobs,
   exportJobs,
+  storageMigrationRuns,
+  storageMigrationObjects,
   auditEvents,
   featureFlags,
 };

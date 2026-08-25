@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import { listSqlMigrations } from "./migration-test-utils";
 
 test("legacy data migrates and immutable/versioning constraints are enforced", async () => {
   const db = new PGlite();
   try {
-    await db.exec(await readFile(new URL("../sql/0001_init.sql", import.meta.url), "utf8"));
+    // Seed the legacy fixture after migration 0001, then run every remaining
+    // migration dynamically so adding a numbered SQL file automatically enters
+    // this upgrade-path test.
+    const sqlDirectory = new URL("../sql/", import.meta.url);
+    await db.exec(await readFile(new URL("0001_init.sql", sqlDirectory), "utf8"));
     await db.exec(`
       INSERT INTO organizations (id, name) VALUES ('00000000-0000-0000-0000-000000000001', 'Test Org');
       INSERT INTO users (id, email, name, password_hash, role, organization_id)
@@ -14,14 +19,10 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
       INSERT INTO sessions (user_id, token_hash, expires_at)
       VALUES ('00000000-0000-0000-0000-000000000002', 'session-hash', now() + interval '1 day');
     `);
-    await db.exec(await readFile(new URL("../sql/0002_backend_platform.sql", import.meta.url), "utf8"));
-    await db.exec(await readFile(new URL("../sql/0003_record_template_integrity.sql", import.meta.url), "utf8"));
-    await db.exec(await readFile(new URL("../sql/0004_configuration_version_integrity.sql", import.meta.url), "utf8"));
-    await db.exec(await readFile(new URL("../sql/0005_audit_permission.sql", import.meta.url), "utf8"));
-    await db.exec(await readFile(new URL("../sql/0006_record_occurrence_time.sql", import.meta.url), "utf8"));
-    await db.exec(await readFile(new URL("../sql/0007_ai_output_schema_provenance.sql", import.meta.url), "utf8"));
-    await db.exec(await readFile(new URL("../sql/0008_v4_1_foundation.sql", import.meta.url), "utf8"));
-    await db.exec(await readFile(new URL("../sql/0009_collection_field_type_registry.sql", import.meta.url), "utf8"));
+    const files = await listSqlMigrations();
+    for (const file of files.slice(1)) {
+      await db.exec(await readFile(new URL(file, sqlDirectory), "utf8"));
+    }
 
     const fieldTypes = await db.query<{ key: string; control: string }>(`
       SELECT item.key, item.metadata->>'control' AS control
@@ -38,6 +39,9 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
       { key: "single_select", control: "single" },
       { key: "multi_select", control: "multi" },
       { key: "boolean", control: "boolean" },
+      { key: "rating_scale", control: "rating" },
+      { key: "dropdown_choice", control: "dropdown" },
+      { key: "information", control: "display" },
     ]);
 
     const sourcePolicies = await db.query<{ key: string; default_origin: string }>(`
@@ -52,6 +56,86 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
 
     const role = await db.query<{ key: string }>(`SELECT r.key FROM user_role_assignments ura JOIN roles r ON r.id = ura.role_id WHERE ura.user_id = '00000000-0000-0000-0000-000000000002' AND ura.status = 'active'`);
     assert.deepEqual(role.rows.map((row) => row.key), ["operations_reviewer"]);
+    const coordinatorPermissions = await db.query<{ key: string }>(`
+      SELECT permission.key
+      FROM role_permissions grant_row
+      JOIN roles role ON role.id = grant_row.role_id
+      JOIN permissions permission ON permission.id = grant_row.permission_id
+      WHERE role.key = 'operations_reviewer'
+        AND grant_row.effect = 'allow'
+        AND permission.key IN (
+          'programs.manage',
+          'programs.manage_membership',
+          'tasks.create',
+          'locations.manage',
+          'people.view',
+          'templates.view',
+          'templates.create',
+          'templates.edit',
+          'templates.publish',
+          'templates.archive',
+          'people.manage_groups'
+        )
+      ORDER BY permission.key
+    `);
+    assert.deepEqual(coordinatorPermissions.rows.map((row) => row.key), [
+      "locations.manage",
+      "people.manage_groups",
+      "people.view",
+      "programs.manage",
+      "programs.manage_membership",
+      "tasks.create",
+      "templates.archive",
+      "templates.create",
+      "templates.edit",
+      "templates.publish",
+      "templates.view",
+    ]);
+    const answerTable = await db.query<{ exists: boolean }>(`
+      SELECT to_regclass('record_field_answers') IS NOT NULL AS exists
+    `);
+    assert.equal(answerTable.rows[0]?.exists, true);
+    const peopleGroupTables = await db.query<{ group_table: boolean; membership_table: boolean }>(`
+      SELECT
+        to_regclass('person_groups') IS NOT NULL AS group_table,
+        to_regclass('person_group_memberships') IS NOT NULL AS membership_table
+    `);
+    assert.deepEqual(peopleGroupTables.rows[0], {
+      group_table: true,
+      membership_table: true,
+    });
+    const studentAffiliation = await db.query<{ count: number }>(`
+      SELECT count(*)::int AS count
+      FROM config_registry_items item
+      JOIN config_registries registry ON registry.id = item.registry_id
+      WHERE registry.key = 'affiliation_type'
+        AND item.key = 'student'
+        AND item.status = 'active'
+    `);
+    assert.equal(studentAffiliation.rows[0]?.count, 1);
+    const locationAddressColumns = await db.query<{ column_name: string }>(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'sites'
+        AND column_name IN ('city', 'state', 'country')
+      ORDER BY column_name
+    `);
+    assert.deepEqual(locationAddressColumns.rows.map((row) => row.column_name), [
+      "city",
+      "country",
+      "state",
+    ]);
+    const accountAvatarColumns = await db.query<{ column_name: string }>(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'users'
+        AND column_name IN ('avatar_storage_key', 'avatar_mime_type')
+      ORDER BY column_name
+    `);
+    assert.deepEqual(accountAvatarColumns.rows.map((row) => row.column_name), [
+      "avatar_mime_type",
+      "avatar_storage_key",
+    ]);
     const session = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM sessions WHERE token_hash = 'session-hash'`);
     assert.equal(session.rows[0]?.n, 1);
 

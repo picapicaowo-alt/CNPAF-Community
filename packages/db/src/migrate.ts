@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
+import { databaseUrl } from "./runtime-config";
 
 config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../../.env") });
 config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/web/.env.local") });
@@ -14,10 +15,7 @@ const files = readdirSync(sqlDir)
   .sort();
 
 export async function applyMigrations() {
-  const url = process.env.DATABASE_URL;
-  if (!url?.startsWith("postgres")) {
-    throw new Error("DATABASE_URL must be a postgres:// connection string");
-  }
+  const url = databaseUrl();
   const client = postgres(url, { max: 1 });
   await client`
     CREATE TABLE IF NOT EXISTS schema_migrations (
