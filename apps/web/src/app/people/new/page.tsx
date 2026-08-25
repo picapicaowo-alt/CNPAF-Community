@@ -25,6 +25,9 @@ export default function NewAccountPage() {
   const [email, setEmail] = useState("");
   const [roleKey, setRoleKey] = useState("");
   const [accountLocale, setAccountLocale] = useState("zh");
+  const [institutionName, setInstitutionName] = useState("");
+  const [departmentName, setDepartmentName] = useState("");
+  const [title, setTitle] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [created, setCreated] = useState<{
     name: string;
@@ -68,7 +71,21 @@ export default function NewAccountPage() {
           requirePasswordChange: true,
           roleAssignments: [{ roleKey, organizationId }],
           scopeAssignments: [],
-          affiliations: [],
+          affiliations: institutionName.trim()
+            ? [
+                {
+                  organizationId,
+                  affiliationTypeKey:
+                    roleKey === "volunteer" ? "student" : "staff",
+                  institutionName: institutionName.trim(),
+                  institutionTypeKey: "university",
+                  departmentName: departmentName.trim() || null,
+                  title: title.trim() || null,
+                  metadata: {},
+                  isPrimary: true,
+                },
+              ]
+            : [],
           programMemberships: [],
         }),
       });
@@ -180,6 +197,40 @@ export default function NewAccountPage() {
                   ))}
                 </select>
               </label>
+              <label>
+                {locale === "zh" ? "学校 / 机构（可选）" : "School / institution (optional)"}
+                <input
+                  onChange={(event) => setInstitutionName(event.target.value)}
+                  placeholder={
+                    locale === "zh"
+                      ? "例如：University of Southern California"
+                      : "e.g. University of Southern California"
+                  }
+                  value={institutionName}
+                />
+              </label>
+              <label>
+                {locale === "zh" ? "学院 / 系（可选）" : "School / department (optional)"}
+                <input
+                  disabled={!institutionName.trim()}
+                  onChange={(event) => setDepartmentName(event.target.value)}
+                  placeholder={
+                    locale === "zh"
+                      ? "例如：Leonard Davis School of Gerontology"
+                      : "e.g. Leonard Davis School of Gerontology"
+                  }
+                  value={departmentName}
+                />
+              </label>
+              <label>
+                {locale === "zh" ? "身份 / 职务（可选）" : "Title (optional)"}
+                <input
+                  disabled={!institutionName.trim()}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder={locale === "zh" ? "例如：学生" : "e.g. Student"}
+                  value={title}
+                />
+              </label>
             </div>
             <button
               className="button"
@@ -201,8 +252,8 @@ export default function NewAccountPage() {
             <p className="muted">
               {roles.find((role) => role.key === roleKey)?.description ||
                 (locale === "zh"
-                  ? "账号会继承所选角色的权限。更细的项目和地点范围可在账号创建后配置。"
-                  : "The account inherits the selected role. Finer program and location scopes can be configured afterward.")}
+                  ? "账号会继承所选角色的权限；学校与学院会保存为主要所属关系。更细的项目和地点范围可在账号创建后配置。"
+                  : "The account inherits the selected role. School and department are saved as the primary affiliation; finer program and location scopes can be configured afterward.")}
             </p>
             <div className="feedback feedback-warning">
               <span>

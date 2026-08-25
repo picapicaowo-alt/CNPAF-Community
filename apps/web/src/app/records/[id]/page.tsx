@@ -11,21 +11,35 @@ import {
   PageHeader,
   StatusPill,
 } from "@/components/ui";
+import { FieldAnswersPanel } from "@/features/records/FieldAnswersPanel";
+import type { RecordFieldAnswer } from "@/features/records/types";
+import { downloadRecord } from "@/features/records/api";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import type { AttachmentSummary } from "@cnpaf/shared";
+import { AttachmentGallery } from "@/features/attachments/components/AttachmentGallery";
 
 export default function RecordDetail() {
   const { t, locale } = useI18n();
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [identity, setIdentity] = useState<{
+    userId: string;
+    permissions: string[];
+  } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
     try {
-      setData(
-        await apiFetch<Record<string, unknown>>(`/api/v1/records/${params.id}`),
-      );
+      const [recordResult, me] = await Promise.all([
+        apiFetch<Record<string, unknown>>(`/api/v1/records/${params.id}`),
+        apiFetch<{ user: { id: string }; permissions: string[] }>(
+          "/api/v1/auth/me",
+        ),
+      ]);
+      setData(recordResult);
+      setIdentity({ userId: me.user.id, permissions: me.permissions ?? [] });
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -61,6 +75,8 @@ export default function RecordDetail() {
     aiStatus: string;
     privacyStatus: string;
     researchUseStatus: string;
+    createdById: string;
+    taskId?: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -77,31 +93,22 @@ export default function RecordDetail() {
   const notes = (data.notes as { body: string }[]) ?? [];
   const findings =
     (data.findings as { kind: string; statement: string }[]) ?? [];
-  const attachments =
-    (data.attachments as {
-      id: string;
-      kind: string;
-      originalName?: string | null;
-      status: string;
-    }[]) ?? [];
+  const attachments = (data.attachments as AttachmentSummary[]) ?? [];
   const head = versions[0];
+  const fieldAnswers = (data.fieldAnswers as RecordFieldAnswer[]) ?? [];
+  const headAnswers = fieldAnswers.filter(
+    (answer) => answer.recordVersionId === head?.id,
+  );
+  const canCorrect =
+    record.reviewStatus === "needs_completion" &&
+    record.createdById === identity?.userId &&
+    identity.permissions.includes("records.edit_own");
 
   async function download() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/v1/records/${params.id}/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "json" }),
-      });
-      if (!response.ok) throw new Error("Download failed");
-      const url = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `record-${params.id}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await downloadRecord(params.id);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -130,6 +137,11 @@ export default function RecordDetail() {
               <AppIcon name="download" />
               JSON
             </button>
+            {canCorrect && record.taskId ? (
+              <Link className="button" href={`/tasks/${record.taskId}/collect`}>
+                {locale === "zh" ? "补充并重新提交" : "Update and resubmit"}
+              </Link>
+            ) : null}
           </>
         }
       />
@@ -148,6 +160,7 @@ export default function RecordDetail() {
       </div>
       <div className="detail-grid">
         <main className="stack">
+          <FieldAnswersPanel answers={headAnswers} locale={locale} />
           <section className="card">
             <h2>{t.qualitative}</h2>
             <p className="pre-wrap">
@@ -214,19 +227,7 @@ export default function RecordDetail() {
           {attachments.length ? (
             <section className="card stack-sm">
               <h2>{locale === "zh" ? "附件" : "Attachments"}</h2>
-              {attachments.map((attachment) => (
-                <div className="row-between" key={attachment.id}>
-                  <span>
-                    <strong>
-                      {attachment.originalName ?? attachment.kind}
-                    </strong>
-                    <span className="caption" style={{ display: "block" }}>
-                      {attachment.status}
-                    </span>
-                  </span>
-                  <StatusPill>{attachment.kind}</StatusPill>
-                </div>
-              ))}
+              <AttachmentGallery attachments={attachments} locale={locale} />
             </section>
           ) : null}
         </aside>

@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, PageHeader } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { fetchDatasetDetail } from "@/features/datasets/api";
+import type { DatasetDetail } from "@/features/datasets/types";
 
 type Program = {
   id: string;
@@ -16,9 +18,12 @@ type Program = {
   status: string;
 };
 
-export default function NewReportPage() {
+function NewReportContent() {
   const { locale } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sourceDatasetId = searchParams.get("datasetId");
+  const sourceDatasetVersionId = searchParams.get("datasetVersionId");
   const [organizationId, setOrganizationId] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState("");
@@ -26,21 +31,30 @@ export default function NewReportPage() {
   const [sectionTitles, setSectionTitles] = useState([""]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sourceDataset, setSourceDataset] = useState<DatasetDetail | null>(null);
   useEffect(() => {
     Promise.all([
       apiFetch<{ user: { organizationId?: string | null } }>("/api/v1/auth/me"),
       apiFetch<{ programs: Program[] }>("/api/v1/programs"),
+      sourceDatasetId && sourceDatasetVersionId
+        ? fetchDatasetDetail(sourceDatasetId, sourceDatasetVersionId)
+        : Promise.resolve(null),
     ])
-      .then(([me, result]) => {
-        setOrganizationId(me.user.organizationId ?? "");
+      .then(([me, result, source]) => {
+        setOrganizationId(source?.dataset.organizationId ?? me.user.organizationId ?? "");
         setPrograms(
           (result.programs ?? []).filter(
             (program) => program.status === "active",
           ),
         );
+        if (source?.selectedVersion) {
+          setSourceDataset(source);
+          setProgramId(source.dataset.programId ?? "");
+          setTitle((current) => current || `${source.dataset.name} ${locale === "zh" ? "初始报告" : "initial report"}`);
+        }
       })
       .catch((caught) => setError(errorMessage(caught)));
-  }, []);
+  }, [locale, sourceDatasetId, sourceDatasetVersionId]);
   async function create() {
     if (
       !organizationId ||
@@ -60,8 +74,9 @@ export default function NewReportPage() {
             programId: programId || null,
             reportTemplateVersionId: null,
             sourceReportArtifactId: null,
+            sourceDatasetVersionId: sourceDataset?.selectedVersion?.id ?? null,
             title: title.trim(),
-            filters: programId ? { programIds: [programId] } : {},
+            filters: sourceDataset ? {} : programId ? { programIds: [programId] } : {},
             evidencePolicy: { approvedOnly: true, researchUseEligible: true },
             sections: sectionTitles.map((section, index) => ({
               sectionKey: `section-${index + 1}`,
@@ -84,7 +99,11 @@ export default function NewReportPage() {
         eyebrow={locale === "zh" ? "报告中心" : "Report center"}
         title={locale === "zh" ? "新建报告" : "New report"}
         description={
-          locale === "zh"
+          sourceDataset
+            ? locale === "zh"
+              ? "从指定 Dataset Version 创建可编辑初始报告，来源关系会被永久保留。"
+              : "Create an editable initial report from a pinned Dataset Version with permanent provenance."
+            : locale === "zh"
             ? "先确定范围和结构，之后再逐段加入证据与内容。"
             : "Set the scope and structure first, then add evidence and content section by section."
         }
@@ -96,6 +115,13 @@ export default function NewReportPage() {
         }
       />
       {error ? <ErrorState message={error} /> : null}
+      {sourceDataset?.selectedVersion ? (
+        <div className="feedback feedback-info">
+          <span>
+            {locale === "zh" ? "报告来源" : "Report source"}: <strong>{sourceDataset.dataset.name} · v{sourceDataset.selectedVersion.versionNumber}</strong> · {sourceDataset.selectedVersion.recordCount} {locale === "zh" ? "条冻结记录" : "frozen records"}
+          </span>
+        </div>
+      ) : null}
       <div className="content-aside">
         <section className="card stack">
           <h2>{locale === "zh" ? "报告设置" : "Report setup"}</h2>
@@ -115,6 +141,7 @@ export default function NewReportPage() {
           <label>
             {locale === "zh" ? "项目范围（可选）" : "Program scope (optional)"}
             <select
+              disabled={Boolean(sourceDataset)}
               onChange={(event) => {
                 setProgramId(event.target.value);
                 const selected = programs.find(
@@ -229,4 +256,12 @@ export default function NewReportPage() {
       </div>
     </div>
   );
+}
+
+export default function NewReportPage() {
+  return <Suspense fallback={<LoadingReportSetup />}><NewReportContent /></Suspense>;
+}
+
+function LoadingReportSetup() {
+  return <div className="card"><p className="muted">正在加载报告来源…</p></div>;
 }

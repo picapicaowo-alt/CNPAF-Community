@@ -22,7 +22,11 @@ export type AppIconName =
   | "download"
   | "sparkles"
   | "menu"
-  | "close";
+  | "close"
+  | "image"
+  | "audio"
+  | "video"
+  | "file";
 
 const paths: Record<AppIconName, React.ReactNode> = {
   home: (
@@ -141,6 +145,30 @@ const paths: Record<AppIconName, React.ReactNode> = {
   ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
+  image: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="2" />
+      <path d="m3 17 5-5 4 4 2-2 7 6" />
+    </>
+  ),
+  audio: (
+    <>
+      <path d="M12 3v11.5a3.5 3.5 0 1 1-2-3.16V6l9-2v8.5a3.5 3.5 0 1 1-2-3.16V3.9Z" />
+    </>
+  ),
+  video: (
+    <>
+      <rect x="3" y="5" width="14" height="14" rx="2" />
+      <path d="m17 10 4-2v8l-4-2Z" />
+    </>
+  ),
+  file: (
+    <>
+      <path d="M6 2h9l4 4v16H6z" />
+      <path d="M14 2v5h5M9 12h6M9 16h4" />
+    </>
+  ),
 };
 
 export function AppIcon({

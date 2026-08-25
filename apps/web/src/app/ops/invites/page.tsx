@@ -2,27 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/LocaleProvider";
+import { createInvite, listInvites } from "@/features/operations/api";
+import type { InviteSummary } from "@/features/operations/types";
 
 export default function InvitesPage() {
   const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("volunteer");
   const [token, setToken] = useState("");
-  const [rows, setRows] = useState<{ email: string; role: string; acceptedAt: string | null }[]>([]);
+  const [rows, setRows] = useState<InviteSummary[]>([]);
 
   useEffect(() => {
-    fetch("/api/v1/invites")
-      .then((r) => r.json())
-      .then((d) => setRows(d.invites ?? []));
+    void listInvites().then(setRows);
   }, [token]);
 
   async function create() {
-    const res = await fetch("/api/v1/invites", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, role }),
-    });
-    const data = await res.json();
+    const data = await createInvite(email, role);
     setToken(data.acceptPath ?? "");
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
@@ -10,397 +11,171 @@ import {
   PageHeader,
   StatusPill,
 } from "@/components/ui";
+import { fetchDatasets } from "@/features/datasets/api";
+import type { DatasetSummary } from "@/features/datasets/types";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
-type Dataset = {
-  id: string;
-  name: string;
-  description?: string | null;
-  status: string;
-  dataClassification: string;
-  updatedAt: string;
-  headVersionId?: string | null;
-  organizationId: string;
-  programId?: string | null;
-};
-type Program = {
-  id: string;
-  organizationId: string;
-  nameEn: string;
-  nameZh: string;
-  status: string;
-};
-type RegistryItem = { key: string; labelEn: string; labelZh: string };
-const fieldOptions = [
-  "structured_answers",
-  "approved_findings",
-  "evidence_excerpts",
-  "collector_notes",
-  "form_version_information",
-  "audit_metadata",
-] as const;
+function classificationLabel(value: string, locale: "zh" | "en") {
+  if (value === "approved_evidence")
+    return locale === "zh" ? "已批准证据" : "Approved evidence";
+  if (value === "restricted_pii")
+    return locale === "zh" ? "受限数据" : "Restricted data";
+  return value;
+}
 
 export default function DataPage() {
   const { locale } = useI18n();
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [classifications, setClassifications] = useState<RegistryItem[]>([]);
+  const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [organizationId, setOrganizationId] = useState("");
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [programId, setProgramId] = useState("");
-  const [classification, setClassification] = useState("");
-  const [fields, setFields] = useState<string[]>([
-    "structured_answers",
-    "approved_findings",
-    "evidence_excerpts",
-  ]);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const me = await apiFetch<{
-        user: { organizationId?: string | null };
-        permissions: string[];
-      }>("/api/v1/auth/me");
-      const [dataResult, programResult, classResult] = await Promise.all([
-        apiFetch<{ datasets: Dataset[] }>("/api/v1/datasets"),
-        apiFetch<{ programs: Program[] }>("/api/v1/programs").catch(() => ({
-          programs: [],
-        })),
-        apiFetch<{ items: RegistryItem[] }>(
-          "/api/v1/config/registries/data_classification?status=active",
-        ).catch(() => ({ items: [] })),
+      const [me, datasetRows] = await Promise.all([
+        apiFetch<{ permissions: string[] }>("/api/v1/auth/me"),
+        fetchDatasets(),
       ]);
       setPermissions(me.permissions ?? []);
-      setOrganizationId(me.user.organizationId ?? "");
-      setDatasets(dataResult.datasets ?? []);
-      setPrograms(
-        (programResult.programs ?? []).filter(
-          (program) => program.status === "active",
-        ),
-      );
-      setClassifications(classResult.items ?? []);
-      setClassification(
-        (current) => current || classResult.items?.[0]?.key || "",
-      );
+      setDatasets(datasetRows);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
       setLoading(false);
     }
   }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
-  const canCreate = permissions.includes("datasets.create");
-  const label = useMemo(
-    () =>
-      new Map(
-        classifications.map((item) => [
-          item.key,
-          locale === "zh" ? item.labelZh : item.labelEn,
-        ]),
+
+  const visible = useMemo(() => {
+    const value = query.trim().toLocaleLowerCase();
+    if (!value) return datasets;
+    return datasets.filter((dataset) =>
+      [dataset.name, dataset.description, dataset.dataClassification].some(
+        (part) => part?.toLocaleLowerCase().includes(value),
       ),
-    [classifications, locale],
+    );
+  }, [datasets, query]);
+  const canCreate = permissions.includes("datasets.create");
+  const totalRecords = datasets.reduce(
+    (sum, dataset) => sum + (dataset.headVersion?.recordCount ?? 0),
+    0,
   );
-  async function create() {
-    if (!name.trim() || !organizationId || !classification) return;
-    setBusy("create");
-    setError("");
-    try {
-      await apiFetch("/api/v1/datasets", {
-        method: "POST",
-        body: JSON.stringify({
-          organizationId,
-          programId: programId || null,
-          name: name.trim(),
-          description: description.trim() || null,
-          dataClassification: classification,
-          selection: { filters: programId ? { programIds: [programId] } : {} },
-          fieldPolicy: { include: fields, exclude: [] },
-        }),
-      });
-      setName("");
-      setDescription("");
-      setShowBuilder(false);
-      await load();
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy("");
-    }
-  }
-  async function refresh(dataset: Dataset) {
-    setBusy(dataset.id);
-    setError("");
-    try {
-      await apiFetch(`/api/v1/datasets/${dataset.id}/refresh`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      await load();
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy("");
-    }
-  }
-  async function download(dataset: Dataset, format: "csv" | "json") {
-    setBusy(dataset.id);
-    setError("");
-    try {
-      const response = await fetch(`/api/v1/datasets/${dataset.id}/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format }),
-      });
-      if (!response.ok) {
-        const payload = await response.json();
-        throw new Error(
-          typeof payload.error === "string"
-            ? payload.error
-            : (payload.error?.message ?? "Download failed"),
-        );
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${dataset.name}.${format}`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy("");
-    }
-  }
+
   return (
-    <div className="stack">
+    <div className="stack data-page dataset-library-page">
       <PageHeader
-        title={locale === "zh" ? "记录与数据" : "Records & data"}
+        eyebrow={locale === "zh" ? "分析工作区" : "Analysis workspace"}
+        title={locale === "zh" ? "数据集" : "Datasets"}
         description={
           locale === "zh"
-            ? "构建可复现的数据集，并按受控字段策略下载。"
-            : "Build reproducible datasets and download them under a controlled field policy."
+            ? "数据集是从现有记录中勾选成组的一批数据，可以打开与 AI 互动并生成初步报告。"
+            : "A dataset is a group of existing records that can be opened for AI analysis and initial reporting."
         }
         actions={
           canCreate ? (
-            <button
-              className="button"
-              onClick={() => setShowBuilder((value) => !value)}
-              type="button"
-            >
-              <AppIcon name={showBuilder ? "close" : "plus"} />
-              {showBuilder
-                ? locale === "zh"
-                  ? "关闭"
-                  : "Close"
-                : locale === "zh"
-                  ? "构建数据集"
-                  : "Build dataset"}
-            </button>
+            <Link className="button" href="/records">
+              <AppIcon name="plus" />
+              {locale === "zh" ? "从记录中创建" : "Create from records"}
+            </Link>
           ) : undefined
         }
       />
+
+      <div
+        aria-label={locale === "zh" ? "数据集流程" : "Dataset workflow"}
+        className="dataset-flow-strip"
+      >
+        <div><span>1</span><strong>{locale === "zh" ? "筛选记录" : "Filter records"}</strong></div>
+        <AppIcon name="arrow" />
+        <div><span>2</span><strong>{locale === "zh" ? "勾选并成组" : "Select and group"}</strong></div>
+        <AppIcon name="arrow" />
+        <div><span>3</span><strong>{locale === "zh" ? "AI 分析与报告" : "AI analysis and report"}</strong></div>
+      </div>
+
       {error ? <ErrorState message={error} retry={load} /> : null}
-      {showBuilder ? (
-        <section className="card stack">
-          <div>
-            <div className="eyebrow">
-              {locale === "zh" ? "数据集构建器" : "Dataset builder"}
-            </div>
-            <h2>
-              {locale === "zh" ? "定义范围与字段" : "Define scope and fields"}
-            </h2>
-          </div>
-          <div className="form-grid">
-            <label>
-              {locale === "zh" ? "名称" : "Name"}
-              <input
-                maxLength={500}
-                onChange={(event) => setName(event.target.value)}
-                value={name}
-              />
-            </label>
-            <label>
-              {locale === "zh" ? "项目范围" : "Program scope"}
-              <select
-                onChange={(event) => {
-                  setProgramId(event.target.value);
-                  const program = programs.find(
-                    (item) => item.id === event.target.value,
-                  );
-                  if (program) setOrganizationId(program.organizationId);
-                }}
-                value={programId}
-              >
-                <option value="">
-                  {locale === "zh" ? "全部授权项目" : "All authorized programs"}
-                </option>
-                {programs.map((program) => (
-                  <option key={program.id} value={program.id}>
-                    {locale === "zh" ? program.nameZh : program.nameEn}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {locale === "zh" ? "数据分类" : "Data classification"}
-              <select
-                onChange={(event) => setClassification(event.target.value)}
-                value={classification}
-              >
-                {classifications.map((item) => (
-                  <option key={item.key} value={item.key}>
-                    {locale === "zh" ? item.labelZh : item.labelEn}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field-full">
-              {locale === "zh" ? "说明（可选）" : "Description (optional)"}
-              <textarea
-                onChange={(event) => setDescription(event.target.value)}
-                value={description}
-              />
-            </label>
-          </div>
-          <fieldset className="card card-soft" style={{ border: 0, margin: 0 }}>
-            <legend style={{ padding: 0, fontWeight: 700 }}>
-              {locale === "zh" ? "包含字段" : "Included fields"}
-            </legend>
-            <div className="grid-3">
-              {fieldOptions.map((field) => (
-                <label className="choice" key={field}>
-                  <input
-                    checked={fields.includes(field)}
-                    onChange={(event) =>
-                      setFields((current) =>
-                        event.target.checked
-                          ? [...current, field]
-                          : current.filter((value) => value !== field),
-                      )
-                    }
-                    type="checkbox"
-                  />
-                  <span>{field.replaceAll("_", " ")}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="row" style={{ justifyContent: "flex-end" }}>
-            <button
-              className="button"
-              disabled={
-                busy === "create" ||
-                !name.trim() ||
-                !organizationId ||
-                !classification
-              }
-              onClick={create}
-              type="button"
-            >
-              {busy === "create"
-                ? locale === "zh"
-                  ? "正在构建…"
-                  : "Building…"
-                : locale === "zh"
-                  ? "构建数据集"
-                  : "Build dataset"}
-            </button>
-          </div>
-        </section>
+      {!loading && datasets.length ? (
+        <div className="dataset-library-toolbar">
+          <label className="search-control dataset-search">
+            <AppIcon name="search" />
+            <input
+              aria-label={locale === "zh" ? "搜索数据集" : "Search datasets"}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={locale === "zh" ? "搜索数据集名称或说明" : "Search name or description"}
+              type="search"
+              value={query}
+            />
+          </label>
+          <span className="caption">
+            {locale === "zh"
+              ? `${datasets.length} 个数据集 · ${totalRecords} 条记录`
+              : `${datasets.length} datasets · ${totalRecords} records`}
+          </span>
+        </div>
       ) : null}
+
       {loading ? (
         <LoadingState rows={5} />
-      ) : datasets.length ? (
-        <div className="table-shell">
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{locale === "zh" ? "数据集" : "Dataset"}</th>
-                  <th>{locale === "zh" ? "分类" : "Classification"}</th>
-                  <th>{locale === "zh" ? "状态" : "Status"}</th>
-                  <th>{locale === "zh" ? "更新" : "Updated"}</th>
-                  <th>{locale === "zh" ? "操作" : "Actions"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {datasets.map((dataset) => (
-                  <tr key={dataset.id}>
-                    <td>
-                      <strong>{dataset.name}</strong>
-                      <div className="caption">
-                        {dataset.description || dataset.id.slice(0, 8)}
-                      </div>
-                    </td>
-                    <td>
-                      {label.get(dataset.dataClassification) ??
-                        dataset.dataClassification}
-                    </td>
-                    <td>
-                      <StatusPill
-                        tone={dataset.status === "active" ? "green" : "neutral"}
-                      >
-                        {dataset.status}
-                      </StatusPill>
-                    </td>
-                    <td>
-                      {new Date(dataset.updatedAt).toLocaleDateString(
-                        locale === "zh" ? "zh-CN" : "en-US",
-                      )}
-                    </td>
-                    <td>
-                      <div className="row">
-                        <button
-                          className="button button-secondary button-small"
-                          disabled={busy === dataset.id}
-                          onClick={() => download(dataset, "csv")}
-                          type="button"
-                        >
-                          CSV
-                        </button>
-                        <button
-                          className="button button-secondary button-small"
-                          disabled={busy === dataset.id}
-                          onClick={() => download(dataset, "json")}
-                          type="button"
-                        >
-                          JSON
-                        </button>
-                        {permissions.includes("datasets.refresh") ? (
-                          <button
-                            className="button button-ghost button-small"
-                            disabled={busy === dataset.id}
-                            onClick={() => refresh(dataset)}
-                            type="button"
-                          >
-                            {locale === "zh" ? "刷新" : "Refresh"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      ) : visible.length ? (
+        <div className="dataset-card-grid">
+          {visible.map((dataset) => (
+            <article className="card dataset-library-card" key={dataset.id}>
+              <div className="dataset-card-heading">
+                <span className="dataset-card-icon"><AppIcon name="data" /></span>
+                <StatusPill tone={dataset.status === "active" ? "green" : "neutral"}>
+                  {dataset.status === "active"
+                    ? locale === "zh" ? "可用" : "Active"
+                    : dataset.status}
+                </StatusPill>
+              </div>
+              <div className="dataset-card-copy">
+                <Link href={`/data/${dataset.id}`}><h2>{dataset.name}</h2></Link>
+                <p className="muted">
+                  {dataset.description ||
+                    (locale === "zh" ? "由现有记录组成的数据集" : "A dataset grouped from existing records")}
+                </p>
+              </div>
+              <div className="dataset-card-metrics">
+                <span><strong>{dataset.headVersion?.recordCount ?? 0}</strong>{locale === "zh" ? "条记录" : "records"}</span>
+                <span><strong>v{dataset.headVersion?.versionNumber ?? 1}</strong>{locale === "zh" ? "当前版本" : "current version"}</span>
+                <span><strong>{new Date(dataset.updatedAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric" })}</strong>{locale === "zh" ? "最近更新" : "updated"}</span>
+              </div>
+              <div className="dataset-card-footer">
+                <span className="caption">{classificationLabel(dataset.dataClassification, locale)}</span>
+                <Link className="button button-secondary button-small" href={`/data/${dataset.id}`}>
+                  <AppIcon name="sparkles" />
+                  {dataset.status === "active"
+                    ? locale === "zh" ? "打开并分析" : "Open and analyze"
+                    : locale === "zh" ? "打开数据集" : "Open dataset"}
+                </Link>
+              </div>
+            </article>
+          ))}
         </div>
       ) : (
         <EmptyState
+          action={
+            canCreate ? (
+              <Link className="button" href="/records">
+                {locale === "zh" ? "去记录中勾选" : "Select records"}
+              </Link>
+            ) : undefined
+          }
           icon="data"
-          title={locale === "zh" ? "还没有数据集" : "No datasets yet"}
+          title={
+            query
+              ? locale === "zh" ? "没有匹配的数据集" : "No matching datasets"
+              : locale === "zh" ? "还没有数据集" : "No datasets yet"
+          }
           description={
             locale === "zh"
-              ? "从已批准证据构建可复现的数据快照。"
-              : "Build a reproducible snapshot from approved evidence."
+              ? "在记录页筛选并勾选多条数据，即可组成数据集。"
+              : "Filter and select multiple records, then group them into a dataset."
           }
         />
       )}

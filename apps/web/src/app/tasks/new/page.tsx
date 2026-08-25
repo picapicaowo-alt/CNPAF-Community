@@ -7,6 +7,7 @@ import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, PageHeader } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import type { TaskDetailResponse } from "@/lib/task-ui";
 
 type Program = {
   id: string;
@@ -41,6 +42,7 @@ type Member = { userId: string; name: string; email: string; status: string };
 export default function NewTaskPage() {
   const { locale } = useI18n();
   const router = useRouter();
+  const [copyTaskId, setCopyTaskId] = useState<string | null>();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [forms, setForms] = useState<FormChoice[]>([]);
@@ -59,6 +61,10 @@ export default function NewTaskPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
+    setCopyTaskId(new URLSearchParams(window.location.search).get("copy"));
+  }, []);
+  useEffect(() => {
+    if (copyTaskId === undefined) return;
     Promise.all([
       apiFetch<{ programs: Program[] }>("/api/v1/programs"),
       apiFetch<{ locations: Location[] }>("/api/v1/locations"),
@@ -66,6 +72,9 @@ export default function NewTaskPage() {
       apiFetch<{ items: RegistryItem[] }>(
         "/api/v1/config/registries/task_type?status=active",
       ),
+      copyTaskId
+        ? apiFetch<TaskDetailResponse>(`/api/v1/tasks/${copyTaskId}`)
+        : Promise.resolve(null),
     ])
       .then(
         async ([
@@ -73,6 +82,7 @@ export default function NewTaskPage() {
           locationResult,
           templateResult,
           taskTypeResult,
+          copyResult,
         ]) => {
           const activePrograms = (programResult.programs ?? []).filter(
             (program) => program.status === "active",
@@ -95,13 +105,33 @@ export default function NewTaskPage() {
           setLocations(locationResult.locations ?? []);
           setForms(published);
           setTaskTypes(taskTypeResult.items ?? []);
-          setProgramId(activePrograms[0]?.id ?? "");
-          setTemplateVersionId(published[0]?.id ?? "");
-          setTaskTypeKey(taskTypeResult.items?.[0]?.key ?? "");
+          const source = copyResult?.task;
+          const copiedProgram = activePrograms.find(
+            (program) => program.id === source?.programId,
+          );
+          const copiedForm = published.find(
+            (form) => form.id === source?.templateVersionId,
+          );
+          const copiedType = taskTypeResult.items?.find(
+            (item) => item.key === source?.taskTypeKey,
+          );
+          const copiedLocation = (locationResult.locations ?? []).find(
+            (location) => location.id === source?.siteId,
+          );
+          setProgramId(copiedProgram?.id ?? activePrograms[0]?.id ?? "");
+          setTemplateVersionId(copiedForm?.id ?? published[0]?.id ?? "");
+          setTaskTypeKey(copiedType?.key ?? taskTypeResult.items?.[0]?.key ?? "");
+          if (source) {
+            setSiteId(copiedLocation?.id ?? "");
+            setTitle(`${source.title}（副本）`);
+            setInstructions(source.instructions ?? "");
+            setPriority(source.priority);
+            setOpenNow(false);
+          }
         },
       )
       .catch((caught) => setError(errorMessage(caught)));
-  }, []);
+  }, [copyTaskId]);
   useEffect(() => {
     if (!programId) {
       setMembers([]);
@@ -134,7 +164,13 @@ export default function NewTaskPage() {
     [locations, selectedProgram],
   );
   async function create() {
-    if (!programId || !templateVersionId || !taskTypeKey || !title.trim())
+    if (
+      !programId ||
+      !templateVersionId ||
+      !taskTypeKey ||
+      !title.trim() ||
+      !assigneeIds.length
+    )
       return;
     setSaving(true);
     setError("");
@@ -153,18 +189,10 @@ export default function NewTaskPage() {
           opensAt: openNow ? new Date().toISOString() : null,
           closesAt: null,
           configuration: {},
+          assigneeIds,
+          status: openNow ? "open" : "draft",
         }),
       });
-      if (assigneeIds.length)
-        await apiFetch(`/api/v1/tasks/${result.task.id}/assignments`, {
-          method: "POST",
-          body: JSON.stringify({ assigneeIds, notes: null }),
-        });
-      if (openNow)
-        await apiFetch(`/api/v1/tasks/${result.task.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: "open" }),
-        });
       router.replace(`/tasks/${result.task.id}`);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -175,14 +203,29 @@ export default function NewTaskPage() {
     <div className="stack">
       <PageHeader
         eyebrow={locale === "zh" ? "任务" : "Tasks"}
-        title={locale === "zh" ? "创建任务" : "Create task"}
+        title={
+          copyTaskId
+            ? locale === "zh"
+              ? "复制任务"
+              : "Copy task"
+            : locale === "zh"
+              ? "创建任务"
+              : "Create task"
+        }
         description={
-          locale === "zh"
-            ? "明确采集内容、地点、截止时间与负责人员。"
-            : "Define what to collect, where, by when, and who is responsible."
+          copyTaskId
+            ? locale === "zh"
+              ? "已复制原任务的表单与设置；负责人、日期和状态需重新确认。"
+              : "Form and settings were copied; assignees, dates, and status must be confirmed again."
+            : locale === "zh"
+              ? "明确采集内容、地点、截止时间与负责人员。"
+              : "Define what to collect, where, by when, and who is responsible."
         }
         actions={
-          <Link className="button button-secondary" href="/tasks">
+          <Link
+            className="button button-secondary"
+            href={copyTaskId ? `/tasks/${copyTaskId}` : "/tasks"}
+          >
             <AppIcon name="back" />
             {locale === "zh" ? "返回" : "Back"}
           </Link>
@@ -286,6 +329,14 @@ export default function NewTaskPage() {
                   </option>
                 ))}
               </select>
+              {!forms.length ? (
+                <span className="caption">
+                  {locale === "zh" ? "尚无已发布表单。" : "No published form yet."}{" "}
+                  <Link className="inline-link" href="/forms/new">
+                    {locale === "zh" ? "创建表单" : "Create a form"}
+                  </Link>
+                </span>
+              ) : null}
             </label>
             <label>
               {locale === "zh" ? "任务类型" : "Task type"}
@@ -301,7 +352,12 @@ export default function NewTaskPage() {
               </select>
             </label>
             <label>
-              {locale === "zh" ? "地点（可选）" : "Location (optional)"}
+              <span className="row-between">
+                <span>{locale === "zh" ? "地点（可选）" : "Location (optional)"}</span>
+                <Link className="inline-link" href="/locations">
+                  {locale === "zh" ? "新建地点" : "New location"}
+                </Link>
+              </span>
               <select
                 onChange={(event) => setSiteId(event.target.value)}
                 value={siteId}
@@ -352,6 +408,7 @@ export default function NewTaskPage() {
                 !programId ||
                 !templateVersionId ||
                 !taskTypeKey ||
+                !assigneeIds.length ||
                 !title.trim()
               }
               onClick={create}

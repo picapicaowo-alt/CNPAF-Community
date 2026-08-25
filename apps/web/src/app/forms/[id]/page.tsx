@@ -3,6 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import {
+  configuredFormControl,
+  type FormAnswers,
+  type RuntimeFormField,
+  type RuntimeFormOption,
+  type RuntimeFormSection,
+  type RuntimeRegistryItem,
+} from "@cnpaf/shared";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import {
@@ -12,6 +20,30 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { DynamicFormSection } from "@/features/forms/runtime/DynamicFormSection";
+import {
+  archiveOption as archiveTemplateOption,
+  deleteField as removeTemplateField,
+  deleteSection as removeTemplateSection,
+  duplicateField as copyTemplateField,
+  duplicateSection as copyTemplateSection,
+  reorderFields,
+  reorderOptions,
+  reorderSections,
+  updateField as patchTemplateField,
+  updateOption as patchTemplateOption,
+  updateSection as patchTemplateSection,
+} from "@/features/forms/editor/api";
+import { moveId, stableFormKey } from "@/features/forms/editor/model";
+import { FieldSettingsPanel } from "@/features/forms/editor/FieldSettingsPanel";
+import { SectionSettingsPanel } from "@/features/forms/editor/SectionSettingsPanel";
+import { FormBuilderOutline } from "@/features/forms/editor/FormBuilderOutline";
+import { FormBuilderPreview } from "@/features/forms/editor/FormBuilderPreview";
+import { FormVersionPanel } from "@/features/forms/versioning/FormVersionPanel";
+import type {
+  FormVersionSummary,
+  ReleaseNotes,
+} from "@/features/forms/versioning/types";
 
 type Template = {
   id: string;
@@ -19,64 +51,11 @@ type Template = {
   templateTypeKey: string;
   currentPublishedVersionId?: string | null;
 };
-type Version = {
-  id: string;
-  version: number;
-  nameEn: string;
-  nameZh: string;
-  descriptionEn?: string | null;
-  descriptionZh?: string | null;
-  status: string;
-};
-type Section = {
-  id: string;
-  key: string;
-  labelEn: string;
-  labelZh: string;
-  helpTextEn?: string | null;
-  helpTextZh?: string | null;
-  sortOrder: number;
-};
-type Field = {
-  id: string;
-  templateSectionId: string;
-  key: string;
-  fieldTypeKey: string;
-  labelEn: string;
-  labelZh: string;
-  helpTextEn?: string | null;
-  helpTextZh?: string | null;
-  required: boolean;
-  allowMissingReason: boolean;
-  allowCustomEntry: boolean;
-  sortOrder: number;
-};
-type Option = {
-  id: string;
-  templateFieldId: string;
-  key: string;
-  labelEn: string;
-  labelZh: string;
-  status: string;
-  sortOrder: number;
-};
-type RegistryItem = {
-  key: string;
-  labelEn: string;
-  labelZh: string;
-  metadata?: { control?: string };
-};
-function stableKey(value: string, fallback: string) {
-  return (
-    value
-      .normalize("NFKD")
-      .toLocaleLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 150) || fallback
-  );
-}
-
+type Version = FormVersionSummary;
+type Section = RuntimeFormSection;
+type Field = RuntimeFormField;
+type Option = RuntimeFormOption;
+type RegistryItem = RuntimeRegistryItem;
 export default function FormEditorPage() {
   const { locale } = useI18n();
   const { id } = useParams<{ id: string }>();
@@ -87,9 +66,18 @@ export default function FormEditorPage() {
   const [fields, setFields] = useState<Field[]>([]);
   const [options, setOptions] = useState<Option[]>([]);
   const [fieldTypes, setFieldTypes] = useState<RegistryItem[]>([]);
+  const [missingReasons, setMissingReasons] = useState<RegistryItem[]>([]);
+  const [previewAnswers, setPreviewAnswers] = useState<FormAnswers>({});
   const [permissions, setPermissions] = useState<string[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [selectedFieldId, setSelectedFieldId] = useState("");
+  const [settingsTarget, setSettingsTarget] = useState<
+    "field" | "section" | null
+  >(null);
+  const [sectionDraft, setSectionDraft] = useState<Partial<Section> | null>(
+    null,
+  );
+  const [fieldDraft, setFieldDraft] = useState<Partial<Field> | null>(null);
   const [preview, setPreview] = useState(false);
   const [showSectionForm, setShowSectionForm] = useState(false);
   const [showFieldForm, setShowFieldForm] = useState(false);
@@ -99,8 +87,6 @@ export default function FormEditorPage() {
   const [fieldZh, setFieldZh] = useState("");
   const [fieldType, setFieldType] = useState("");
   const [required, setRequired] = useState(false);
-  const [optionEn, setOptionEn] = useState("");
-  const [optionZh, setOptionZh] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -119,12 +105,15 @@ export default function FormEditorPage() {
         ? current
         : (bundle.sections[0]?.id ?? ""),
     );
+    setSelectedFieldId((current) =>
+      bundle.fields.some((field) => field.id === current) ? current : "",
+    );
   }, []);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [bundle, me, types] = await Promise.all([
+      const [bundle, me, types, reasons] = await Promise.all([
         apiFetch<{ template: Template; versions: Version[] }>(
           `/api/v1/templates/${id}`,
         ),
@@ -132,11 +121,15 @@ export default function FormEditorPage() {
         apiFetch<{ items: RegistryItem[] }>(
           "/api/v1/config/registries/collection_field_type?status=active",
         ),
+        apiFetch<{ items: RegistryItem[] }>(
+          "/api/v1/config/registries/missing_reason?status=active",
+        ),
       ]);
       setTemplate(bundle.template);
       setVersions(bundle.versions ?? []);
       setPermissions(me.permissions ?? []);
       setFieldTypes(types.items ?? []);
+      setMissingReasons(reasons.items ?? []);
       setFieldType((current) => current || types.items?.[0]?.key || "");
       const target =
         bundle.versions.find((version) => version.status === "draft") ??
@@ -176,16 +169,120 @@ export default function FormEditorPage() {
   );
   const selectedField = fields.find((field) => field.id === selectedFieldId);
   const fieldOptions = options.filter(
-    (option) => option.templateFieldId === selectedFieldId,
+    (option) =>
+      option.templateFieldId === selectedFieldId && option.status !== "archived",
   );
-  const selectedControl = fieldTypes.find(
-    (item) => item.key === selectedField?.fieldTypeKey,
-  )?.metadata?.control;
-  const selectedFieldAllowsOptions =
-    selectedControl === "single" || selectedControl === "multi";
+  const selectedControl = configuredFormControl(
+    fieldTypes.find((item) => item.key === selectedField?.fieldTypeKey)
+      ?.metadata,
+  );
+  const previewControls = useMemo(
+    () =>
+      new Map(
+        fieldTypes.map((item) => [
+          item.key,
+          configuredFormControl(item.metadata),
+        ]),
+      ),
+    [fieldTypes],
+  );
+  const previewSections = useMemo(
+    () =>
+      sections.map((section) =>
+        section.id === selectedSectionId && sectionDraft
+          ? { ...section, ...sectionDraft }
+          : section,
+      ),
+    [sectionDraft, sections, selectedSectionId],
+  );
+  const previewFields = useMemo(
+    () =>
+      fields.map((field) =>
+        field.id === selectedFieldId && fieldDraft
+          ? { ...field, ...fieldDraft }
+          : field,
+      ),
+    [fieldDraft, fields, selectedFieldId],
+  );
+  const previewSelectedSection = previewSections.find(
+    (section) => section.id === selectedSectionId,
+  );
+  const previewSelectedField = previewFields.find(
+    (field) => field.id === selectedFieldId,
+  );
+  const updateSectionPreview = useCallback(
+    (body: Partial<Section>) => setSectionDraft(body),
+    [],
+  );
+  const updateFieldPreview = useCallback(
+    (body: Partial<Field>) => setFieldDraft(body),
+    [],
+  );
+  const conditionFieldsForSection = useMemo(() => {
+    const selectedOrder = sections.findIndex(
+      (section) => section.id === selectedSectionId,
+    );
+    const earlierSectionIds = new Set(
+      sections.slice(0, Math.max(0, selectedOrder)).map((section) => section.id),
+    );
+    return fields.filter((field) => earlierSectionIds.has(field.templateSectionId));
+  }, [fields, sections, selectedSectionId]);
+  const conditionFieldsForField = useMemo(() => {
+    if (!selectedField) return [];
+    const selectedSectionIndex = sections.findIndex(
+      (section) => section.id === selectedField.templateSectionId,
+    );
+    return fields.filter((field) => {
+      const fieldSectionIndex = sections.findIndex(
+        (section) => section.id === field.templateSectionId,
+      );
+      return (
+        fieldSectionIndex < selectedSectionIndex ||
+        (fieldSectionIndex === selectedSectionIndex &&
+          field.sortOrder < selectedField.sortOrder)
+      );
+    });
+  }, [fields, sections, selectedField]);
+  useEffect(() => {
+    if (settingsTarget === "field" && !selectedField) setSettingsTarget(null);
+    if (settingsTarget === "section" && !selectedSection)
+      setSettingsTarget(null);
+  }, [selectedField, selectedSection, settingsTarget]);
+
+  function selectBuilderSection(sectionId: string) {
+    const closing =
+      sectionId === selectedSectionId && settingsTarget === "section";
+    if (closing) {
+      setSettingsTarget(null);
+      return;
+    }
+    if (sectionId !== selectedSectionId) setSectionDraft(null);
+    setFieldDraft(null);
+    setSelectedSectionId(sectionId);
+    setSelectedFieldId("");
+    setSettingsTarget(editable ? "section" : null);
+  }
+
+  function selectBuilderField(fieldId: string) {
+    const field = fields.find((candidate) => candidate.id === fieldId);
+    if (!field) return;
+    const closing = fieldId === selectedFieldId && settingsTarget === "field";
+    if (closing) {
+      setSettingsTarget(null);
+      return;
+    }
+    if (fieldId !== selectedFieldId) setFieldDraft(null);
+    if (field.templateSectionId !== selectedSectionId) setSectionDraft(null);
+    setSelectedSectionId(field.templateSectionId);
+    setSelectedFieldId(fieldId);
+    setSettingsTarget(editable ? "field" : null);
+  }
   async function selectVersion(target: string) {
     setVersionId(target);
     setSelectedFieldId("");
+    setSettingsTarget(null);
+    setSectionDraft(null);
+    setFieldDraft(null);
     setLoading(true);
     try {
       await loadVersion(target);
@@ -225,7 +322,7 @@ export default function FormEditorPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            key: stableKey(sectionEn, `section-${sections.length + 1}`),
+            key: stableFormKey(sectionEn, `section-${sections.length + 1}`),
             labelEn: sectionEn.trim(),
             labelZh: sectionZh.trim(),
             sortOrder: sections.length,
@@ -238,6 +335,8 @@ export default function FormEditorPage() {
       setShowSectionForm(false);
       await loadVersion(currentVersion.id);
       setSelectedSectionId(result.section.id);
+      setSelectedFieldId("");
+      setSettingsTarget("section");
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -255,7 +354,7 @@ export default function FormEditorPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            key: stableKey(fieldEn, `field-${sectionFields.length + 1}`),
+            key: stableFormKey(fieldEn, `field-${sectionFields.length + 1}`),
             fieldTypeKey: fieldType,
             labelEn: fieldEn.trim(),
             labelZh: fieldZh.trim(),
@@ -277,31 +376,245 @@ export default function FormEditorPage() {
       setShowFieldForm(false);
       await loadVersion(currentVersion!.id);
       setSelectedFieldId(result.field.id);
+      setSettingsTarget("field");
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
   }
-  async function addOption() {
-    if (!selectedField || !optionEn.trim() || !optionZh.trim()) return;
+  async function addOption(body: { labelEn: string; labelZh: string }) {
+    if (!selectedField || !body.labelEn.trim() || !body.labelZh.trim())
+      return false;
     setBusy(true);
     setError("");
     try {
       await apiFetch(`/api/v1/template-fields/${selectedField.id}/options`, {
         method: "POST",
         body: JSON.stringify({
-          key: stableKey(optionEn, `option-${fieldOptions.length + 1}`),
-          labelEn: optionEn.trim(),
-          labelZh: optionZh.trim(),
+          key: stableFormKey(body.labelEn, `option-${fieldOptions.length + 1}`),
+          labelEn: body.labelEn.trim(),
+          labelZh: body.labelZh.trim(),
           status: "active",
           sortOrder: fieldOptions.length,
           configuration: {},
         }),
       });
-      setOptionEn("");
-      setOptionZh("");
       await loadVersion(currentVersion!.id);
+      return true;
+    } catch (caught) {
+      setError(errorMessage(caught));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveSection(body: Partial<Section>) {
+    if (!selectedSection || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await patchTemplateSection(selectedSection.id, body);
+      await loadVersion(currentVersion.id);
+      setSectionDraft(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function deleteSection() {
+    if (!selectedSection || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await removeTemplateSection(selectedSection.id);
+      setSelectedSectionId("");
+      setSelectedFieldId("");
+      setSettingsTarget(null);
+      setSectionDraft(null);
+      setFieldDraft(null);
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function duplicateSection() {
+    if (!selectedSection || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await copyTemplateSection(selectedSection.id);
+      await loadVersion(currentVersion.id);
+      setSelectedSectionId(result.section.id);
+      setSelectedFieldId("");
+      setSettingsTarget("section");
+      setSectionDraft(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function moveSection(direction: -1 | 1) {
+    if (!selectedSection || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await reorderSections(
+        currentVersion.id,
+        moveId(
+          sections.map((section) => section.id),
+          selectedSection.id,
+          direction,
+        ),
+      );
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function reorderSectionIds(orderedIds: string[]) {
+    if (!currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await reorderSections(currentVersion.id, orderedIds);
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveField(
+    body: Partial<Field> & { templateSectionId?: string },
+  ) {
+    if (!selectedField || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await patchTemplateField(selectedField.id, body);
+      if (result.field.templateSectionId !== selectedSectionId)
+        setSelectedSectionId(result.field.templateSectionId);
+      await loadVersion(currentVersion.id);
+      setSelectedFieldId(result.field.id);
+      setFieldDraft(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function deleteField() {
+    if (!selectedField || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await removeTemplateField(selectedField.id);
+      setSelectedFieldId("");
+      setSettingsTarget(null);
+      setFieldDraft(null);
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function duplicateField() {
+    if (!selectedField || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await copyTemplateField(selectedField.id);
+      await loadVersion(currentVersion.id);
+      setSelectedFieldId(result.field.id);
+      setSettingsTarget("field");
+      setFieldDraft(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function moveField(direction: -1 | 1) {
+    if (!selectedField || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await reorderFields(
+        selectedField.templateSectionId,
+        moveId(
+          sectionFields.map((field) => field.id),
+          selectedField.id,
+          direction,
+        ),
+      );
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function reorderFieldIds(sectionId: string, orderedIds: string[]) {
+    if (!currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await reorderFields(sectionId, orderedIds);
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveOption(optionId: string, body: Partial<Option>) {
+    if (!currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await patchTemplateOption(optionId, body);
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function archiveOption(optionId: string) {
+    if (!currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await archiveTemplateOption(optionId);
+      await loadVersion(currentVersion.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function moveOption(optionId: string, direction: -1 | 1) {
+    if (!selectedField || !currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await reorderOptions(
+        selectedField.id,
+        moveId(
+          fieldOptions.map((option) => option.id),
+          optionId,
+          direction,
+        ),
+      );
+      await loadVersion(currentVersion.id);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -331,6 +644,48 @@ export default function FormEditorPage() {
       setBusy(false);
     }
   }
+  async function setQuickCapture(enabled: boolean) {
+    if (!currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/template-versions/${currentVersion.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          configuration: {
+            ...currentVersion.configuration,
+            allowQuickCapture: enabled,
+          },
+        }),
+      });
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveReleaseNotes(notes: ReleaseNotes) {
+    if (!currentVersion) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/template-versions/${currentVersion.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          configuration: {
+            ...currentVersion.configuration,
+            releaseNotes: notes,
+          },
+        }),
+      });
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
   if (loading && !template)
     return (
       <>
@@ -339,7 +694,7 @@ export default function FormEditorPage() {
       </>
     );
   return (
-    <div className="stack">
+    <div className="stack form-editor-page">
       <PageHeader
         eyebrow={`${template?.key ?? ""} · ${template?.templateTypeKey ?? ""}`}
         title={
@@ -364,16 +719,20 @@ export default function FormEditorPage() {
             </Link>
             <button
               className="button button-secondary"
-              onClick={() => setPreview((value) => !value)}
+              onClick={() => {
+                setPreview((value) => !value);
+                setShowFieldForm(false);
+                setShowSectionForm(false);
+              }}
               type="button"
             >
               {preview
                 ? locale === "zh"
-                  ? "编辑"
-                  : "Edit"
+                  ? "返回编辑"
+                  : "Back to editor"
                 : locale === "zh"
-                  ? "预览"
-                  : "Preview"}
+                  ? "完整预览"
+                  : "Full preview"}
             </button>
             {editable && permissions.includes("templates.publish") ? (
               <button
@@ -409,186 +768,200 @@ export default function FormEditorPage() {
           ) : null}
         </div>
       ) : null}
-      <div className="editor-layout">
-        <aside className="editor-sidebar">
-          <section className="card stack-sm">
-            <label>
-              {locale === "zh" ? "版本" : "Version"}
-              <select
-                onChange={(event) => void selectVersion(event.target.value)}
-                value={versionId}
-              >
-                {versions.map((version) => (
-                  <option key={version.id} value={version.id}>
-                    v{version.version} · {version.status}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="row-between">
-              <h2>{locale === "zh" ? "章节" : "Sections"}</h2>
-              <StatusPill
-                tone={
-                  currentVersion?.status === "published" ? "green" : "amber"
-                }
-              >
-                {currentVersion?.status ?? "—"}
-              </StatusPill>
-            </div>
-            <div className="section-picker">
-              {sections.map((section, index) => (
-                <button
-                  className={section.id === selectedSectionId ? "active" : ""}
-                  key={section.id}
-                  onClick={() => {
-                    setSelectedSectionId(section.id);
-                    setSelectedFieldId("");
-                  }}
-                  type="button"
-                >
-                  <span>
-                    {index + 1}.{" "}
-                    {locale === "zh" ? section.labelZh : section.labelEn}
-                  </span>
-                  <span className="caption">
-                    {
-                      fields.filter(
-                        (field) => field.templateSectionId === section.id,
-                      ).length
-                    }
-                  </span>
-                </button>
-              ))}
-            </div>
-            {editable ? (
-              <button
-                className="button button-secondary button-wide button-small"
-                onClick={() => setShowSectionForm((value) => !value)}
-                type="button"
-              >
-                <AppIcon name="plus" />
-                {locale === "zh" ? "添加章节" : "Add section"}
-              </button>
-            ) : null}
-            {showSectionForm ? (
-              <div className="stack-sm">
+      {template && currentVersion ? (
+        <FormVersionPanel
+          busy={busy}
+          currentVersion={currentVersion}
+          editable={editable}
+          locale={locale}
+          onSaveReleaseNotes={saveReleaseNotes}
+          templateId={template.id}
+          versions={versions}
+        />
+      ) : null}
+      {preview ? (
+        <section className="card stack builder-full-preview">
+          <div className="progress-label">
+            <span>{locale === "zh" ? "完整表单预览" : "Full form preview"}</span>
+            <span>
+              {sections.length} {locale === "zh" ? "个章节" : "sections"}
+            </span>
+          </div>
+          {previewSections.map((section) => (
+            <DynamicFormSection
+              answers={previewAnswers}
+              controls={previewControls}
+              fields={previewFields}
+              key={section.id}
+              locale={locale}
+              missingReasons={missingReasons}
+              onChange={(fieldId, answer) =>
+                setPreviewAnswers((current) => ({
+                  ...current,
+                  [fieldId]: answer,
+                }))
+              }
+              options={options}
+              section={section}
+              sections={previewSections}
+            />
+          ))}
+        </section>
+      ) : (
+        <div
+          className={`editor-layout builder-layout${settingsTarget && editable ? " has-inspector" : ""}`}
+        >
+          <aside className="editor-sidebar">
+            <section className="card stack-sm builder-sidebar-card">
+              <div className="builder-version-row">
                 <label>
-                  中文
-                  <input
-                    onChange={(event) => setSectionZh(event.target.value)}
-                    value={sectionZh}
-                  />
-                </label>
-                <label>
-                  English
-                  <input
-                    onChange={(event) => setSectionEn(event.target.value)}
-                    value={sectionEn}
-                  />
-                </label>
-                <button
-                  className="button button-small"
-                  disabled={busy || !sectionZh.trim() || !sectionEn.trim()}
-                  onClick={addSection}
-                  type="button"
-                >
-                  {locale === "zh" ? "保存章节" : "Save section"}
-                </button>
-              </div>
-            ) : null}
-          </section>
-        </aside>
-        <main className="editor-canvas">
-          {preview ? (
-            <section className="card stack">
-              <div className="progress-label">
-                <span>{locale === "zh" ? "表单预览" : "Form preview"}</span>
-                <span>
-                  {sections.length} {locale === "zh" ? "节" : "sections"}
-                </span>
-              </div>
-              {sections.map((section) => (
-                <div className="editor-section" key={section.id}>
-                  <div>
-                    <h2>
-                      {locale === "zh" ? section.labelZh : section.labelEn}
-                    </h2>
-                    <p className="muted">
-                      {locale === "zh"
-                        ? section.helpTextZh
-                        : section.helpTextEn}
-                    </p>
-                  </div>
-                  {fields
-                    .filter((field) => field.templateSectionId === section.id)
-                    .map((field) => (
-                      <label key={field.id}>
-                        {locale === "zh" ? field.labelZh : field.labelEn}
-                        {field.required ? " *" : ""}
-                        {fieldOptionsFor(field.id, options).length ? (
-                          <select disabled>
-                            <option>
-                              {locale === "zh" ? "请选择…" : "Select…"}
-                            </option>
-                            {fieldOptionsFor(field.id, options).map(
-                              (option) => (
-                                <option key={option.id}>
-                                  {locale === "zh"
-                                    ? option.labelZh
-                                    : option.labelEn}
-                                </option>
-                              ),
-                            )}
-                          </select>
-                        ) : (
-                          <input disabled placeholder={field.fieldTypeKey} />
-                        )}
-                      </label>
+                  {locale === "zh" ? "版本" : "Version"}
+                  <select
+                    onChange={(event) => void selectVersion(event.target.value)}
+                    value={versionId}
+                  >
+                    {versions.map((version) => (
+                      <option key={version.id} value={version.id}>
+                        v{version.version} · {version.status}
+                      </option>
                     ))}
+                  </select>
+                </label>
+                <StatusPill
+                  tone={
+                    currentVersion?.status === "published" ? "green" : "amber"
+                  }
+                >
+                  {currentVersion?.status ?? "—"}
+                </StatusPill>
+              </div>
+              {editable ? (
+                <label className="choice builder-quick-capture">
+                  <input
+                    checked={
+                      currentVersion?.configuration.allowQuickCapture === true
+                    }
+                    disabled={busy}
+                    onChange={(event) =>
+                      void setQuickCapture(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  <span>
+                    {locale === "zh" ? "允许快速采集" : "Allow quick capture"}
+                  </span>
+                </label>
+              ) : null}
+              <FormBuilderOutline
+                busy={busy}
+                editable={editable}
+                fields={previewFields}
+                locale={locale}
+                onReorderFields={reorderFieldIds}
+                onReorderSections={reorderSectionIds}
+                onSelectField={selectBuilderField}
+                onSelectSection={selectBuilderSection}
+                sections={previewSections}
+                selectedFieldId={selectedFieldId}
+                selectedSectionId={selectedSectionId}
+                settingsTarget={settingsTarget}
+              />
+              {editable ? (
+                <button
+                  className="button button-secondary button-wide button-small"
+                  onClick={() => setShowSectionForm((value) => !value)}
+                  type="button"
+                >
+                  <AppIcon name={showSectionForm ? "close" : "plus"} />
+                  {showSectionForm
+                    ? locale === "zh"
+                      ? "取消添加"
+                      : "Cancel"
+                    : locale === "zh"
+                      ? "添加章节"
+                      : "Add section"}
+                </button>
+              ) : null}
+              {showSectionForm ? (
+                <div className="stack-sm builder-inline-create">
+                  <label>
+                    中文标题
+                    <input
+                      onChange={(event) => setSectionZh(event.target.value)}
+                      value={sectionZh}
+                    />
+                  </label>
+                  <label>
+                    English title
+                    <input
+                      onChange={(event) => setSectionEn(event.target.value)}
+                      value={sectionEn}
+                    />
+                  </label>
+                  <button
+                    className="button button-small button-wide"
+                    disabled={busy || !sectionZh.trim() || !sectionEn.trim()}
+                    onClick={addSection}
+                    type="button"
+                  >
+                    {locale === "zh" ? "保存章节" : "Save section"}
+                  </button>
                 </div>
-              ))}
+              ) : null}
             </section>
-          ) : selectedSection ? (
-            <section className="card stack">
-              <div className="editor-toolbar">
+          </aside>
+          <main className="editor-canvas">
+            <section className="card builder-preview-panel">
+              <div className="builder-canvas-toolbar">
                 <div>
-                  <div className="eyebrow">{selectedSection.key}</div>
-                  <h2>
+                  <div className="row builder-live-label">
+                    <span className="builder-live-dot" />
+                    <strong>
+                      {locale === "zh" ? "实时预览" : "Live preview"}
+                    </strong>
+                  </div>
+                  <p className="caption">
                     {locale === "zh"
-                      ? selectedSection.labelZh
-                      : selectedSection.labelEn}
-                  </h2>
+                      ? "填写、切换条件并直接查看采集端效果"
+                      : "Test inputs and conditional behavior as you build"}
+                  </p>
                 </div>
-                {editable ? (
+                {editable && selectedSection ? (
                   <button
                     className="button button-secondary button-small"
                     onClick={() => setShowFieldForm((value) => !value)}
                     type="button"
                   >
-                    <AppIcon name="plus" />
-                    {locale === "zh" ? "添加字段" : "Add field"}
+                    <AppIcon name={showFieldForm ? "close" : "plus"} />
+                    {showFieldForm
+                      ? locale === "zh"
+                        ? "收起"
+                        : "Close"
+                      : locale === "zh"
+                        ? "添加题目"
+                        : "Add field"}
                   </button>
                 ) : null}
               </div>
-              {showFieldForm ? (
-                <div className="editor-field">
+              {showFieldForm && selectedSection ? (
+                <div className="builder-inline-create builder-field-create">
                   <div className="form-grid">
                     <label>
-                      中文标签
+                      中文题目
                       <input
                         onChange={(event) => setFieldZh(event.target.value)}
                         value={fieldZh}
                       />
                     </label>
                     <label>
-                      English label
+                      English question
                       <input
                         onChange={(event) => setFieldEn(event.target.value)}
                         value={fieldEn}
                       />
                     </label>
                     <label>
-                      {locale === "zh" ? "字段类型" : "Field type"}
+                      {locale === "zh" ? "题型" : "Field type"}
                       <select
                         onChange={(event) => setFieldType(event.target.value)}
                         value={fieldType}
@@ -600,7 +973,7 @@ export default function FormEditorPage() {
                         ))}
                       </select>
                     </label>
-                    <label className="choice" style={{ alignSelf: "end" }}>
+                    <label className="choice builder-create-required">
                       <input
                         checked={required}
                         onChange={(event) => setRequired(event.target.checked)}
@@ -617,110 +990,108 @@ export default function FormEditorPage() {
                     onClick={addField}
                     type="button"
                   >
-                    {locale === "zh" ? "添加字段" : "Add field"}
+                    {locale === "zh" ? "添加并编辑" : "Add and edit"}
                   </button>
                 </div>
               ) : null}
-              {sectionFields.length ? (
-                sectionFields.map((field, index) => (
-                  <button
-                    className={`editor-field${selectedFieldId === field.id ? " selected-row" : ""}`}
-                    key={field.id}
-                    onClick={() => setSelectedFieldId(field.id)}
-                    style={{
-                      width: "100%",
-                      color: "inherit",
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                    type="button"
-                  >
-                    <span className="editor-field-title">
-                      <span>
-                        <span className="caption">
-                          {index + 1} · {field.fieldTypeKey}
-                        </span>
-                        <h3>
-                          {locale === "zh" ? field.labelZh : field.labelEn}
-                          {field.required ? " *" : ""}
-                        </h3>
-                      </span>
-                      <StatusPill tone="blue">
-                        {fieldOptionsFor(field.id, options).length}{" "}
-                        {locale === "zh" ? "选项" : "options"}
-                      </StatusPill>
-                    </span>
-                  </button>
-                ))
+              {previewSelectedSection ? (
+                <FormBuilderPreview
+                  answers={previewAnswers}
+                  busy={busy}
+                  controls={previewControls}
+                  editable={editable}
+                  fields={previewFields}
+                  locale={locale}
+                  missingReasons={missingReasons}
+                  onChange={(fieldId, answer) =>
+                    setPreviewAnswers((current) => ({
+                      ...current,
+                      [fieldId]: answer,
+                    }))
+                  }
+                  onReorderFields={(orderedIds) =>
+                    reorderFieldIds(selectedSectionId, orderedIds)
+                  }
+                  onSelectField={selectBuilderField}
+                  options={options}
+                  section={previewSelectedSection}
+                  sections={previewSections}
+                  selectedFieldId={selectedFieldId}
+                />
               ) : (
-                <div className="empty-state" style={{ minHeight: 220 }}>
+                <div className="empty-state builder-no-section">
                   <span className="empty-icon">
                     <AppIcon name="forms" />
                   </span>
                   <h2>
-                    {locale === "zh"
-                      ? "此章节暂无字段"
-                      : "No fields in this section"}
+                    {locale === "zh" ? "先添加一个章节" : "Add a section first"}
                   </h2>
+                  <p>
+                    {locale === "zh"
+                      ? "章节会成为采集表单中的步骤。"
+                      : "Sections become steps in the collection form."}
+                  </p>
                 </div>
               )}
-              {selectedField && editable && selectedFieldAllowsOptions ? (
-                <div className="card card-soft stack-sm">
-                  <h3>{locale === "zh" ? "添加选项" : "Add option"}</h3>
-                  <div className="form-grid">
-                    <label>
-                      中文
-                      <input
-                        onChange={(event) => setOptionZh(event.target.value)}
-                        value={optionZh}
-                      />
-                    </label>
-                    <label>
-                      English
-                      <input
-                        onChange={(event) => setOptionEn(event.target.value)}
-                        value={optionEn}
-                      />
-                    </label>
-                  </div>
-                  {fieldOptions.length ? (
-                    <div className="row">
-                      {fieldOptions.map((option) => (
-                        <StatusPill key={option.id}>
-                          {locale === "zh" ? option.labelZh : option.labelEn}
-                        </StatusPill>
-                      ))}
-                    </div>
-                  ) : null}
-                  <button
-                    className="button button-secondary button-small"
-                    disabled={busy || !optionZh.trim() || !optionEn.trim()}
-                    onClick={addOption}
-                    type="button"
-                  >
-                    {locale === "zh" ? "保存选项" : "Save option"}
-                  </button>
-                </div>
+            </section>
+          </main>
+          {settingsTarget && editable ? (
+            <aside className="editor-inspector">
+              {settingsTarget === "section" && previewSelectedSection ? (
+                <SectionSettingsPanel
+                  availableFields={conditionFieldsForSection}
+                  busy={busy}
+                  controls={previewControls}
+                  fieldCount={sectionFields.length}
+                  index={sections.findIndex(
+                    (section) => section.id === selectedSectionId,
+                  )}
+                  key={previewSelectedSection.id}
+                  locale={locale}
+                  onClose={() => setSettingsTarget(null)}
+                  onDelete={deleteSection}
+                  onDuplicate={duplicateSection}
+                  onMove={moveSection}
+                  onPreviewChange={updateSectionPreview}
+                  onSave={saveSection}
+                  options={options}
+                  section={previewSelectedSection}
+                  total={sections.length}
+                />
               ) : null}
-            </section>
-          ) : (
-            <section className="card">
-              <p className="muted">
-                {locale === "zh"
-                  ? "添加或选择一个章节。"
-                  : "Add or select a section."}
-              </p>
-            </section>
-          )}
-        </main>
-      </div>
+              {settingsTarget === "field" && previewSelectedField ? (
+                  <FieldSettingsPanel
+                    allFields={conditionFieldsForField}
+                    allOptions={options}
+                    busy={busy}
+                    control={selectedControl}
+                    controls={previewControls}
+                    field={previewSelectedField}
+                    fieldTypes={fieldTypes}
+                    index={sectionFields.findIndex(
+                      (field) => field.id === selectedFieldId,
+                    )}
+                    key={previewSelectedField.id}
+                    locale={locale}
+                    onAddOption={addOption}
+                    onArchiveOption={archiveOption}
+                    onClose={() => setSettingsTarget(null)}
+                    onDelete={deleteField}
+                    onDuplicate={duplicateField}
+                    onMove={moveField}
+                    onMoveOption={moveOption}
+                    onPreviewChange={updateFieldPreview}
+                    onSave={saveField}
+                    onSaveOption={saveOption}
+                    options={fieldOptions}
+                    sections={sections}
+                    total={sectionFields.length}
+                  />
+              ) : null}
+            </aside>
+          ) : null}
+        </div>
+      )}
     </div>
-  );
-}
-
-function fieldOptionsFor(fieldId: string, options: Option[]) {
-  return options.filter(
-    (option) =>
-      option.templateFieldId === fieldId && option.status !== "archived",
   );
 }

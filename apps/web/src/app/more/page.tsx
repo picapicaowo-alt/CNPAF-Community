@@ -18,6 +18,15 @@ type Module = {
 };
 const modules: Module[] = [
   {
+    href: "/programs",
+    icon: "reports",
+    en: "Programs",
+    zh: "项目",
+    detailEn: "Programs, members, forms, and tasks",
+    detailZh: "项目、成员、表单与任务范围",
+    permissions: ["programs.view"],
+  },
+  {
     href: "/locations",
     icon: "locations",
     en: "Locations",
@@ -70,6 +79,15 @@ const modules: Module[] = [
     detailEn: "Worker and queue administration",
     detailZh: "工作队列管理",
     permissions: ["settings.manage"],
+  },
+  {
+    href: "/settings/configuration",
+    icon: "settings",
+    en: "Custom configuration",
+    zh: "自定义配置",
+    detailEn: "Location, task, form, source, and missing-value types",
+    detailZh: "地点、任务、表单、来源与未记录原因",
+    permissions: ["services.manage"],
   },
   {
     href: "/account",

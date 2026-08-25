@@ -161,15 +161,22 @@ export default function InsightsPage() {
       ) : null}
       {analytics ? (
         <div className="grid-2">
-          <div className="card insight-card blue">
+          <Link className="card insight-card blue card-interactive" href="/records">
             <h2>{locale === "zh" ? "发生了什么变化？" : "What changed?"}</h2>
             <p>
               {locale === "zh"
                 ? `当前授权范围内共有 ${analytics.authorizedRecordCount} 条记录。`
                 : `${analytics.authorizedRecordCount} records are currently in your authorized scope.`}
             </p>
-          </div>
-          <div className="card insight-card amber">
+            <span className="inline-link">
+              {locale === "zh" ? "查看全部记录" : "View all records"}
+              <AppIcon name="arrow" />
+            </span>
+          </Link>
+          <Link
+            className="card insight-card amber card-interactive"
+            href="/records?status=approved&hasConcerns=1"
+          >
             <h2>
               {locale === "zh" ? "什么需要关注？" : "What needs attention?"}
             </h2>
@@ -178,8 +185,19 @@ export default function InsightsPage() {
                 ? `已批准证据中共有 ${totalConcerns} 个关注点。`
                 : `${totalConcerns} concerns appear in approved evidence.`}
             </p>
-          </div>
-          <div className="card insight-card violet">
+            <span className="inline-link">
+              {locale === "zh" ? "查看关注点记录" : "View concern records"}
+              <AppIcon name="arrow" />
+            </span>
+          </Link>
+          <Link
+            className="card insight-card violet card-interactive"
+            href={
+              lowestCompletion
+                ? `/records?source=${encodeURIComponent(lowestCompletion.sourceKind)}`
+                : "/records"
+            }
+          >
             <h2>
               {locale === "zh"
                 ? "我们还不知道什么？"
@@ -192,8 +210,19 @@ export default function InsightsPage() {
                   ? "目前没有足够的完成率数据。"
                   : "There is not enough completion data yet."}
             </p>
-          </div>
-          <div className="card insight-card green">
+            <span className="inline-link">
+              {locale === "zh" ? "查看该来源记录" : "View source records"}
+              <AppIcon name="arrow" />
+            </span>
+          </Link>
+          <Link
+            className="card insight-card green card-interactive"
+            href={
+              lowestCompletion
+                ? `/records?source=${encodeURIComponent(lowestCompletion.sourceKind)}`
+                : "/records"
+            }
+          >
             <h2>
               {locale === "zh"
                 ? "下一步在哪里采集？"
@@ -204,11 +233,11 @@ export default function InsightsPage() {
                 ? "使用任务与地点覆盖情况来补齐证据缺口。"
                 : "Use task and location coverage to close evidence gaps."}
             </p>
-            <Link className="inline-link" href="/tasks/new">
-              {locale === "zh" ? "创建任务" : "Create task"}
+            <span className="inline-link">
+              {locale === "zh" ? "查看待补齐来源" : "Trace the evidence gap"}
               <AppIcon name="arrow" />
-            </Link>
-          </div>
+            </span>
+          </Link>
         </div>
       ) : null}
       <section>

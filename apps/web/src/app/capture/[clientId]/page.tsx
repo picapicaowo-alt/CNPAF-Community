@@ -1,9 +1,5 @@
-"use client";
-
-import { useParams } from "next/navigation";
-import { CaptureForm } from "@/components/CaptureForm";
+import { redirect } from "next/navigation";
 
 export default function CaptureContinue() {
-  const params = useParams<{ clientId: string }>();
-  return <CaptureForm clientRecordId={params.clientId} />;
+  redirect("/capture");
 }

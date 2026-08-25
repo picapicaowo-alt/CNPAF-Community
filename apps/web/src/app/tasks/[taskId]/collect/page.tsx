@@ -3,6 +3,19 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  configuredFormControl,
+  hasFormAnswerValue,
+  normalizeLegacyFormAnswers,
+  resolveFormBranchAction,
+  resolveRuntimeFormVisibility,
+  type FormAnswer,
+  type FormAnswers,
+  type FormScalarAnswer,
+  type RuntimeFormField,
+  type RuntimeFormOption,
+  type RuntimeFormSection,
+} from "@cnpaf/shared";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState, StatusPill } from "@/components/ui";
@@ -15,6 +28,9 @@ import {
   saveLocalDraft,
 } from "@/lib/offline";
 import type { TaskAssignment, TaskSummary } from "@/lib/task-ui";
+import { DynamicFieldControl } from "@/features/forms/runtime/DynamicFieldControl";
+import { serializeFormAnswers } from "@/features/forms/runtime/serializeFormAnswers";
+import { AttachmentPicker } from "@/features/attachments/components/AttachmentPicker";
 
 type TemplateVersion = {
   id: string;
@@ -24,42 +40,6 @@ type TemplateVersion = {
   descriptionZh?: string | null;
   configuration: Record<string, unknown>;
 };
-type TemplateSection = {
-  id: string;
-  key: string;
-  labelEn: string;
-  labelZh: string;
-  helpTextEn?: string | null;
-  helpTextZh?: string | null;
-  sortOrder: number;
-};
-type TemplateField = {
-  id: string;
-  templateSectionId: string;
-  key: string;
-  fieldTypeKey: string;
-  labelEn: string;
-  labelZh: string;
-  helpTextEn?: string | null;
-  helpTextZh?: string | null;
-  placeholderEn?: string | null;
-  placeholderZh?: string | null;
-  required: boolean;
-  allowCustomEntry: boolean;
-  sortOrder: number;
-  validation: Record<string, unknown>;
-};
-type TemplateOption = {
-  id: string;
-  templateFieldId: string;
-  key: string;
-  labelEn: string;
-  labelZh: string;
-  helpTextEn?: string | null;
-  helpTextZh?: string | null;
-  status: string;
-  sortOrder: number;
-};
 type RegistryItem = {
   registryKey: string;
   itemKey: string;
@@ -68,48 +48,35 @@ type RegistryItem = {
   metadata?: Record<string, unknown>;
 };
 type TaskPackage = {
-  task: Omit<TaskSummary, "myAssignment">;
+  task: Omit<TaskSummary, "myAssignment" | "assignments">;
   assignment: TaskAssignment;
   form: {
     version: TemplateVersion;
-    sections: TemplateSection[];
-    fields: TemplateField[];
-    options: TemplateOption[];
+    sections: RuntimeFormSection[];
+    fields: RuntimeFormField[];
+    options: RuntimeFormOption[];
   };
   configuration: RegistryItem[];
+  correction: {
+    record: { id: string; clientRecordId: string; sourceKind: string };
+    version: {
+      id: string;
+      localVersion: number;
+      occurredAt?: string | null;
+      piiAttestation?: boolean | null;
+    };
+    fieldAnswers: Array<{
+      templateFieldId: string;
+      value: FormScalarAnswer | null;
+      missingReasonKey?: string | null;
+      customText?: string | null;
+    }>;
+    notes: Array<{ body: string }>;
+    correctionFieldIds: string[];
+  } | null;
   packageVersion: string;
 };
 type RecordResult = { record: { id: string } };
-type Answer = string | number | boolean | string[];
-type ControlKind =
-  | "text"
-  | "textarea"
-  | "number"
-  | "date"
-  | "single"
-  | "multi"
-  | "boolean";
-
-function hasValue(value: Answer | undefined) {
-  return Array.isArray(value)
-    ? value.length > 0
-    : value !== undefined && value !== "";
-}
-
-function configuredControl(metadata?: Record<string, unknown>): ControlKind {
-  const control = metadata?.control;
-  return [
-    "text",
-    "textarea",
-    "number",
-    "date",
-    "single",
-    "multi",
-    "boolean",
-  ].includes(String(control))
-    ? (control as ControlKind)
-    : "text";
-}
 
 export default function GuidedCollectionPage() {
   const { locale } = useI18n();
@@ -119,10 +86,11 @@ export default function GuidedCollectionPage() {
   const preview = searchParams.get("preview") === "1";
   const [taskPackage, setTaskPackage] = useState<TaskPackage | null>(null);
   const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const [sectionHistory, setSectionHistory] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<FormAnswers>({});
   const [sourceKind, setSourceKind] = useState("");
   const [clientRecordId, setClientRecordId] = useState(() => newId());
-  const [occurredAt] = useState(() => new Date().toISOString());
+  const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString());
   const [attested, setAttested] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [online, setOnline] = useState(true);
@@ -161,10 +129,50 @@ export default function GuidedCollectionPage() {
           versionRef.current = local.localVersion;
           const storedAnswers = local.payload.answers;
           if (storedAnswers && typeof storedAnswers === "object")
-            setAnswers(storedAnswers as Record<string, Answer>);
+            setAnswers(
+              normalizeLegacyFormAnswers(
+                storedAnswers as Record<
+                  string,
+                  FormAnswer | FormScalarAnswer
+                >,
+              ),
+            );
           if (typeof local.payload.sourceKind === "string")
             setSourceKind(local.payload.sourceKind);
           if (local.payload.attested === true) setAttested(true);
+        } else if (result.correction) {
+          setClientRecordId(result.correction.record.clientRecordId);
+          setSourceKind(result.correction.record.sourceKind);
+          setOccurredAt(
+            result.correction.version.occurredAt ?? new Date().toISOString(),
+          );
+          setAttested(Boolean(result.correction.version.piiAttestation));
+          versionRef.current = result.correction.version.localVersion;
+          setAnswers(
+            Object.fromEntries(
+              result.correction.fieldAnswers.map((answer) => [
+                answer.templateFieldId,
+                {
+                  ...(answer.value === null ? {} : { value: answer.value }),
+                  ...(answer.missingReasonKey
+                    ? { missingReasonKey: answer.missingReasonKey }
+                    : {}),
+                  ...(answer.customText
+                    ? { customText: answer.customText }
+                    : {}),
+                },
+              ]),
+            ),
+          );
+          const firstCorrectionField = result.form.fields.find((field) =>
+            result.correction?.correctionFieldIds.includes(field.id),
+          );
+          if (firstCorrectionField) {
+            const targetStep = result.form.sections.findIndex(
+              (section) => section.id === firstCorrectionField.templateSectionId,
+            );
+            if (targetStep >= 0) setStep(targetStep);
+          }
         }
       }
       hydratedRef.current = true;
@@ -234,19 +242,31 @@ export default function GuidedCollectionPage() {
     taskPackage,
   ]);
 
-  const sections = taskPackage?.form.sections ?? [];
+  const visibility = useMemo(
+    () =>
+      resolveRuntimeFormVisibility({
+        answers,
+        fields: taskPackage?.form.fields ?? [],
+        sections: taskPackage?.form.sections ?? [],
+      }),
+    [answers, taskPackage],
+  );
+  const sections = visibility.visibleSections;
   const reviewStep = sections.length;
   const totalSteps = Math.max(1, sections.length + 1);
   const currentSection = sections[step];
   const fields = useMemo(
     () =>
       currentSection
-        ? (taskPackage?.form.fields ?? [])
-            .filter((field) => field.templateSectionId === currentSection.id)
-            .sort((a, b) => a.sortOrder - b.sortOrder)
+        ? visibility.visibleFields.filter(
+            (field) => field.templateSectionId === currentSection.id,
+          )
         : [],
-    [currentSection, taskPackage],
+    [currentSection, visibility.visibleFields],
   );
+  useEffect(() => {
+    if (step > reviewStep) setStep(reviewStep);
+  }, [reviewStep, step]);
   const sourceKinds = (taskPackage?.configuration ?? []).filter(
     (item) => item.registryKey === "source_kind",
   );
@@ -255,8 +275,20 @@ export default function GuidedCollectionPage() {
       new Map(
         (taskPackage?.configuration ?? [])
           .filter((item) => item.registryKey === "collection_field_type")
-          .map((item) => [item.itemKey, configuredControl(item.metadata)]),
+          .map((item) => [item.itemKey, configuredFormControl(item.metadata)]),
       ),
+    [taskPackage],
+  );
+  const missingReasons = useMemo(
+    () =>
+      (taskPackage?.configuration ?? [])
+        .filter((item) => item.registryKey === "missing_reason")
+        .map((item) => ({
+          key: item.itemKey,
+          labelEn: item.labelEn,
+          labelZh: item.labelZh,
+          metadata: item.metadata,
+        })),
     [taskPackage],
   );
 
@@ -271,8 +303,8 @@ export default function GuidedCollectionPage() {
       )
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }
-  function update(fieldId: string, value: Answer) {
-    setAnswers((current) => ({ ...current, [fieldId]: value }));
+  function update(fieldId: string, answer: FormAnswer) {
+    setAnswers((current) => ({ ...current, [fieldId]: answer }));
   }
 
   function validateCurrentStep() {
@@ -284,7 +316,7 @@ export default function GuidedCollectionPage() {
       return false;
     }
     const missing = fields.find(
-      (field) => field.required && !hasValue(answers[field.id]),
+      (field) => field.required && !hasFormAnswerValue(answers[field.id]),
     );
     if (missing) {
       setError(
@@ -297,40 +329,14 @@ export default function GuidedCollectionPage() {
 
   function recordBody(submit: boolean, localVersion: number) {
     if (!taskPackage) throw new Error("Task package is unavailable");
-    const selections: Array<{
-      templateFieldId: string;
-      optionId: string;
-      value: Record<string, unknown>;
-    }> = [];
-    const quantitative: Record<
-      string,
-      { reason: string; value: number | null }
-    > = {};
-    const qualitativeLines: string[] = [];
-    for (const field of taskPackage.form.fields) {
-      const answer = answers[field.id];
-      if (!hasValue(answer)) continue;
-      const kind = fieldControlByKey.get(field.fieldTypeKey) ?? "text";
-      if (kind === "multi") {
-        for (const optionId of Array.isArray(answer) ? answer : [])
-          selections.push({ templateFieldId: field.id, optionId, value: {} });
-      } else if (kind === "single" && typeof answer === "string") {
-        selections.push({
-          templateFieldId: field.id,
-          optionId: answer,
-          value: {},
-        });
-      } else if (kind === "number") {
-        quantitative[field.key] = {
-          reason: "recorded",
-          value: typeof answer === "number" ? answer : Number(answer),
-        };
-      } else {
-        qualitativeLines.push(
-          `${label(field.labelEn, field.labelZh)}: ${String(answer)}`,
-        );
-      }
-    }
+    const serialized = serializeFormAnswers({
+      answers,
+      controls: fieldControlByKey,
+      fields: taskPackage.form.fields,
+      locale,
+      options: taskPackage.form.options,
+      sections: taskPackage.form.sections,
+    });
     return {
       clientRecordId,
       idempotencyKey: `${clientRecordId}-${submit ? "submit" : "draft"}-${localVersion}`,
@@ -341,10 +347,7 @@ export default function GuidedCollectionPage() {
       taskId: taskPackage.task.id,
       taskAssignmentId: taskPackage.assignment.id,
       templateVersionId: taskPackage.form.version.id,
-      structuredSelections: selections,
-      customEntries: [],
-      qualitative: qualitativeLines.join("\n"),
-      quantitative,
+      ...serialized,
       attribution: {},
       contentLanguage: locale,
       occurredAt,
@@ -371,11 +374,49 @@ export default function GuidedCollectionPage() {
     if (!validateCurrentStep()) return;
     try {
       await persistDraft();
-      setStep((current) => Math.min(reviewStep, current + 1));
+      if (!currentSection || !taskPackage) return;
+      const branch = resolveFormBranchAction({
+        answers,
+        fields: taskPackage.form.fields,
+        sectionId: currentSection.id,
+        visibleFieldIds: visibility.visibleFieldIds,
+      });
+      const targetStep =
+        branch?.action === "go_to_section"
+          ? sections.findIndex(
+              (section) => section.key === branch.targetSectionKey,
+            )
+          : -1;
+      setSectionHistory((current) => [...current, currentSection.key]);
+      setStep(
+        branch?.action === "end_form"
+          ? reviewStep
+          : targetStep >= 0
+            ? targetStep
+            : Math.min(reviewStep, step + 1),
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (caught) {
       setError(errorMessage(caught));
     }
+  }
+
+  function back() {
+    setError("");
+    const history = [...sectionHistory];
+    while (history.length) {
+      const previousKey = history.pop();
+      const previousStep = sections.findIndex(
+        (section) => section.key === previousKey,
+      );
+      if (previousStep >= 0) {
+        setSectionHistory(history);
+        setStep(previousStep);
+        return;
+      }
+    }
+    setSectionHistory([]);
+    setStep((current) => Math.max(0, current - 1));
   }
 
   async function submit() {
@@ -506,6 +547,28 @@ export default function GuidedCollectionPage() {
 
       <main className="stack">
         {error ? <ErrorState message={error} /> : null}
+        {!preview && taskPackage.correction ? (
+          <div className="feedback feedback-warning">
+            <div>
+              <strong>
+                {locale === "zh" ? "此提交需要补充" : "This submission needs an update"}
+              </strong>
+              {taskPackage.correction.notes.map((note, index) => (
+                <p key={`${note.body}-${index}`}>{note.body}</p>
+              ))}
+              {taskPackage.correction.correctionFieldIds.length ? (
+                <p className="caption">
+                  {locale === "zh" ? "需要修改" : "Update"}: {taskPackage.form.fields
+                    .filter((field) =>
+                      taskPackage.correction?.correctionFieldIds.includes(field.id),
+                    )
+                    .map((field) => label(field.labelEn, field.labelZh))
+                    .join("、")}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {!isReview ? (
           <>
             <div>
@@ -541,13 +604,14 @@ export default function GuidedCollectionPage() {
             ) : null}
             <div className="stack">
               {fields.map((field) => (
-                <FieldControl
-                  answers={answers}
+                <DynamicFieldControl
+                  answer={answers[field.id]}
                   control={fieldControlByKey.get(field.fieldTypeKey) ?? "text"}
                   disabled={preview}
                   field={field}
                   key={field.id}
                   locale={locale}
+                  missingReasons={missingReasons}
                   onChange={update}
                   options={optionsFor(field.id)}
                 />
@@ -574,49 +638,18 @@ export default function GuidedCollectionPage() {
                 <h2>
                   {locale === "zh" ? "附件（可选）" : "Attachments (optional)"}
                 </h2>
-                <div className="grid-2">
-                  <label className="card card-compact">
-                    {locale === "zh" ? "添加照片" : "Add photo"}
-                    <input
-                      accept="image/*"
-                      capture="environment"
-                      disabled={preview || !online}
-                      onChange={(event) =>
-                        setFiles((current) => [
-                          ...current,
-                          ...Array.from(event.target.files ?? []),
-                        ])
-                      }
-                      type="file"
-                    />
-                  </label>
-                  <label className="card card-compact">
-                    {locale === "zh" ? "添加语音笔记" : "Add voice note"}
-                    <input
-                      accept="audio/*"
-                      capture
-                      disabled={preview || !online}
-                      onChange={(event) =>
-                        setFiles((current) => [
-                          ...current,
-                          ...Array.from(event.target.files ?? []),
-                        ])
-                      }
-                      type="file"
-                    />
-                  </label>
-                </div>
+                <AttachmentPicker
+                  disabled={preview || !online}
+                  files={files}
+                  locale={locale}
+                  onChange={setFiles}
+                />
                 {!online ? (
                   <p className="caption">
                     {locale === "zh"
                       ? "文字可离线保存；附件需联网后选择并上传。"
                       : "Answers save offline; choose attachments when connected."}
                   </p>
-                ) : null}
-                {files.length ? (
-                  <div className="caption">
-                    {files.map((file) => file.name).join(" · ")}
-                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -638,7 +671,7 @@ export default function GuidedCollectionPage() {
               <p className="muted">{title}</p>
               <div className="row">
                 {taskPackage.form.fields
-                  .filter((field) => hasValue(answers[field.id]))
+                  .filter((field) => hasFormAnswerValue(answers[field.id]))
                   .map((field) => (
                     <StatusPill tone="blue" key={field.id}>
                       {label(field.labelEn, field.labelZh)}
@@ -692,10 +725,7 @@ export default function GuidedCollectionPage() {
           <button
             className="button button-secondary"
             disabled={saving || submitting}
-            onClick={() => {
-              setError("");
-              setStep((current) => current - 1);
-            }}
+            onClick={back}
             type="button"
           >
             {locale === "zh" ? "上一步" : "Back"}
@@ -740,154 +770,5 @@ export default function GuidedCollectionPage() {
         )}
       </footer>
     </div>
-  );
-}
-
-function FieldControl({
-  field,
-  control: kind,
-  options,
-  answers,
-  onChange,
-  locale,
-  disabled,
-}: {
-  field: TemplateField;
-  control: ControlKind;
-  options: TemplateOption[];
-  answers: Record<string, Answer>;
-  onChange: (fieldId: string, value: Answer) => void;
-  locale: "zh" | "en";
-  disabled: boolean;
-}) {
-  const answer = answers[field.id];
-  const label = locale === "zh" ? field.labelZh : field.labelEn;
-  const help = locale === "zh" ? field.helpTextZh : field.helpTextEn;
-  const placeholder =
-    locale === "zh" ? field.placeholderZh : field.placeholderEn;
-  const limits = field.validation ?? {};
-  const min = typeof limits.min === "number" ? limits.min : undefined;
-  const max = typeof limits.max === "number" ? limits.max : undefined;
-
-  if ((kind === "multi" || kind === "single") && options.length) {
-    const selected = Array.isArray(answer) ? answer : [];
-    return (
-      <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-        <legend style={{ marginBottom: 8, fontSize: 13, fontWeight: 700 }}>
-          {label}
-          {field.required ? " *" : ""}
-        </legend>
-        {help ? <p className="muted">{help}</p> : null}
-        <div className="choice-list">
-          {options.map((option) => {
-            const checked =
-              kind === "multi"
-                ? selected.includes(option.id)
-                : answer === option.id;
-            return (
-              <label className="choice" key={option.id}>
-                <input
-                  checked={checked}
-                  disabled={disabled}
-                  name={field.id}
-                  onChange={(event) => {
-                    if (kind === "single") onChange(field.id, option.id);
-                    else
-                      onChange(
-                        field.id,
-                        event.target.checked
-                          ? [...selected, option.id]
-                          : selected.filter((id) => id !== option.id),
-                      );
-                  }}
-                  type={kind === "single" ? "radio" : "checkbox"}
-                />
-                <span>{locale === "zh" ? option.labelZh : option.labelEn}</span>
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
-    );
-  }
-
-  if (kind === "boolean")
-    return (
-      <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-        <legend style={{ marginBottom: 8, fontSize: 13, fontWeight: 700 }}>
-          {label}
-          {field.required ? " *" : ""}
-        </legend>
-        {help ? <p className="muted">{help}</p> : null}
-        <div className="grid-2">
-          <label className="choice">
-            <input
-              checked={answer === true}
-              disabled={disabled}
-              name={field.id}
-              onChange={() => onChange(field.id, true)}
-              type="radio"
-            />
-            <span>{locale === "zh" ? "是" : "Yes"}</span>
-          </label>
-          <label className="choice">
-            <input
-              checked={answer === false}
-              disabled={disabled}
-              name={field.id}
-              onChange={() => onChange(field.id, false)}
-              type="radio"
-            />
-            <span>{locale === "zh" ? "否" : "No"}</span>
-          </label>
-        </div>
-      </fieldset>
-    );
-  if (kind === "textarea")
-    return (
-      <label>
-        {label}
-        {field.required ? " *" : ""}
-        {help ? <span className="caption">{help}</span> : null}
-        <textarea
-          disabled={disabled}
-          onChange={(event) => onChange(field.id, event.target.value)}
-          placeholder={placeholder ?? ""}
-          value={typeof answer === "string" ? answer : ""}
-        />
-      </label>
-    );
-  return (
-    <label>
-      {label}
-      {field.required ? " *" : ""}
-      {help ? <span className="caption">{help}</span> : null}
-      <input
-        disabled={disabled}
-        max={max}
-        min={min}
-        onChange={(event) =>
-          onChange(
-            field.id,
-            kind === "number"
-              ? event.target.value === ""
-                ? ""
-                : Number(event.target.value)
-              : event.target.value,
-          )
-        }
-        placeholder={placeholder ?? ""}
-        type={
-          kind === "number"
-            ? "number"
-            : kind === "date"
-              ? "datetime-local"
-              : "text"
-        }
-        value={
-          typeof answer === "string" || typeof answer === "number" ? answer : ""
-        }
-      />
-    </label>
   );
 }

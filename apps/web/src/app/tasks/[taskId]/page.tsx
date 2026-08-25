@@ -11,8 +11,14 @@ import {
   PageHeader,
   StatusPill,
 } from "@/components/ui";
+import { TaskManagementPanel } from "@/features/tasks/components/TaskManagementPanel";
 import { apiFetch, errorMessage } from "@/lib/api-client";
-import { taskDate, taskTone, type TaskDetailResponse } from "@/lib/task-ui";
+import {
+  taskDate,
+  taskStatusLabel,
+  taskTone,
+  type TaskDetailResponse,
+} from "@/lib/task-ui";
 
 export default function TaskDetailPage() {
   const { locale } = useI18n();
@@ -98,8 +104,10 @@ export default function TaskDetailPage() {
     .join(" · ");
   const canWork =
     myAssignment &&
-    ["assigned", "in_progress"].includes(myAssignment.status) &&
-    task.status === "open";
+    ((["assigned", "in_progress"].includes(myAssignment.status) &&
+      task.status === "open") ||
+      (myAssignment.status === "completed" &&
+        myAssignment.recordReviewStatus === "needs_completion"));
 
   return (
     <div className="stack">
@@ -112,7 +120,7 @@ export default function TaskDetailPage() {
         description={task.title}
         actions={
           <StatusPill tone={taskTone(myAssignment?.status ?? task.status)}>
-            {(myAssignment?.status ?? task.status).replaceAll("_", " ")}
+            {taskStatusLabel(myAssignment?.status ?? task.status, locale)}
           </StatusPill>
         }
       />
@@ -174,6 +182,12 @@ export default function TaskDetailPage() {
               </div>
             </div>
           ) : null}
+          <TaskManagementPanel
+            assignments={assignments}
+            locale={locale}
+            onChanged={load}
+            task={task}
+          />
         </div>
         <aside className="card stack-sm">
           {canWork ? (
@@ -187,6 +201,11 @@ export default function TaskDetailPage() {
                 ? locale === "zh"
                   ? "继续任务"
                   : "Continue task"
+                : myAssignment.status === "completed" &&
+                    myAssignment.recordReviewStatus === "needs_completion"
+                  ? locale === "zh"
+                    ? "补充并重新提交"
+                    : "Update and resubmit"
                 : locale === "zh"
                   ? "开始任务"
                   : "Start task"}

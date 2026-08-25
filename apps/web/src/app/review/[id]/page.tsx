@@ -11,6 +11,8 @@ import {
   PageHeader,
   StatusPill,
 } from "@/components/ui";
+import { FieldAnswersPanel } from "@/features/records/FieldAnswersPanel";
+import type { RecordFieldAnswer } from "@/features/records/types";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
 type ReviewItem = {
@@ -21,7 +23,13 @@ type ReviewItem = {
   priority: number;
   summary: string;
   createdAt: string;
-  detail: Record<string, Record<string, unknown>>;
+  detail: {
+    [key: string]: unknown;
+    record?: Record<string, unknown>;
+    recordVersion?: Record<string, unknown>;
+    finding?: Record<string, unknown>;
+    fieldAnswers?: RecordFieldAnswer[];
+  };
 };
 
 export default function ReviewDetailPage() {
@@ -31,6 +39,7 @@ export default function ReviewDetailPage() {
   const [item, setItem] = useState<ReviewItem | null>(null);
   const [notes, setNotes] = useState("");
   const [editedText, setEditedText] = useState("");
+  const [correctionFieldIds, setCorrectionFieldIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
@@ -76,7 +85,13 @@ export default function ReviewDetailPage() {
     if (item.itemType === "record")
       payload = {
         itemType: "record",
-        decision: { action, annotation: notes || undefined, findings: [] },
+        decision: {
+          action,
+          annotation: notes || undefined,
+          correctionFieldIds:
+            action === "needs_completion" ? correctionFieldIds : [],
+          findings: [],
+        },
       };
     else if (item.itemType === "privacy_flag")
       payload = {
@@ -182,6 +197,22 @@ export default function ReviewDetailPage() {
                   : "No text content is available.")}
             </p>
           </div>
+          <FieldAnswersPanel
+            answers={item.detail.fieldAnswers ?? []}
+            locale={locale}
+            onFieldSelectionChange={
+              item.itemType === "record"
+                ? (fieldId, selected) =>
+                    setCorrectionFieldIds((current) =>
+                      selected
+                        ? [...new Set([...current, fieldId])]
+                        : current.filter((id) => id !== fieldId),
+                    )
+                : undefined
+            }
+            selectedFieldIds={correctionFieldIds}
+            title={locale === "zh" ? "提交的表单回答" : "Submitted form answers"}
+          />
           {[version.quantitative, finding.evidence].some(Boolean) ? (
             <div className="card">
               <h2>{locale === "zh" ? "结构化证据" : "Structured evidence"}</h2>
@@ -239,6 +270,10 @@ export default function ReviewDetailPage() {
                 busy ||
                 ((action === "redacted" || action === "edit") &&
                   !editedText.trim()) ||
+                (action === "needs_completion" && !notes.trim()) ||
+                (action === "needs_completion" &&
+                  Boolean(item.detail.fieldAnswers?.length) &&
+                  !correctionFieldIds.length) ||
                 (action === "re_run_requested" && !notes.trim())
               }
               key={action}

@@ -36,6 +36,10 @@ type Bundle = {
   versions: Version[];
   headVersion: Version | null;
   sections: Section[];
+  sourceDataset: {
+    dataset: { id: string; name: string };
+    version: { id: string; versionNumber: number; recordCount: number; contentHash: string };
+  } | null;
 };
 
 export default function ReportEditorPage() {
@@ -197,6 +201,45 @@ export default function ReportEditorPage() {
       setBusy(false);
     }
   }
+  async function generateAiDraft() {
+    if (!selected || !editable) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/report-sections/${selected.id}/ai-draft`, {
+        method: "POST",
+        body: JSON.stringify({
+          instruction:
+            locale === "zh"
+              ? `使用已绑定的 Dataset 证据为“${selected.title}”章节起草一份谨慎、可追溯的初稿。`
+              : `Draft a cautious, traceable ${selected.title} section using the bound Dataset evidence.`,
+          workflowVersionId: null,
+          idempotencyKey: `report-editor-${selected.id}-${crypto.randomUUID()}`,
+        }),
+      });
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function resolveAiSuggestion(action: "accept" | "dismiss") {
+    if (!selected || !editable) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/report-sections/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ aiSuggestionAction: action }),
+      });
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
   if (!data && !error)
     return (
       <>
@@ -235,6 +278,17 @@ export default function ReportEditorPage() {
         }
       />
       {error ? <ErrorState message={error} retry={load} /> : null}
+      {data?.sourceDataset ? (
+        <div className="feedback feedback-info">
+          <span>
+            {locale === "zh" ? "来源 Dataset" : "Source Dataset"}: {" "}
+            <Link href={`/data/${data.sourceDataset.dataset.id}?versionId=${data.sourceDataset.version.id}`}>
+              <strong>{data.sourceDataset.dataset.name} · v{data.sourceDataset.version.versionNumber}</strong>
+            </Link>
+            {` · ${data.sourceDataset.version.recordCount} ${locale === "zh" ? "条冻结记录" : "frozen records"}`}
+          </span>
+        </div>
+      ) : null}
       {!editable && data ? (
         <div className="feedback feedback-info">
           <span>
@@ -380,7 +434,7 @@ export default function ReportEditorPage() {
                   ) : null}
                 </div>
                 {selected.aiSuggestion ? (
-                  <div className="feedback feedback-info">
+                  <div className="feedback feedback-info report-ai-suggestion">
                     <div>
                       <strong>
                         {locale === "zh"
@@ -388,8 +442,39 @@ export default function ReportEditorPage() {
                           : "AI draft suggestion"}
                       </strong>
                       <p className="pre-wrap">{selected.aiSuggestion}</p>
+                      {editable ? (
+                        <div className="row">
+                          <button
+                            className="button button-small"
+                            disabled={busy}
+                            onClick={() => resolveAiSuggestion("accept")}
+                            type="button"
+                          >
+                            <AppIcon name="check" />
+                            {locale === "zh" ? "采纳为章节内容" : "Accept into section"}
+                          </button>
+                          <button
+                            className="button button-ghost button-small"
+                            disabled={busy}
+                            onClick={() => resolveAiSuggestion("dismiss")}
+                            type="button"
+                          >
+                            {locale === "zh" ? "放弃建议" : "Dismiss"}
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
+                ) : editable && data.sourceDataset ? (
+                  <button
+                    className="button button-secondary button-wide"
+                    disabled={busy}
+                    onClick={generateAiDraft}
+                    type="button"
+                  >
+                    <AppIcon name="sparkles" />
+                    {locale === "zh" ? "用 Dataset 证据生成本章初稿" : "Draft this section from Dataset evidence"}
+                  </button>
                 ) : null}
               </section>
             ) : (

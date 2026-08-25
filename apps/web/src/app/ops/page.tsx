@@ -3,23 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/LocaleProvider";
-
-type Rec = {
-  id: string;
-  sourceKind: string;
-  privacyStatus: string;
-  aiStatus: string;
-  reviewStatus: string;
-  updatedAt: string;
-};
+import { listPendingReviewRecords } from "@/features/operations/api";
+import type { OpsQueueRecord } from "@/features/operations/types";
 
 export default function OpsQueue() {
   const { t } = useI18n();
-  const [rows, setRows] = useState<Rec[]>([]);
+  const [rows, setRows] = useState<OpsQueueRecord[]>([]);
   useEffect(() => {
-    fetch("/api/v1/records")
-      .then((r) => r.json())
-      .then((d) => setRows((d.records ?? []).filter((r: Rec) => r.reviewStatus === "pending")));
+    void listPendingReviewRecords().then(setRows);
   }, []);
 
   const flagged = rows.filter((r) => r.privacyStatus === "flagged");
@@ -57,7 +48,7 @@ export default function OpsQueue() {
   );
 }
 
-function QueueCard({ r }: { r: Rec }) {
+function QueueCard({ r }: { r: OpsQueueRecord }) {
   return (
     <Link href={`/ops/review/${r.id}`} className="card">
       <div className="row">

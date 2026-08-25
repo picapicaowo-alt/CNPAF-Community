@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -14,6 +15,7 @@ type MeResponse = {
     name: string;
     email: string;
     mustChangePassword: boolean;
+    avatarUrl: string | null;
   };
   roles: Role[];
   permissions: string[];
@@ -224,7 +226,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const publicPage =
     pathname === "/login" ||
     pathname.startsWith("/invite") ||
-    pathname === "/privacy";
+    pathname === "/privacy" ||
+    pathname === "/offline";
 
   useEffect(() => {
     if (publicPage) {
@@ -248,6 +251,18 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, [pathname, publicPage]);
+
+  useEffect(() => {
+    if (publicPage) return;
+    const refreshProfile = () => {
+      void apiFetch<MeResponse>("/api/v1/auth/me")
+        .then(setMe)
+        .catch(() => undefined);
+    };
+    window.addEventListener("cnpaf-profile-updated", refreshProfile);
+    return () =>
+      window.removeEventListener("cnpaf-profile-updated", refreshProfile);
+  }, [publicPage]);
 
   const permissions = useMemo(
     () => new Set(me?.permissions ?? me?.capabilities ?? []),
@@ -326,9 +341,26 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="sidebar-spacer" />
         <div className="sidebar-user">
-          <div className="sidebar-user-row">
+          <Link
+            aria-current={pathname === "/account" ? "page" : undefined}
+            className={`sidebar-user-row${pathname === "/account" ? " active" : ""}`}
+            href="/account"
+          >
             <span className="user-avatar">
-              {me ? initials(me.user.name) : "…"}
+              {me?.user.avatarUrl ? (
+                <Image
+                  alt=""
+                  className="user-avatar-image"
+                  height={34}
+                  src={me.user.avatarUrl}
+                  unoptimized
+                  width={34}
+                />
+              ) : me ? (
+                initials(me.user.name)
+              ) : (
+                "…"
+              )}
             </span>
             <span className="sidebar-user-copy">
               <span className="sidebar-user-name">
@@ -336,7 +368,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
               </span>
               <span className="sidebar-user-email">{me?.user.email ?? ""}</span>
             </span>
-          </div>
+            <AppIcon className="sidebar-account-arrow" name="arrow" />
+          </Link>
           <div className="sidebar-utilities">
             <button
               className="sidebar-utility"

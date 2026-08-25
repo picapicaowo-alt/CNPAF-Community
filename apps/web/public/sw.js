@@ -1,7 +1,8 @@
-const CACHE = "cnpaf-shell-v2";
+const CACHE = "cnpaf-shell-v3";
 const SHELL = [
   "/login",
   "/dashboard",
+  "/offline",
   "/capture",
   "/manifest.webmanifest",
   "/icon.svg",
@@ -64,13 +65,14 @@ self.addEventListener("fetch", (event) => {
         }
         return res;
       })
-      .catch(() =>
-        caches
-          .match(req)
-          .then(
-            (cached) =>
-              cached || caches.match("/dashboard") || caches.match("/login"),
-          ),
-      ),
+      .catch(async () => {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        if (req.mode === "navigate") return caches.match("/offline");
+        return new Response("Offline", {
+          status: 503,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }),
   );
 });

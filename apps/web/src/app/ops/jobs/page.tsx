@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/LocaleProvider";
-
-type Job = { id: string; kind: string; status: string; lastError: string | null; attempts: number };
+import { listJobs, processJobs, retryJob } from "@/features/operations/api";
+import type { JobSummary } from "@/features/operations/types";
 
 export default function JobsPage() {
   const { t } = useI18n();
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
   async function load() {
-    const d = await fetch("/api/v1/jobs").then((r) => r.json());
-    setJobs(d.jobs ?? []);
+    setJobs(await listJobs());
   }
   useEffect(() => {
     load();
@@ -19,7 +18,7 @@ export default function JobsPage() {
     <div className="stack">
       <h1>{t.jobs}</h1>
       <div className="row">
-        <button className="btn secondary" type="button" onClick={() => fetch("/api/v1/jobs", { method: "POST" }).then(load)}>
+        <button className="btn secondary" type="button" onClick={() => void processJobs().then(load)}>
           Process queue
         </button>
       </div>
@@ -35,13 +34,7 @@ export default function JobsPage() {
             <button
               className="btn secondary"
               type="button"
-              onClick={() =>
-                fetch("/api/v1/jobs", {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: j.id }),
-                }).then(load)
-              }
+              onClick={() => void retryJob(j.id).then(load)}
             >
               Retry
             </button>

@@ -11,9 +11,18 @@ import {
   PageHeader,
   StatusPill,
 } from "@/components/ui";
+import {
+  NotificationPanel,
+  type InAppNotification,
+} from "@/features/notifications/NotificationPanel";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { listLocalDrafts, type LocalDraft } from "@/lib/offline";
-import { taskDate, taskTone, type TaskSummary } from "@/lib/task-ui";
+import {
+  taskDate,
+  taskStatusLabel,
+  taskTone,
+  type TaskSummary,
+} from "@/lib/task-ui";
 
 type Me = { user: { name: string }; permissions: string[] };
 type ReviewItem = {
@@ -32,6 +41,7 @@ export default function DashboardPage() {
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [drafts, setDrafts] = useState<LocalDraft[]>([]);
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -47,7 +57,13 @@ export default function DashboardPage() {
           key,
         ),
       );
-      const [taskResult, reviewResult, recordResult, localDrafts] =
+      const [
+        taskResult,
+        reviewResult,
+        recordResult,
+        notificationResult,
+        localDrafts,
+      ] =
         await Promise.all([
           apiFetch<{ tasks: TaskSummary[] }>("/api/v1/tasks/today"),
           canReview
@@ -56,11 +72,17 @@ export default function DashboardPage() {
           canReadRecords
             ? apiFetch<{ records: RecordRow[] }>("/api/v1/records")
             : Promise.resolve({ records: [] }),
+          identity.permissions.includes("notifications.view")
+            ? apiFetch<{ notifications: InAppNotification[] }>(
+                "/api/v1/notifications?status=unread",
+              )
+            : Promise.resolve({ notifications: [] }),
           listLocalDrafts().catch(() => []),
         ]);
       setTasks(taskResult.tasks ?? []);
       setReviewItems(reviewResult.items ?? []);
       setRecords(recordResult.records ?? []);
+      setNotifications(notificationResult.notifications ?? []);
       setDrafts(localDrafts ?? []);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -112,6 +134,18 @@ export default function DashboardPage() {
         <PageHeader
           title={locale === "zh" ? "今天" : "Today"}
           description={greeting}
+        />
+        <NotificationPanel
+          locale={locale}
+          notifications={notifications}
+          onOpen={(notificationId) => {
+            setNotifications((current) =>
+              current.filter((notification) => notification.id !== notificationId),
+            );
+            void apiFetch(`/api/v1/notifications/${notificationId}/read`, {
+              method: "POST",
+            });
+          }}
         />
         {currentTask ? (
           <Link
@@ -233,6 +267,18 @@ export default function DashboardPage() {
             : "Everything that needs your attention, in one place."
         }
       />
+      <NotificationPanel
+        locale={locale}
+        notifications={notifications}
+        onOpen={(notificationId) => {
+          setNotifications((current) =>
+            current.filter((notification) => notification.id !== notificationId),
+          );
+          void apiFetch(`/api/v1/notifications/${notificationId}/read`, {
+            method: "POST",
+          });
+        }}
+      />
       <section>
         <div className="section-title">
           <h2>{locale === "zh" ? "需要关注" : "Needs your attention"}</h2>
@@ -293,7 +339,10 @@ export default function DashboardPage() {
                   <StatusPill
                     tone={taskTone(task.myAssignment?.status ?? task.status)}
                   >
-                    {task.myAssignment?.status ?? task.status}
+                    {taskStatusLabel(
+                      task.myAssignment?.status ?? task.status,
+                      locale,
+                    )}
                   </StatusPill>
                   <span className="list-row-arrow">
                     <AppIcon name="arrow" />
