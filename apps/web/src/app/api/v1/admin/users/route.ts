@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { permissionScopeAssignments, programMemberships, programs, roles, userAffiliations, userRoleAssignments, users } from "@cnpaf/db/schema";
+import { and, eq } from "drizzle-orm";
+import { permissionScopeAssignments, personGroupMemberships, personGroups, programMemberships, programs, roles, userAffiliations, userRoleAssignments, users } from "@cnpaf/db/schema";
 import { db } from "@/lib/db";
 import { requireAnyPermission, requirePermission } from "@/lib/http";
 import { evaluateAuthorization, getAccessContext } from "@/lib/authorization";
@@ -11,7 +11,7 @@ import { createAccount } from "@/lib/modules/accounts";
 export async function GET(req: Request) {
   const { user: actor, error } = await requireAnyPermission(["people.view", "users.view"]);
   if (error) return error;
-  const [userRows, assignmentRows, affiliationRows, membershipRows, scopeRows] = await Promise.all([
+  const [userRows, assignmentRows, affiliationRows, membershipRows, scopeRows, groupRows] = await Promise.all([
     db.select({
       id: users.id,
       email: users.email,
@@ -46,6 +46,20 @@ export async function GET(req: Request) {
       status: programMemberships.status,
     }).from(programMemberships).innerJoin(programs, eq(programMemberships.programId, programs.id)),
     db.select().from(permissionScopeAssignments),
+    db.select({
+      userId: personGroupMemberships.userId,
+      id: personGroups.id,
+      key: personGroups.key,
+      nameEn: personGroups.nameEn,
+      nameZh: personGroups.nameZh,
+      status: personGroups.status,
+    })
+      .from(personGroupMemberships)
+      .innerJoin(personGroups, eq(personGroupMemberships.groupId, personGroups.id))
+      .where(and(
+        eq(personGroupMemberships.status, "active"),
+        eq(personGroups.status, "active"),
+      )),
   ]);
   const byUser = new Map<string, typeof assignmentRows>();
   for (const assignment of assignmentRows) {
@@ -59,6 +73,8 @@ export async function GET(req: Request) {
   for (const membership of membershipRows) membershipsByUser.set(membership.userId, [...(membershipsByUser.get(membership.userId) ?? []), membership]);
   const scopesByUser = new Map<string, typeof scopeRows>();
   for (const scope of scopeRows) scopesByUser.set(scope.userId, [...(scopesByUser.get(scope.userId) ?? []), scope]);
+  const groupsByUser = new Map<string, typeof groupRows>();
+  for (const group of groupRows) groupsByUser.set(group.userId, [...(groupsByUser.get(group.userId) ?? []), group]);
   const access = await getAccessContext(actor.id);
   const url = new URL(req.url);
   const query = (url.searchParams.get("q") ?? "").trim().toLocaleLowerCase();
@@ -74,6 +90,7 @@ export async function GET(req: Request) {
     affiliations: affiliationsByUser.get(user.id) ?? [],
     programMemberships: membershipsByUser.get(user.id) ?? [],
     accessScopes: scopesByUser.get(user.id) ?? [],
+    groups: groupsByUser.get(user.id) ?? [],
   }));
   const searched = query ? enriched.filter((user) => [
     user.name,
@@ -81,6 +98,7 @@ export async function GET(req: Request) {
     ...user.affiliations.flatMap((affiliation) => [affiliation.institutionName, affiliation.departmentName, affiliation.title]),
     ...user.programMemberships.flatMap((membership) => [membership.programNameEn, membership.programNameZh]),
     ...user.roleAssignments.flatMap((role) => [role.roleNameEn, role.roleNameZh]),
+    ...user.groups.flatMap((group) => [group.nameEn, group.nameZh]),
   ].some((value) => value?.toLocaleLowerCase().includes(query))) : enriched;
   return NextResponse.json({ users: searched.slice(0, limit), total: searched.length, limit });
 }

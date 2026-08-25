@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   approvedFindings,
+  attachments,
   auditEvents,
   programs,
   records,
@@ -13,6 +14,8 @@ import {
   reports,
   reportVersionEvidenceLinks,
   reportVersions,
+  datasetVersions,
+  datasets,
   users,
 } from "@cnpaf/db/schema";
 import type { z } from "zod";
@@ -30,6 +33,12 @@ import { audit } from "../audit";
 import { ApiError } from "../api-error";
 import { authorize, evaluateAuthorization, getAccessContext } from "../authorization";
 import { executeConfiguredWorkflow } from "../ai";
+import { getDatasetVersionForReport } from "./datasets";
+import { toAttachmentSummary, toFrozenAttachmentManifest } from "../attachments";
+import {
+  markDatasetImagesSentToAi,
+  prepareDatasetAiMedia,
+} from "../dataset-ai-media";
 
 type ReportCreate = z.infer<typeof editableReportCreateBodySchema>;
 type ReportUpdate = z.infer<typeof editableReportUpdateBodySchema>;
@@ -82,10 +91,18 @@ export async function getEditableReport(actorId: string, reportId: string) {
   const editorIds = [...new Set(sections.map((section) => section.lastEditedById).filter(Boolean))] as string[];
   const editors = editorIds.length ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, editorIds)) : [];
   const editorById = new Map(editors.map((editor) => [editor.id, editor]));
+  const sourceDataset = head?.sourceDatasetVersionId
+    ? (await db.select({ dataset: datasets, version: datasetVersions })
+        .from(datasetVersions)
+        .innerJoin(datasets, eq(datasetVersions.datasetId, datasets.id))
+        .where(eq(datasetVersions.id, head.sourceDatasetVersionId))
+        .limit(1))[0] ?? null
+    : null;
   return {
     report,
     versions,
     headVersion: head,
+    sourceDataset,
     sections: sections.map((section) => ({
       ...section,
       lastEditedBy: section.lastEditedById ? editorById.get(section.lastEditedById) ?? null : null,
@@ -108,7 +125,18 @@ export async function createEditableReport(actorId: string, input: ReportCreate,
         .innerJoin(reportRuns, eq(reportArtifacts.reportRunId, reportRuns.id))
         .where(eq(reportArtifacts.id, input.sourceReportArtifactId)).limit(1))[0]
     : null;
+  const datasetSource = input.sourceDatasetVersionId
+    ? await getDatasetVersionForReport(actorId, input.sourceDatasetVersionId)
+    : null;
   if (input.sourceReportArtifactId && !source) throw new ApiError("NOT_FOUND", "Source report artifact not found", 404);
+  if (datasetSource) {
+    if (datasetSource.dataset.organizationId !== input.organizationId || datasetSource.dataset.programId !== (input.programId ?? null)) {
+      throw new ApiError("BAD_REQUEST", "Report scope must exactly match the source Dataset", 400);
+    }
+    if (datasetSource.dataset.dataClassification !== "approved_evidence") {
+      throw new ApiError("FORBIDDEN", "Initial reports can only use approved-evidence Datasets", 403);
+    }
+  }
   if (source) {
     const sourceRows = await db.select({ approved: approvedFindings, record: records })
       .from(reportEvidenceLinks)
@@ -127,7 +155,44 @@ export async function createEditableReport(actorId: string, input: ReportCreate,
     }).allowed)) throw new ApiError("FORBIDDEN", "Source report includes evidence outside the current access scope", 403);
   }
   const sourceLinks = source ? await db.select().from(reportEvidenceLinks).where(eq(reportEvidenceLinks.reportArtifactId, source.artifact.id)) : [];
-  const filters = Object.keys(input.filters).length ? input.filters : (source?.run.filters ?? {});
+  const datasetFindingLinks = datasetSource ? datasetSource.findings.map(({ finding, frozen }) => ({
+    evidenceType: "approved_finding",
+    evidenceId: finding.id,
+    citationLabel: `Dataset v${datasetSource.version.versionNumber} / Record ${frozen.recordId.slice(0, 8)}`,
+    metadata: {
+      datasetId: datasetSource.dataset.id,
+      datasetVersionId: datasetSource.version.id,
+      datasetContentHash: datasetSource.version.contentHash,
+      recordId: frozen.recordId,
+      recordVersionId: frozen.recordVersionId,
+      ordinal: frozen.ordinal,
+    },
+  })) : [];
+  const frozenByVersionId = new Map(datasetSource?.frozenRows.map((row) => [row.recordVersionId, row]) ?? []);
+  const datasetMediaLinks = datasetSource ? datasetSource.mediaAttachments.flatMap((attachment) => {
+    const frozen = frozenByVersionId.get(attachment.recordVersionId);
+    if (!frozen) return [];
+    const summary = toFrozenAttachmentManifest(attachment);
+    return [{
+      evidenceType: "attachment",
+      evidenceId: attachment.id,
+      citationLabel: `Dataset v${datasetSource.version.versionNumber} / ${summary.kind} ${summary.originalName}`,
+      metadata: {
+        datasetId: datasetSource.dataset.id,
+        datasetVersionId: datasetSource.version.id,
+        datasetContentHash: datasetSource.version.contentHash,
+        recordId: frozen.recordId,
+        recordVersionId: frozen.recordVersionId,
+        attachment: summary,
+        ordinal: frozen.ordinal,
+      },
+    }];
+  }) : [];
+  const datasetLinks = [...datasetFindingLinks, ...datasetMediaLinks];
+  const datasetSelection = datasetSource?.version.selectionQuery as { filters?: ReportCreate["filters"] } | null;
+  const filters = datasetSource
+    ? datasetSelection?.filters ?? {}
+    : Object.keys(input.filters).length ? input.filters : (source?.run.filters ?? {});
   const evidencePolicy = Object.keys(input.evidencePolicy).length ? input.evidencePolicy : (source?.run.evidencePolicy ?? {});
   return db.transaction(async (tx) => {
     const [report] = await tx.insert(reports).values({
@@ -144,6 +209,7 @@ export async function createEditableReport(actorId: string, input: ReportCreate,
       filters,
       evidencePolicy,
       sourceReportArtifactId: input.sourceReportArtifactId,
+      sourceDatasetVersionId: input.sourceDatasetVersionId,
       createdById: actorId,
     }).returning();
     const sections = await tx.insert(reportSections).values(input.sections.map((section) => ({
@@ -158,6 +224,11 @@ export async function createEditableReport(actorId: string, input: ReportCreate,
       evidenceId: link.evidenceId,
       citationLabel: link.citationLabel,
       metadata: link.metadata,
+    })));
+    if (datasetLinks.length) await tx.insert(reportVersionEvidenceLinks).values(datasetLinks.map((link) => ({
+      reportVersionId: version.id,
+      reportSectionId: null,
+      ...link,
     })));
     await tx.update(reports).set({ headVersionId: version.id, updatedAt: new Date() }).where(eq(reports.id, report.id));
     await audit({ actorId, action: "report.created", entityType: "report", entityId: report.id, afterState: { report, version, sections }, metadata: { requestId } }, (values) => tx.insert(auditEvents).values(values));
@@ -196,6 +267,7 @@ export async function createReportVersion(actorId: string, reportId: string, inp
       changeSummary: input.changeSummary,
       filters: input.filters ?? latest?.filters ?? {},
       evidencePolicy: input.evidencePolicy ?? latest?.evidencePolicy ?? {},
+      sourceDatasetVersionId: latest?.sourceDatasetVersionId,
       createdById: actorId,
     }).returning();
     const sections = await tx.insert(reportSections).values(input.sections.map((section) => ({ ...section, reportVersionId: version.id, lastEditedById: actorId }))).returning();
@@ -322,6 +394,9 @@ export async function draftReportSectionWithAi(actorId: string, sectionId: strin
   const { report, version, section } = await requireSection(actorId, sectionId, "reports.edit");
   if (version.status !== "draft") throw new ApiError("CONFLICT", "Published report sections are immutable", 409);
   const sources = await getReportSectionSources(actorId, sectionId);
+  const media = input.includeMedia && version.sourceDatasetVersionId
+    ? await prepareDatasetAiMedia(actorId, version.sourceDatasetVersionId)
+    : null;
   const generation = await executeConfiguredWorkflow({
     workflowKey: "report_section_draft",
     workflowVersionId: input.workflowVersionId,
@@ -334,11 +409,27 @@ export async function draftReportSectionWithAi(actorId: string, sectionId: strin
       instruction: input.instruction,
       currentHumanText: section.content,
       approvedSources: sources,
+      mediaContext: {
+        requested: input.includeMedia,
+        includedByDatasetPolicy: media?.mediaIncluded ?? false,
+        imageSourceIds: media?.mediaSources.map((source) => source.id) ?? [],
+        nonImageAttachmentCount: (media?.totalAttachmentCount ?? 0) - (media?.mediaSources.length ?? 0),
+      },
     },
     localOutput: { suggestion: section.content || input.instruction },
+    imageInputs: media?.imageInputs,
   });
   const suggestion = (generation.output as { suggestion?: unknown } | null)?.suggestion;
   if (typeof suggestion !== "string" || !suggestion.trim()) throw new ApiError("CONFLICT", "AI workflow did not return a section suggestion", 409);
+  if (generation.run.provider === "openai" && media?.selectedImages.length && version.sourceDatasetVersionId) {
+    await markDatasetImagesSentToAi({
+      actorId,
+      aiRunId: generation.run.id,
+      attachmentIds: media.selectedImages.map((attachment) => attachment.id),
+      datasetVersionId: version.sourceDatasetVersionId,
+      context: { reportId: report.id, reportSectionId: section.id },
+    });
+  }
   return db.transaction(async (tx) => {
     const [after] = await tx.update(reportSections).set({
       aiSuggestion: suggestion,
@@ -357,11 +448,17 @@ export async function getReportSectionSources(actorId: string, sectionId: string
   const links = await db.select().from(reportVersionEvidenceLinks).where(eq(reportVersionEvidenceLinks.reportVersionId, version.id));
   const applicable = links.filter((link) => !link.reportSectionId || link.reportSectionId === sectionId);
   const findingIds = applicable.filter((link) => link.evidenceType === "approved_finding").map((link) => link.evidenceId);
+  const attachmentIds = applicable.filter((link) => link.evidenceType === "attachment").map((link) => link.evidenceId);
   const rows = findingIds.length ? await db.select({ approved: approvedFindings, record: records })
     .from(approvedFindings)
     .innerJoin(recordVersions, eq(approvedFindings.recordVersionId, recordVersions.id))
     .innerJoin(records, eq(recordVersions.recordId, records.id))
     .where(inArray(approvedFindings.id, findingIds)) : [];
+  const mediaRows = attachmentIds.length ? await db.select({ attachment: attachments, record: records })
+    .from(attachments)
+    .innerJoin(recordVersions, eq(attachments.recordVersionId, recordVersions.id))
+    .innerJoin(records, eq(recordVersions.recordId, records.id))
+    .where(inArray(attachments.id, attachmentIds)) : [];
   const access = await getAccessContext(actorId);
   const byId = new Map(rows.filter(({ approved, record }) => approved.status === "approved" && ["clear", "redacted"].includes(record.privacyStatus) && record.researchUseStatus !== "restricted" && evaluateAuthorization(access, "records.view_approved", {
     organizationId: record.organizationId,
@@ -371,8 +468,32 @@ export async function getReportSectionSources(actorId: string, sectionId: string
     researchUse: record.researchUseStatus,
     dataClassification: "approved_evidence",
   }).allowed).map((row) => [row.approved.id, row]));
-  return applicable.flatMap((link) => {
+  const mediaById = new Map(mediaRows.filter(({ record }) => ["clear", "redacted"].includes(record.privacyStatus) && record.researchUseStatus !== "restricted" && evaluateAuthorization(access, "records.view_approved", {
+    organizationId: record.organizationId,
+    programId: record.programId,
+    siteId: record.siteId,
+    serviceKey: record.sourceKind,
+    researchUse: record.researchUseStatus,
+    dataClassification: "approved_evidence",
+  }).allowed).map((row) => [row.attachment.id, row]));
+  const visibleSources: Array<{
+    id: string;
+    evidenceType: string;
+    evidenceId: string;
+    citationLabel: string | null;
+    metadata: unknown;
+    finding: unknown | null;
+    attachment: ReturnType<typeof toAttachmentSummary> | null;
+    record: { id: string; programId: string | null; locationId: string | null; sourceKind: string };
+  }> = [];
+  for (const link of applicable) {
     const row = byId.get(link.evidenceId);
-    return row ? [{ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: link.metadata, finding: row.approved.approvedValue, record: { id: row.record.id, programId: row.record.programId, locationId: row.record.siteId, sourceKind: row.record.sourceKind } }] : [];
-  });
+    if (row) {
+      visibleSources.push({ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: link.metadata, finding: row.approved.approvedValue, attachment: null, record: { id: row.record.id, programId: row.record.programId, locationId: row.record.siteId, sourceKind: row.record.sourceKind } });
+      continue;
+    }
+    const media = mediaById.get(link.evidenceId);
+    if (media) visibleSources.push({ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: link.metadata, finding: null, attachment: toAttachmentSummary(media.attachment), record: { id: media.record.id, programId: media.record.programId, locationId: media.record.siteId, sourceKind: media.record.sourceKind } });
+  }
+  return visibleSources;
 }

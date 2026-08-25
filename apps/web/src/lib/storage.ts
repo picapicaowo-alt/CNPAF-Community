@@ -1,17 +1,22 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import {
+  getStorageRuntimeConfig,
+  type StorageBackend,
+} from "@/config/server";
 
-export type StorageBackend = "local" | "s3";
+export type { StorageBackend } from "@/config/server";
 
 let s3Client: S3Client | null = null;
 
 export function storageBackend(): StorageBackend {
-  return process.env.STORAGE_BACKEND?.toLowerCase() === "s3" ? "s3" : "local";
-}
-
-function localDir() {
-  return process.env.UPLOAD_DIR ?? path.join(process.cwd(), "uploads");
+  return getStorageRuntimeConfig().backend;
 }
 
 function assertSafeKey(key: string) {
@@ -20,59 +25,100 @@ function assertSafeKey(key: string) {
   }
 }
 
-function objectKey(key: string) {
+function objectKey(key: string, prefix: string) {
   assertSafeKey(key);
-  const prefix = (process.env.S3_PREFIX ?? "").replace(/^\/+|\/+$/g, "");
   return prefix ? `${prefix}/${key}` : key;
 }
 
 function getS3() {
-  const bucket = process.env.S3_BUCKET?.trim();
-  if (!bucket) throw new Error("S3_BUCKET is required when STORAGE_BACKEND=s3");
+  const config = getStorageRuntimeConfig();
+  if (config.backend !== "s3") throw new Error("S3 storage is not configured");
   if (!s3Client) {
-    const endpoint = process.env.S3_ENDPOINT?.trim();
     s3Client = new S3Client({
-      region: process.env.S3_REGION || process.env.AWS_REGION || "us-west-2",
-      ...(endpoint
+      region: config.region,
+      ...(config.endpoint
         ? {
-            endpoint,
-            forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
+            endpoint: config.endpoint,
+            forcePathStyle: config.forcePathStyle,
           }
         : {}),
     });
   }
-  return { client: s3Client, bucket };
+  return { client: s3Client, config };
 }
 
 export async function putObject(key: string, body: Buffer, contentType: string) {
   if (storageBackend() === "s3") {
-    const { client, bucket } = getS3();
+    const { client, config } = getS3();
     await client.send(
       new PutObjectCommand({
-        Bucket: bucket,
-        Key: objectKey(key),
+        Bucket: config.bucket,
+        Key: objectKey(key, config.prefix),
         Body: body,
         ContentType: contentType,
-        ...(process.env.S3_ENDPOINT ? {} : { ServerSideEncryption: "AES256" as const }),
+        ...(config.serverSideEncryption
+          ? { ServerSideEncryption: "AES256" as const }
+          : {}),
       }),
     );
     return;
   }
   assertSafeKey(key);
   // The runtime upload root is intentionally configurable and contains data, not application code.
-  const full = path.join(/* turbopackIgnore: true */ localDir(), key);
+  const config = getStorageRuntimeConfig();
+  if (config.backend !== "local") throw new Error("Local storage is not configured");
+  const full = path.join(/* turbopackIgnore: true */ config.directory, key);
   await mkdir(path.dirname(full), { recursive: true });
   await writeFile(full, body);
 }
 
 export async function getObject(key: string): Promise<{ body: Buffer; contentType?: string }> {
   if (storageBackend() === "s3") {
-    const { client, bucket } = getS3();
-    const out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey(key) }));
-    const bytes = await out.Body!.transformToByteArray();
-    return { body: Buffer.from(bytes), contentType: out.ContentType };
+    const { client, config } = getS3();
+    try {
+      const out = await client.send(new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: objectKey(key, config.prefix),
+      }));
+      const bytes = await out.Body!.transformToByteArray();
+      return { body: Buffer.from(bytes), contentType: out.ContentType };
+    } catch (error) {
+      const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+      const name = (error as { name?: string }).name;
+      if (!config.fallbackLocalDirectory || (status !== 404 && name !== "NoSuchKey" && name !== "NotFound")) throw error;
+      assertSafeKey(key);
+      return { body: await readFile(path.join(config.fallbackLocalDirectory, key)) };
+    }
   }
   assertSafeKey(key);
-  const body = await readFile(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ localDir(), key));
+  const config = getStorageRuntimeConfig();
+  if (config.backend !== "local") throw new Error("Local storage is not configured");
+  const body = await readFile(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ config.directory, key));
   return { body };
+}
+
+export async function deleteObject(key: string) {
+  if (storageBackend() === "s3") {
+    const { client, config } = getS3();
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: config.bucket,
+        Key: objectKey(key, config.prefix),
+      }),
+    );
+    return;
+  }
+  assertSafeKey(key);
+  const config = getStorageRuntimeConfig();
+  if (config.backend !== "local") throw new Error("Local storage is not configured");
+  try {
+    await unlink(
+      /* turbopackIgnore: true */ path.join(
+        /* turbopackIgnore: true */ config.directory,
+        key,
+      ),
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 }

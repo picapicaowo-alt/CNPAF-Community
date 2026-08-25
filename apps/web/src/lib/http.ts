@@ -70,6 +70,18 @@ export async function requireAnyPermission(permissions: PermissionKey[], resourc
   return { user, decision, error: null };
 }
 
+export function registryManagementPermissions(
+  registryKey: string,
+): PermissionKey[] {
+  return registryKey === "site_type"
+    ? ["services.manage", "locations.manage"]
+    : ["services.manage"];
+}
+
+export function requireRegistryManagement(registryKey: string) {
+  return requireAnyPermission(registryManagementPermissions(registryKey));
+}
+
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }

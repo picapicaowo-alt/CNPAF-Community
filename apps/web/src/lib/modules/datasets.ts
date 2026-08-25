@@ -2,22 +2,31 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   approvedFindings,
+  attachments,
   auditEvents,
+  configRegistries,
+  configRegistryItems,
   datasetRecords,
   datasets,
   datasetVersions,
+  organizations,
   privacyFlags,
   programs,
   records,
+  recordFieldAnswers,
   recordStructuredSelections,
   recordVersions,
   sharedDatasetAccessLogs,
   sharedDatasets,
+  sites,
+  templates,
+  templateVersions,
   users,
 } from "@cnpaf/db/schema";
 import type { z } from "zod";
 import type {
   dataDownloadBodySchema,
+  datasetArchiveBodySchema,
   datasetCreateBodySchema,
   datasetRefreshBodySchema,
   datasetShareBodySchema,
@@ -31,8 +40,10 @@ import { contentHash, sha256 } from "../crypto";
 import { toCsv, toSimplePdf } from "../export-format";
 import { matchesEvidenceFilters } from "../evidence-filters";
 import { requireActiveRegistryItem } from "../registries";
+import { toAttachmentSummary, toFrozenAttachmentManifest } from "../attachments";
 
 type DatasetCreate = z.infer<typeof datasetCreateBodySchema>;
+type DatasetArchive = z.infer<typeof datasetArchiveBodySchema>;
 type DatasetRefresh = z.infer<typeof datasetRefreshBodySchema>;
 type DatasetShare = z.infer<typeof datasetShareBodySchema>;
 type RecordShare = z.infer<typeof recordShareBodySchema>;
@@ -74,7 +85,14 @@ function requestedFields(policy: FieldPolicy) {
     "evidence_excerpts",
     "collector_notes",
     "form_version_information",
+    "media_attachments",
   ]);
+}
+
+function includedFields(policy: FieldPolicy) {
+  const include = requestedFields(policy);
+  for (const excluded of policy.exclude) include.delete(excluded);
+  return include;
 }
 
 function assertFieldPolicyAllowed(dataClassification: string, policy: FieldPolicy) {
@@ -165,7 +183,13 @@ async function createDatasetVersion(input: {
 }) {
   const selected = await selectRecordVersions(input.actorId, input.selection, input.dataset.organizationId, input.dataset.dataClassification);
   const frozen = selected.map(({ record, version }) => ({ recordId: record.id, recordVersionId: version.id }));
-  const hash = contentHash({ frozen, fieldPolicy: input.fieldPolicy });
+  const frozenVersionIds = frozen.map((item) => item.recordVersionId);
+  const mediaManifest = includedFields(input.fieldPolicy).has("media_attachments") && frozenVersionIds.length
+    ? (await db.select().from(attachments).where(inArray(attachments.recordVersionId, frozenVersionIds)))
+        .map((attachment) => toFrozenAttachmentManifest(attachment))
+        .sort((left, right) => left.id.localeCompare(right.id))
+    : [];
+  const hash = contentHash({ frozen, fieldPolicy: input.fieldPolicy, mediaManifest });
   return db.transaction(async (tx) => {
     await tx.execute(sql`select id from datasets where id = ${input.dataset.id} for update`);
     const latest = (await tx.select().from(datasetVersions).where(eq(datasetVersions.datasetId, input.dataset.id)).orderBy(desc(datasetVersions.versionNumber)).limit(1))[0];
@@ -188,14 +212,502 @@ async function createDatasetVersion(input: {
 }
 
 export async function listDatasets(actorId: string) {
-  const [access, rows] = await Promise.all([getAccessContext(actorId), db.select().from(datasets).orderBy(desc(datasets.updatedAt))]);
-  return rows.filter((dataset) => evaluateAuthorization(access, "datasets.download", datasetResource(dataset)).allowed || evaluateAuthorization(access, "datasets.create", datasetResource(dataset)).allowed);
+  const [access, rows] = await Promise.all([
+    getAccessContext(actorId),
+    db
+      .select({ dataset: datasets, headVersion: datasetVersions })
+      .from(datasets)
+      .leftJoin(datasetVersions, eq(datasets.headVersionId, datasetVersions.id))
+      .orderBy(desc(datasets.updatedAt)),
+  ]);
+  return rows
+    .filter(({ dataset }) =>
+      evaluateAuthorization(access, "datasets.download", datasetResource(dataset)).allowed ||
+      evaluateAuthorization(access, "datasets.create", datasetResource(dataset)).allowed,
+    )
+    .map(({ dataset, headVersion }) => ({ ...dataset, headVersion }));
 }
 
-export async function getDataset(actorId: string, datasetId: string) {
+function optionLabel(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+/**
+ * Returns labels only for dimensions that the actor can already reach through
+ * dataset/record permissions. This lets the builder expose canonical filters
+ * without requiring unrelated People, Forms, or Location admin permissions.
+ */
+type EvidenceFilterOptionPurpose = "dataset" | "records";
+
+/**
+ * Builds the canonical evidence dimensions for either Records exploration or
+ * Dataset creation. Both contexts share labels and values, while authorization
+ * remains purpose-specific: viewing Records must never depend on datasets.create.
+ */
+async function getEvidenceFilterOptions(
+  actorId: string,
+  purpose: EvidenceFilterOptionPurpose,
+) {
+  const [access, actor, allRecords, allOrganizations, allPrograms, registryRows] =
+    await Promise.all([
+      getAccessContext(actorId),
+      db
+        .select({ organizationId: users.organizationId })
+        .from(users)
+        .where(eq(users.id, actorId))
+        .limit(1)
+        .then((rows) => rows[0]),
+      db.select().from(records),
+      db.select().from(organizations),
+      db.select().from(programs),
+      db
+        .select({ registryKey: configRegistries.key, item: configRegistryItems })
+        .from(configRegistryItems)
+        .innerJoin(
+          configRegistries,
+          eq(configRegistryItems.registryId, configRegistries.id),
+        )
+        .where(eq(configRegistryItems.status, "active")),
+    ]);
+  const usableRecords = allRecords.filter((record) => {
+    const resource = recordResource(record);
+    const approvedAccess =
+      approvedEvidenceEligible(record) &&
+      evaluateAuthorization(access, "records.view_approved", {
+        ...resource,
+        dataClassification: "approved_evidence",
+      }).allowed;
+    const restrictedAccess =
+      evaluateAuthorization(access, "records.view", {
+        ...resource,
+        dataClassification: "restricted_pii",
+      }).allowed &&
+      evaluateAuthorization(access, "records.view_restricted_pii", {
+        ...resource,
+        dataClassification: "restricted_pii",
+      }).allowed;
+    if (purpose === "dataset") return approvedAccess || restrictedAccess;
+    return (
+      evaluateAuthorization(access, "records.view", resource).allowed ||
+      evaluateAuthorization(access, "records.view_own", resource).allowed ||
+      approvedAccess
+    );
+  });
+  const headVersionIds = usableRecords.flatMap((record) =>
+    record.headVersionId ? [record.headVersionId] : [],
+  );
+  const siteIds = new Set(
+    usableRecords.flatMap((record) => (record.siteId ? [record.siteId] : [])),
+  );
+  const collectorIds = new Set(usableRecords.map((record) => record.createdById));
+  const [locationRows, collectorRows, formRows, findingRows] = await Promise.all([
+    siteIds.size
+      ? db.select().from(sites).where(inArray(sites.id, [...siteIds]))
+      : [],
+    collectorIds.size
+      ? db
+          .select({ id: users.id, name: users.name, email: users.email })
+          .from(users)
+          .where(inArray(users.id, [...collectorIds]))
+      : [],
+    headVersionIds.length
+      ? db
+          .select({ version: templateVersions, template: templates })
+          .from(recordVersions)
+          .innerJoin(
+            templateVersions,
+            eq(recordVersions.templateVersionId, templateVersions.id),
+          )
+          .innerJoin(templates, eq(templateVersions.templateId, templates.id))
+          .where(inArray(recordVersions.id, headVersionIds))
+      : [],
+    headVersionIds.length
+      ? db
+          .select()
+          .from(approvedFindings)
+          .where(
+            and(
+              inArray(approvedFindings.recordVersionId, headVersionIds),
+              eq(approvedFindings.status, "approved"),
+            ),
+          )
+      : [],
+  ]);
+  const usableOrganizationIds = new Set(
+    usableRecords.flatMap((record) =>
+      record.organizationId ? [record.organizationId] : [],
+    ),
+  );
+  const usableProgramIds = new Set(
+    usableRecords.flatMap((record) =>
+      record.programId ? [record.programId] : [],
+    ),
+  );
+  if (actor?.organizationId) usableOrganizationIds.add(actor.organizationId);
+  const visibleRegistryRows = registryRows.filter(
+    ({ item }) =>
+      !item.organizationId || usableOrganizationIds.has(item.organizationId),
+  );
+  const organizationRows = allOrganizations.filter(
+    (organization) =>
+      usableOrganizationIds.has(organization.id) &&
+      (purpose === "records" ||
+        evaluateAuthorization(access, "datasets.create", {
+          organizationId: organization.id,
+          dataClassification: "approved_evidence",
+        }).allowed),
+  );
+  const programRows = allPrograms.filter(
+    (program) =>
+      program.status !== "archived" &&
+      organizationRows.some((organization) => organization.id === program.organizationId) &&
+      (purpose === "records"
+        ? usableProgramIds.has(program.id)
+        : evaluateAuthorization(access, "datasets.create", {
+            organizationId: program.organizationId,
+            programId: program.id,
+            dataClassification: "approved_evidence",
+          }).allowed),
+  );
+  const registryItems = (registryKey: string) =>
+    visibleRegistryRows
+      .filter(({ registryKey: key }) => key === registryKey)
+      .map(({ item }) => item);
+  const serviceRegistryItems = [
+    ...registryItems("source_kind"),
+    ...registryItems("service_type"),
+  ];
+  const sourceKinds = [...new Set(usableRecords.map((record) => record.sourceKind))];
+  const themeIds = new Set(
+    findingRows.flatMap((finding) =>
+      finding.canonicalRegistryItemId ? [finding.canonicalRegistryItemId] : [],
+    ),
+  );
+  const themeRows = registryRows
+    .map(({ item }) => item)
+    .filter((item) => themeIds.has(item.id));
+  const sourceOrigins = [
+    ...new Set(
+      findingRows.flatMap((finding) => {
+        const origin = (finding.approvedValue as { origin?: unknown } | null)
+          ?.origin;
+        return typeof origin === "string" && origin ? [origin] : [];
+      }),
+    ),
+  ];
+  return {
+    organizations: organizationRows
+      .map((organization) => ({
+        value: organization.id,
+        labelEn: organization.name,
+        labelZh: organization.name,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    programs: programRows
+      .map((program) => ({
+        value: program.id,
+        organizationId: program.organizationId,
+        labelEn: program.nameEn,
+        labelZh: program.nameZh,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    locations: locationRows
+      .map((location) => ({
+        value: location.id,
+        organizationId: location.organizationId,
+        labelEn: location.name,
+        labelZh: location.name,
+        description: location.region,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    forms: [...new Map(formRows.map(({ version, template }) => [
+      version.id,
+      {
+        value: version.id,
+        organizationId: template.organizationId,
+        labelEn: `${version.nameEn} v${version.version}`,
+        labelZh: `${version.nameZh} v${version.version}`,
+      },
+    ])).values()].sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    collectors: collectorRows
+      .map((collector) => ({
+        value: collector.id,
+        labelEn: collector.name,
+        labelZh: collector.name,
+        description: collector.email,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    services: sourceKinds
+      .map((sourceKind) => {
+        const configured = serviceRegistryItems.find((item) => item.key === sourceKind);
+        return {
+          value: sourceKind,
+          labelEn: configured?.labelEn ?? optionLabel(sourceKind),
+          labelZh: configured?.labelZh ?? sourceKind,
+        };
+      })
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    populations: registryItems("population_type")
+      .map((item) => ({
+        value: item.key,
+        labelEn: item.labelEn,
+        labelZh: item.labelZh,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    sourceOrigins: sourceOrigins
+      .map((origin) => ({
+        value: origin,
+        labelEn: optionLabel(origin),
+        labelZh: origin,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    findingTypes: [...new Set(findingRows.map((finding) => finding.findingType))]
+      .map((findingType) => ({
+        value: findingType,
+        labelEn: optionLabel(findingType),
+        labelZh: findingType,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    themes: themeRows
+      .map((item) => ({
+        value: item.id,
+        labelEn: item.labelEn,
+        labelZh: item.labelZh,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    reviewStatuses: [...new Set(usableRecords.map((record) => record.reviewStatus))]
+      .map((status) => ({
+        value: status,
+        labelEn: optionLabel(status),
+        labelZh: status,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    researchUseStatuses: [
+      ...new Set(usableRecords.map((record) => record.researchUseStatus)),
+    ]
+      .map((status) => ({
+        value: status,
+        labelEn: optionLabel(status),
+        labelZh: status,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    classifications: registryItems("data_classification")
+      .map((item) => ({
+        value: item.key,
+        labelEn: item.labelEn,
+        labelZh: item.labelZh,
+      }))
+      .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
+    approvedRecordCount: usableRecords.filter(
+      (record) =>
+        approvedEvidenceEligible(record) &&
+        evaluateAuthorization(access, "records.view_approved", {
+          ...recordResource(record),
+          dataClassification: "approved_evidence",
+        }).allowed,
+    ).length,
+  };
+}
+
+export function getDatasetBuilderOptions(actorId: string) {
+  return getEvidenceFilterOptions(actorId, "dataset");
+}
+
+export function getRecordFilterOptions(actorId: string) {
+  return getEvidenceFilterOptions(actorId, "records");
+}
+
+export async function getDataset(actorId: string, datasetId: string, requestedVersionId?: string | null) {
   const dataset = await requireDataset(actorId, datasetId, "datasets.download");
   const versions = await db.select().from(datasetVersions).where(eq(datasetVersions.datasetId, datasetId)).orderBy(desc(datasetVersions.versionNumber));
-  return { dataset, versions };
+  const selectedVersion = requestedVersionId
+    ? versions.find((version) => version.id === requestedVersionId)
+    : versions.find((version) => version.id === dataset.headVersionId) ?? versions[0];
+  if (requestedVersionId && !selectedVersion) throw new ApiError("NOT_FOUND", "Dataset version not found", 404);
+
+  const frozen = selectedVersion
+    ? await requireFrozenRecordAccess(actorId, selectedVersion.id, dataset.dataClassification)
+    : [];
+  const frozenRows = selectedVersion
+    ? await db.select({ frozen: datasetRecords, version: recordVersions })
+        .from(datasetRecords)
+        .innerJoin(recordVersions, eq(datasetRecords.recordVersionId, recordVersions.id))
+        .where(eq(datasetRecords.datasetVersionId, selectedVersion.id))
+        .orderBy(asc(datasetRecords.ordinal))
+    : [];
+  const frozenByRecord = new Map(frozenRows.map((row) => [row.frozen.recordId, row]));
+  const siteIds = [...new Set(frozen.flatMap(({ record }) => record.siteId ? [record.siteId] : []))];
+  const programIds = [...new Set(frozen.flatMap(({ record }) => record.programId ? [record.programId] : []))];
+  const collectorIds = [...new Set(frozen.map(({ record }) => record.createdById))];
+  const frozenVersionIds = frozenRows.map((row) => row.version.id);
+  const mediaIncluded = selectedVersion
+    ? includedFields(selectedVersion.fieldPolicy as FieldPolicy).has("media_attachments")
+    : false;
+  const [siteRows, programRows, collectorRows, mediaRows] = await Promise.all([
+    siteIds.length ? db.select({ id: sites.id, name: sites.name }).from(sites).where(inArray(sites.id, siteIds)) : [],
+    programIds.length ? db.select({ id: programs.id, nameEn: programs.nameEn, nameZh: programs.nameZh }).from(programs).where(inArray(programs.id, programIds)) : [],
+    collectorIds.length ? db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, collectorIds)) : [],
+    mediaIncluded && frozenVersionIds.length
+      ? db.select().from(attachments).where(inArray(attachments.recordVersionId, frozenVersionIds))
+      : [],
+  ]);
+  const siteById = new Map(siteRows.map((row) => [row.id, row.name]));
+  const programById = new Map(programRows.map((row) => [row.id, row]));
+  const collectorById = new Map(collectorRows.map((row) => [row.id, row.name]));
+  const recordsInVersion = frozen
+    .map(({ record }) => {
+      const row = frozenByRecord.get(record.id);
+      return {
+        id: record.id,
+        recordVersionId: row?.version.id,
+        ordinal: row?.frozen.ordinal ?? 0,
+        sourceKind: record.sourceKind,
+        reviewStatus: record.reviewStatus,
+        researchUseStatus: record.researchUseStatus,
+        privacyStatus: record.privacyStatus,
+        site: record.siteId ? { id: record.siteId, name: siteById.get(record.siteId) ?? null } : null,
+        program: record.programId ? {
+          id: record.programId,
+          nameEn: programById.get(record.programId)?.nameEn ?? null,
+          nameZh: programById.get(record.programId)?.nameZh ?? null,
+        } : null,
+        collector: { id: record.createdById, name: collectorById.get(record.createdById) ?? null },
+        occurredAt: row?.version.occurredAt ?? null,
+        attachments: row ? mediaRows
+          .filter((attachment) => attachment.recordVersionId === row.version.id)
+          .map((attachment) => toAttachmentSummary(
+            attachment,
+            `/api/v1/datasets/${dataset.id}/attachments/${attachment.id}?versionId=${selectedVersion?.id ?? ""}`,
+          )) : [],
+      };
+    })
+    .sort((left, right) => left.ordinal - right.ordinal);
+
+  const canManageShares = (await authorize({
+    userId: actorId,
+    permission: "datasets.share",
+    resource: datasetResource(dataset),
+  })).allowed;
+  const versionIds = versions.map((version) => version.id);
+  const shares = canManageShares && versionIds.length
+    ? await db.select({
+        id: sharedDatasets.id,
+        datasetVersionId: sharedDatasets.datasetVersionId,
+        recipientLabel: sharedDatasets.recipientLabel,
+        accessScope: sharedDatasets.accessScope,
+        status: sharedDatasets.status,
+        expiresAt: sharedDatasets.expiresAt,
+        revokedAt: sharedDatasets.revokedAt,
+        createdAt: sharedDatasets.createdAt,
+      }).from(sharedDatasets).where(inArray(sharedDatasets.datasetVersionId, versionIds)).orderBy(desc(sharedDatasets.createdAt))
+    : [];
+  const shareIds = shares.map((share) => share.id);
+  const accessLogs = shareIds.length
+    ? await db.select({
+        id: sharedDatasetAccessLogs.id,
+        sharedDatasetId: sharedDatasetAccessLogs.sharedDatasetId,
+        action: sharedDatasetAccessLogs.action,
+        actorUserId: sharedDatasetAccessLogs.actorUserId,
+        createdAt: sharedDatasetAccessLogs.createdAt,
+      }).from(sharedDatasetAccessLogs).where(inArray(sharedDatasetAccessLogs.sharedDatasetId, shareIds)).orderBy(desc(sharedDatasetAccessLogs.createdAt))
+    : [];
+  const media = mediaRows.map((attachment) => toAttachmentSummary(attachment));
+  return {
+    dataset,
+    versions,
+    selectedVersion: selectedVersion ?? null,
+    records: recordsInVersion,
+    shares,
+    accessLogs,
+    mediaSummary: {
+      total: media.length,
+      images: media.filter((attachment) => attachment.kind === "image").length,
+      audio: media.filter((attachment) => attachment.kind === "audio").length,
+      video: media.filter((attachment) => attachment.kind === "video").length,
+      documents: media.filter((attachment) => attachment.kind === "document").length,
+    },
+  };
+}
+
+/**
+ * Resolve an immutable Dataset Version as a report source. This is the shared
+ * authorization boundary for Dataset → Report creation and deliberately
+ * revalidates every frozen Record against the actor's current access.
+ */
+export async function getDatasetVersionForReport(actorId: string, datasetVersionId: string) {
+  const source = (await db.select({ dataset: datasets, version: datasetVersions })
+    .from(datasetVersions)
+    .innerJoin(datasets, eq(datasetVersions.datasetId, datasets.id))
+    .where(eq(datasetVersions.id, datasetVersionId))
+    .limit(1))[0];
+  if (!source) throw new ApiError("NOT_FOUND", "Dataset version not found", 404);
+  await requireDataset(actorId, source.dataset.id, "datasets.download");
+  if (source.dataset.status !== "active") throw new ApiError("CONFLICT", "Archived datasets cannot start new reports", 409);
+  if (source.version.status !== "ready") throw new ApiError("CONFLICT", "Only ready Dataset Versions can start a report", 409);
+  await requireFrozenRecordAccess(actorId, source.version.id, source.dataset.dataClassification);
+  const frozenRows = await db.select().from(datasetRecords)
+    .where(eq(datasetRecords.datasetVersionId, source.version.id))
+    .orderBy(asc(datasetRecords.ordinal));
+  const recordVersionIds = frozenRows.map((row) => row.recordVersionId);
+  const mediaIncluded = includedFields(source.version.fieldPolicy as FieldPolicy)
+    .has("media_attachments");
+  const [findings, mediaAttachments] = recordVersionIds.length
+    ? await Promise.all([
+        db.select().from(approvedFindings).where(and(
+          inArray(approvedFindings.recordVersionId, recordVersionIds),
+          eq(approvedFindings.status, "approved"),
+        )),
+        mediaIncluded
+          ? db.select().from(attachments).where(inArray(attachments.recordVersionId, recordVersionIds))
+          : [],
+      ])
+    : [[], []];
+  const frozenByVersionId = new Map(frozenRows.map((row) => [row.recordVersionId, row]));
+  return {
+    ...source,
+    frozenRows,
+    findings: findings.map((finding) => ({ finding, frozen: frozenByVersionId.get(finding.recordVersionId!)! })),
+    mediaAttachments,
+    mediaIncluded,
+  };
+}
+
+export async function getDatasetMediaForAi(actorId: string, datasetVersionId: string) {
+  const source = await getDatasetVersionForReport(actorId, datasetVersionId);
+  return source;
+}
+
+export async function getDatasetAttachmentFile(
+  actorId: string,
+  datasetId: string,
+  attachmentId: string,
+  requestedVersionId?: string | null,
+) {
+  const dataset = await requireDataset(actorId, datasetId, "datasets.download");
+  const versionId = requestedVersionId ?? dataset.headVersionId;
+  if (!versionId) throw new ApiError("NOT_FOUND", "Dataset has no ready version", 404);
+  const version = (await db.select().from(datasetVersions).where(and(
+    eq(datasetVersions.id, versionId),
+    eq(datasetVersions.datasetId, dataset.id),
+    eq(datasetVersions.status, "ready"),
+  )).limit(1))[0];
+  if (!version) throw new ApiError("NOT_FOUND", "Ready Dataset Version not found", 404);
+  if (!includedFields(version.fieldPolicy as FieldPolicy).has("media_attachments")) {
+    throw new ApiError("NOT_FOUND", "Media attachments are not included in this Dataset Version", 404);
+  }
+  await requireFrozenRecordAccess(actorId, version.id, dataset.dataClassification);
+  const row = (await db.select({ attachment: attachments })
+    .from(attachments)
+    .innerJoin(datasetRecords, eq(attachments.recordVersionId, datasetRecords.recordVersionId))
+    .where(and(
+      eq(attachments.id, attachmentId),
+      eq(datasetRecords.datasetVersionId, version.id),
+    ))
+    .limit(1))[0];
+  if (!row) throw new ApiError("NOT_FOUND", "Attachment not found in this Dataset Version", 404);
+  return row.attachment;
 }
 
 export async function createDataset(actorId: string, input: DatasetCreate, requestId?: string) {
@@ -232,6 +744,7 @@ export async function createDataset(actorId: string, input: DatasetCreate, reque
 
 export async function refreshDataset(actorId: string, datasetId: string, input: DatasetRefresh, requestId?: string) {
   const dataset = await requireDataset(actorId, datasetId, "datasets.refresh");
+  if (dataset.status !== "active") throw new ApiError("CONFLICT", "Archived datasets cannot be refreshed", 409);
   const selection = (input.selection ?? dataset.selectionQuery) as DatasetCreate["selection"];
   const fieldPolicy = (input.fieldPolicy ?? dataset.fieldPolicy) as FieldPolicy;
   assertFieldPolicyAllowed(dataset.dataClassification, fieldPolicy);
@@ -246,14 +759,16 @@ async function loadDatasetRows(datasetVersionId: string, fieldPolicy?: FieldPoli
     .where(eq(datasetRecords.datasetVersionId, datasetVersionId))
     .orderBy(asc(datasetRecords.ordinal));
   const versionIds = frozenRows.map((row) => row.version.id);
-  const [findings, selections, resolvedPrivacy] = versionIds.length ? await Promise.all([
+  const effectivePolicy = fieldPolicy ?? { include: [], exclude: [], redactionProfileKey: null };
+  const include = includedFields(effectivePolicy);
+  const [findings, selections, resolvedPrivacy, mediaRows] = versionIds.length ? await Promise.all([
     db.select().from(approvedFindings).where(inArray(approvedFindings.recordVersionId, versionIds)),
     db.select().from(recordStructuredSelections).where(inArray(recordStructuredSelections.recordVersionId, versionIds)),
     db.select().from(privacyFlags).where(and(inArray(privacyFlags.recordVersionId, versionIds), eq(privacyFlags.status, "resolved"))),
-  ]) : [[], [], []];
-  const effectivePolicy = fieldPolicy ?? { include: [], exclude: [], redactionProfileKey: null };
-  const include = requestedFields(effectivePolicy);
-  for (const excluded of effectivePolicy.exclude) include.delete(excluded);
+    include.has("media_attachments")
+      ? db.select().from(attachments).where(inArray(attachments.recordVersionId, versionIds))
+      : [],
+  ]) : [[], [], [], []];
   return frozenRows.map(({ record, version }) => {
     const privacy = resolvedPrivacy.find((flag) => flag.recordVersionId === version.id);
     const safeText = record.privacyStatus === "redacted" ? privacy?.redactedText ?? null : record.privacyStatus === "clear" ? version.qualitative : null;
@@ -265,6 +780,11 @@ async function loadDatasetRows(datasetVersionId: string, fieldPolicy?: FieldPoli
       ...(include.has("approved_findings") ? { approvedFindings: findings.filter((finding) => finding.recordVersionId === version.id).map((finding) => finding.approvedValue) } : {}),
       ...(include.has("evidence_excerpts") ? { evidenceExcerpts: findings.filter((finding) => finding.recordVersionId === version.id).flatMap((finding) => finding.evidence as unknown[]) } : {}),
       ...(include.has("collector_notes") ? { collectorNotes: safeText } : {}),
+      ...(include.has("media_attachments") ? {
+        mediaAttachments: mediaRows
+          .filter((attachment) => attachment.recordVersionId === version.id)
+          .map((attachment) => toFrozenAttachmentManifest(attachment)),
+      } : {}),
       ...(include.has("personal_fields") ? { personalFields: { attribution: version.attribution } } : {}),
       ...(include.has("audit_metadata") ? { auditMetadata: { recordCreatedAt: record.createdAt, recordUpdatedAt: record.updatedAt, versionCreatedAt: version.createdAt, submittedById: version.submittedById, contentHash: version.contentHash } } : {}),
     };
@@ -309,22 +829,26 @@ export async function downloadRecord(actorId: string, recordId: string, input: D
 }
 
 async function loadDatasetRowsForRecord(record: typeof records.$inferSelect, version: typeof recordVersions.$inferSelect, policy?: FieldPolicy) {
-  const include = requestedFields(policy ?? { include: [], exclude: [], redactionProfileKey: null });
-  for (const excluded of policy?.exclude ?? []) include.delete(excluded);
-  const [findings, selections, privacy] = await Promise.all([
+  const include = includedFields(policy ?? { include: [], exclude: [], redactionProfileKey: null });
+  const [findings, selections, fieldAnswers, privacy, mediaRows] = await Promise.all([
     db.select().from(approvedFindings).where(eq(approvedFindings.recordVersionId, version.id)),
     db.select().from(recordStructuredSelections).where(eq(recordStructuredSelections.recordVersionId, version.id)),
+    db.select().from(recordFieldAnswers).where(eq(recordFieldAnswers.recordVersionId, version.id)),
     db.select().from(privacyFlags).where(and(eq(privacyFlags.recordVersionId, version.id), eq(privacyFlags.status, "resolved"))).limit(1).then((rows) => rows[0]),
+    include.has("media_attachments")
+      ? db.select().from(attachments).where(eq(attachments.recordVersionId, version.id))
+      : [],
   ]);
   const safeText = record.privacyStatus === "redacted" ? privacy?.redactedText ?? null : record.privacyStatus === "clear" ? version.qualitative : null;
   return {
     record: { id: record.id, sourceKind: record.sourceKind, programId: record.programId, siteId: record.siteId, reviewStatus: record.reviewStatus, researchUseStatus: record.researchUseStatus },
     recordVersionId: version.id,
     ...(include.has("form_version_information") ? { form: { templateVersionId: version.templateVersionId, versionNumber: version.versionNumber, occurredAt: version.occurredAt, submittedAt: version.submittedAt } } : {}),
-    ...(include.has("structured_answers") ? { structuredAnswers: selections, quantitative: version.quantitative } : {}),
+    ...(include.has("structured_answers") ? { structuredAnswers: { fieldAnswers, selections, quantitative: version.quantitative } } : {}),
     ...(include.has("approved_findings") ? { approvedFindings: findings.map((finding) => finding.approvedValue) } : {}),
     ...(include.has("evidence_excerpts") ? { evidenceExcerpts: findings.flatMap((finding) => finding.evidence as unknown[]) } : {}),
     ...(include.has("collector_notes") ? { collectorNotes: safeText } : {}),
+    ...(include.has("media_attachments") ? { mediaAttachments: mediaRows.map((attachment) => toFrozenAttachmentManifest(attachment)) } : {}),
     ...(include.has("personal_fields") ? { personalFields: { attribution: version.attribution } } : {}),
     ...(include.has("audit_metadata") ? { auditMetadata: { recordCreatedAt: record.createdAt, recordUpdatedAt: record.updatedAt, versionCreatedAt: version.createdAt, submittedById: version.submittedById, contentHash: version.contentHash } } : {}),
   };
@@ -332,6 +856,7 @@ async function loadDatasetRowsForRecord(record: typeof records.$inferSelect, ver
 
 export async function shareDataset(actorId: string, datasetId: string, input: DatasetShare, requestId?: string) {
   const dataset = await requireDataset(actorId, datasetId, "datasets.share");
+  if (dataset.status !== "active") throw new ApiError("CONFLICT", "Archived datasets cannot be shared", 409);
   const versionId = input.datasetVersionId ?? dataset.headVersionId;
   if (!versionId) throw new ApiError("NOT_FOUND", "Dataset has no ready version", 404);
   const version = (await db.select().from(datasetVersions).where(and(eq(datasetVersions.id, versionId), eq(datasetVersions.datasetId, datasetId), eq(datasetVersions.status, "ready"))).limit(1))[0];
@@ -370,12 +895,48 @@ export async function revokeDatasetShare(actorId: string, shareId: string, reque
   });
 }
 
+export async function archiveDataset(actorId: string, datasetId: string, input: DatasetArchive, requestId?: string) {
+  const before = await requireDataset(actorId, datasetId, "datasets.archive");
+  if (before.status !== "active") throw new ApiError("CONFLICT", "Dataset is already archived", 409);
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select id from datasets where id = ${datasetId} for update`);
+    const versionRows = await tx.select({ id: datasetVersions.id }).from(datasetVersions).where(eq(datasetVersions.datasetId, datasetId));
+    const now = new Date();
+    const revoked = versionRows.length
+      ? await tx.update(sharedDatasets).set({
+          status: "revoked",
+          revokedAt: now,
+          revokedById: actorId,
+          updatedAt: now,
+        }).where(and(
+          inArray(sharedDatasets.datasetVersionId, versionRows.map((version) => version.id)),
+          eq(sharedDatasets.status, "active"),
+        )).returning({ id: sharedDatasets.id })
+      : [];
+    const [after] = await tx.update(datasets).set({ status: "archived", updatedAt: now })
+      .where(and(eq(datasets.id, datasetId), eq(datasets.status, "active")))
+      .returning();
+    if (!after) throw new ApiError("CONFLICT", "Dataset changed concurrently", 409);
+    await audit({
+      actorId,
+      action: "dataset.archived",
+      entityType: "dataset",
+      entityId: datasetId,
+      beforeState: { status: before.status },
+      afterState: { status: after.status, revokedShareIds: revoked.map((share) => share.id) },
+      reason: input.reason,
+      metadata: { requestId },
+    }, (values) => tx.insert(auditEvents).values(values));
+    return { dataset: after, revokedShareCount: revoked.length };
+  });
+}
+
 export async function accessSharedDataset(actorId: string, token: string, requestId?: string) {
   const row = (await db.select({ share: sharedDatasets, version: datasetVersions, dataset: datasets }).from(sharedDatasets)
     .innerJoin(datasetVersions, eq(sharedDatasets.datasetVersionId, datasetVersions.id))
     .innerJoin(datasets, eq(datasetVersions.datasetId, datasets.id))
     .where(eq(sharedDatasets.tokenHash, sha256(token))).limit(1))[0];
-  if (!row || row.share.status !== "active" || (row.share.expiresAt && row.share.expiresAt <= new Date())) throw new ApiError("NOT_FOUND", "Active dataset share not found", 404);
+  if (!row || row.dataset.status !== "active" || row.share.status !== "active" || (row.share.expiresAt && row.share.expiresAt <= new Date())) throw new ApiError("NOT_FOUND", "Active dataset share not found", 404);
   if (!(await authorize({ userId: actorId, permission: "datasets.download", resource: datasetResource(row.dataset) })).allowed) throw new ApiError("FORBIDDEN", "Shared dataset is outside the assigned scope", 403);
   const scope = row.share.accessScope as { userIds?: string[]; organizationIds?: string[] } | null;
   if (scope?.userIds?.length && !scope.userIds.includes(actorId)) throw new ApiError("FORBIDDEN", "Share is restricted to another recipient", 403);

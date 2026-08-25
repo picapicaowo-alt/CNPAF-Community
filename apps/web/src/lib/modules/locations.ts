@@ -1,7 +1,7 @@
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { auditEvents, locationAliases, locationMergeHistory, records, sites, tasks, visits } from "@cnpaf/db/schema";
 import type { z } from "zod";
-import type { locationAliasBodySchema, locationCreateBodySchema, locationMergeBodySchema } from "@cnpaf/shared";
+import type { locationAliasBodySchema, locationCreateBodySchema, locationMergeBodySchema, locationUpdateBodySchema } from "@cnpaf/shared";
 import { db } from "../db";
 import { audit } from "../audit";
 import { ApiError } from "../api-error";
@@ -9,6 +9,7 @@ import { authorize, evaluateAuthorization, getAccessContext } from "../authoriza
 import { requireActiveRegistryItem } from "../registries";
 
 type LocationCreate = z.infer<typeof locationCreateBodySchema>;
+type LocationUpdate = z.infer<typeof locationUpdateBodySchema>;
 type AliasCreate = z.infer<typeof locationAliasBodySchema>;
 type LocationMerge = z.infer<typeof locationMergeBodySchema>;
 
@@ -54,6 +55,16 @@ async function requireLocation(actorId: string, locationId: string, permission: 
   return location;
 }
 
+export async function getLocation(actorId: string, locationId: string) {
+  const location = await requireLocation(actorId, locationId, "locations.view");
+  const aliases = await db
+    .select()
+    .from(locationAliases)
+    .where(eq(locationAliases.siteId, location.id))
+    .orderBy(asc(locationAliases.displayAlias));
+  return { location, aliases };
+}
+
 export async function searchLocations(actorId: string, query?: string | null, coordinates?: { latitude: number; longitude: number } | null) {
   const [access, locations, aliases] = await Promise.all([
     getAccessContext(actorId),
@@ -67,7 +78,17 @@ export async function searchLocations(actorId: string, query?: string | null, co
     .filter((location) => evaluateAuthorization(access, "locations.view", resource(location)).allowed)
     .map((location) => {
       const locationAliases = aliasesBySite.get(location.id) ?? [];
-      const names = [normalizeLocationName(location.name), ...locationAliases.map((alias) => alias.normalizedAlias)];
+      const names = [
+        location.name,
+        location.address,
+        location.city,
+        location.state,
+        location.country,
+        location.region,
+        ...locationAliases.map((alias) => alias.displayAlias),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map(normalizeLocationName);
       const score = !normalizedQuery ? 0 : Math.min(...names.map((name) => name.includes(normalizedQuery) ? 0 : distance(name, normalizedQuery) / Math.max(name.length, normalizedQuery.length, 1)));
       const distanceKm = coordinates ? geographicDistanceKm(coordinates.latitude, coordinates.longitude, location) : null;
       return { ...location, aliases: locationAliases, matchScore: score, distanceKm };
@@ -87,6 +108,9 @@ export async function createLocation(actorId: string, input: LocationCreate, req
       siteType: input.siteType,
       region: input.region,
       address: input.address,
+      city: input.city,
+      state: input.state,
+      country: input.country,
       latitude: input.latitude == null ? null : String(input.latitude),
       longitude: input.longitude == null ? null : String(input.longitude),
       canonicalStatus: "canonical",
@@ -102,6 +126,72 @@ export async function createLocation(actorId: string, input: LocationCreate, req
     }))).returning() : [];
     await audit({ actorId, action: "location.created", entityType: "location", entityId: location.id, afterState: { location, aliases }, metadata: { requestId } }, (values) => tx.insert(auditEvents).values(values));
     return { location, aliases };
+  });
+}
+
+export async function updateLocation(
+  actorId: string,
+  locationId: string,
+  input: LocationUpdate,
+  requestId?: string,
+) {
+  const before = await requireLocation(actorId, locationId, "locations.manage");
+  if (input.siteType && input.siteType !== before.siteType) {
+    await requireActiveRegistryItem(
+      "site_type",
+      input.siteType,
+      before.organizationId,
+    );
+  }
+  const nextStatus = input.canonicalStatus ?? before.canonicalStatus;
+  const allowedTransitions: Record<string, readonly string[]> = {
+    unverified: ["unverified", "canonical", "archived"],
+    canonical: ["canonical", "archived"],
+    archived: ["archived", "canonical"],
+  };
+  if (!allowedTransitions[before.canonicalStatus]?.includes(nextStatus)) {
+    throw new ApiError(
+      "INVALID_TRANSITION",
+      `Cannot transition location from ${before.canonicalStatus} to ${nextStatus}`,
+      409,
+    );
+  }
+  const values = {
+    ...input,
+    latitude:
+      input.latitude === undefined
+        ? undefined
+        : input.latitude === null
+          ? null
+          : String(input.latitude),
+    longitude:
+      input.longitude === undefined
+        ? undefined
+        : input.longitude === null
+          ? null
+          : String(input.longitude),
+    updatedAt: new Date(),
+  };
+  return db.transaction(async (tx) => {
+    const [after] = await tx
+      .update(sites)
+      .set(values)
+      .where(eq(sites.id, locationId))
+      .returning();
+    if (!after) throw new ApiError("NOT_FOUND", "Location not found", 404);
+    await audit(
+      {
+        actorId,
+        action: "location.updated",
+        entityType: "location",
+        entityId: locationId,
+        beforeState: before,
+        afterState: after,
+        metadata: { requestId },
+      },
+      (auditValues) => tx.insert(auditEvents).values(auditValues),
+    );
+    return after;
   });
 }
 

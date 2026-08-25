@@ -4,6 +4,7 @@ import { aiFindings, aiRuns, approvedFindings, attachments, safetyFlags } from "
 import { db } from "@/lib/db";
 import { requireUser, jsonError } from "@/lib/http";
 import { getRecordBundle } from "@/lib/records";
+import { toAttachmentSummary } from "@/lib/attachments";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { user, error } = await requireUser();
@@ -28,5 +29,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const files = headId
     ? await db.select().from(attachments).where(eq(attachments.recordVersionId, headId))
     : [];
-  return NextResponse.json({ ...bundle, run, findings, safetyFlags: flags, attachments: files });
+  return NextResponse.json({
+    ...bundle,
+    run,
+    findings,
+    safetyFlags: flags,
+    attachments: files.map((file) => toAttachmentSummary(
+      file,
+      `/api/v1/records/${bundle.record.id}/attachments/${file.id}`,
+    )),
+  });
 }

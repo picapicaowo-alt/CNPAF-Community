@@ -1,7 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { auditEvents, programMemberships, programs, users } from "@cnpaf/db/schema";
 import type { z } from "zod";
-import type { programCreateBodySchema, programMembershipBodySchema, programUpdateBodySchema } from "@cnpaf/shared";
+import type { programCreateBodySchema, programMembershipBodySchema, programMembershipBulkBodySchema, programUpdateBodySchema } from "@cnpaf/shared";
 import { db } from "../db";
 import { audit } from "../audit";
 import { ApiError } from "../api-error";
@@ -11,6 +11,7 @@ import { requireActiveRegistryItem } from "../registries";
 type ProgramCreate = z.infer<typeof programCreateBodySchema>;
 type ProgramUpdate = z.infer<typeof programUpdateBodySchema>;
 type MembershipCreate = z.infer<typeof programMembershipBodySchema>;
+type MembershipBulkCreate = z.infer<typeof programMembershipBulkBodySchema>;
 
 const PROGRAM_TRANSITIONS: Record<string, readonly string[]> = {
   draft: ["active", "archived"],
@@ -104,19 +105,54 @@ export async function addProgramMembership(
   input: MembershipCreate,
   requestId?: string,
 ) {
+  const memberships = await addProgramMemberships(
+    actorId,
+    programId,
+    { ...input, userIds: [input.userId] },
+    requestId,
+  );
+  return memberships[0]!;
+}
+
+export async function addProgramMemberships(
+  actorId: string,
+  programId: string,
+  input: MembershipBulkCreate,
+  requestId?: string,
+) {
   const program = await requireProgram(actorId, programId, "programs.manage_membership");
-  const target = (await db.select().from(users).where(eq(users.id, input.userId)).limit(1))[0];
-  if (!target || target.status !== "active") throw new ApiError("NOT_FOUND", "Active user not found", 404);
-  if (target.organizationId && target.organizationId !== program.organizationId) {
+  const targets = await db
+    .select()
+    .from(users)
+    .where(inArray(users.id, input.userIds));
+  if (
+    targets.length !== input.userIds.length ||
+    targets.some((target) => target.status !== "active")
+  )
+    throw new ApiError("NOT_FOUND", "One or more active users were not found", 404);
+  if (
+    targets.some(
+      (target) =>
+        target.organizationId && target.organizationId !== program.organizationId,
+    )
+  ) {
     throw new ApiError("BAD_REQUEST", "User and program belong to different organizations", 400);
   }
   await requireActiveRegistryItem("program_membership_role", input.membershipRoleKey, program.organizationId);
   return db.transaction(async (tx) => {
-    const existing = (await tx.select().from(programMemberships).where(and(
-      eq(programMemberships.programId, programId),
-      eq(programMemberships.userId, input.userId),
-      eq(programMemberships.status, "active"),
-    )).limit(1))[0];
+    const existingMemberships = await tx
+      .select()
+      .from(programMemberships)
+      .where(
+        and(
+          eq(programMemberships.programId, programId),
+          inArray(programMemberships.userId, input.userIds),
+          eq(programMemberships.status, "active"),
+        ),
+      );
+    const existingByUserId = new Map(
+      existingMemberships.map((membership) => [membership.userId, membership]),
+    );
     const values = {
       membershipRoleKey: input.membershipRoleKey,
       startsAt: input.startsAt ? new Date(input.startsAt) : null,
@@ -124,20 +160,32 @@ export async function addProgramMembership(
       assignedById: actorId,
       updatedAt: new Date(),
     };
-    const [membership] = existing
-      ? await tx.update(programMemberships).set(values).where(eq(programMemberships.id, existing.id)).returning()
-      : await tx.insert(programMemberships).values({ programId, userId: input.userId, ...values }).returning();
-    await audit({
-      actorId,
-      action: existing ? "program.membership_updated" : "program.membership_added",
-      entityType: "program_membership",
-      entityId: membership.id,
-      targetUserId: input.userId,
-      beforeState: existing,
-      afterState: membership,
-      metadata: { requestId, programId },
-    }, (auditValues) => tx.insert(auditEvents).values(auditValues));
-    return membership;
+    const memberships = [];
+    for (const userId of input.userIds) {
+      const existing = existingByUserId.get(userId);
+      const [membership] = existing
+        ? await tx
+            .update(programMemberships)
+            .set(values)
+            .where(eq(programMemberships.id, existing.id))
+            .returning()
+        : await tx
+            .insert(programMemberships)
+            .values({ programId, userId, ...values })
+            .returning();
+      await audit({
+        actorId,
+        action: existing ? "program.membership_updated" : "program.membership_added",
+        entityType: "program_membership",
+        entityId: membership.id,
+        targetUserId: userId,
+        beforeState: existing,
+        afterState: membership,
+        metadata: { requestId, programId, batchSize: input.userIds.length },
+      }, (auditValues) => tx.insert(auditEvents).values(auditValues));
+      memberships.push(membership);
+    }
+    return memberships;
   });
 }
 

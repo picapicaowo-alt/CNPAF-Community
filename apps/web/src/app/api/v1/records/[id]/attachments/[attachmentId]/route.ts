@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser, jsonError } from "@/lib/http";
 import { authorizeAny } from "@/lib/authorization";
 import { getObject } from "@/lib/storage";
+import { inlineContentDisposition } from "@/lib/attachments";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string; attachmentId: string }> }) {
   const { user, error } = await requireUser();
@@ -30,6 +31,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; at
       "Content-Type": contentType || file.mimeType,
       "Content-Length": String(body.length),
       "Cache-Control": "private, max-age=3600",
+      "Content-Disposition": inlineContentDisposition(file.storageKey),
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

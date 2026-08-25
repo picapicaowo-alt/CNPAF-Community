@@ -12,6 +12,7 @@ import {
   promptVersions,
   records,
   recordCustomEntries,
+  recordFieldAnswers,
   recordStructuredSelections,
   recordVersions,
   safetyFlags,
@@ -28,6 +29,7 @@ import { contentHash } from "./crypto";
 import { scanPrivacy } from "./pii";
 import { audit } from "./audit";
 import { loadSourceKindPolicy } from "./source-kind";
+import { getOpenAiRuntimeConfig } from "@/config/server";
 
 const SAFETY_HINT =
   /不给他吃饭|虐待|打人|受伤|abuse|starv|neglect|hit him|hit her|not feeding/i;
@@ -97,13 +99,23 @@ function localAnalyze(
   };
 }
 
-async function callOpenAi(system: string, user: string, model: string): Promise<{ raw: string; parsed: unknown; tokens?: { in: number; out: number } }> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("NO_KEY");
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+export type AiImageInput = {
+  id: string;
+  mimeType: string;
+  body: Buffer;
+};
+
+async function callOpenAi(
+  system: string,
+  user: string,
+  model: string,
+  images: AiImageInput[] = [],
+): Promise<{ raw: string; parsed: unknown; tokens?: { in: number; out: number } }> {
+  const { apiKey, endpoint } = getOpenAiRuntimeConfig();
+  const res = await fetch(endpoint, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -112,7 +124,20 @@ async function callOpenAi(system: string, user: string, model: string): Promise<
       temperature: 0.2,
       messages: [
         { role: "system", content: system },
-        { role: "user", content: user },
+        {
+          role: "user",
+          content: images.length
+            ? [
+                { type: "text", text: user },
+                ...images.map((image) => ({
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${image.mimeType};base64,${image.body.toString("base64")}`,
+                  },
+                })),
+              ]
+            : user,
+        },
       ],
     }),
   });
@@ -194,6 +219,7 @@ export async function executeConfiguredWorkflow(input: {
   localOutput: unknown | (() => unknown | Promise<unknown>);
   createdByUserId?: string | null;
   reportRunId?: string | null;
+  imageInputs?: AiImageInput[];
 }) {
   const existingRun = (await db.select().from(aiRuns).where(eq(aiRuns.idempotencyKey, input.idempotencyKey)).limit(1))[0];
   const configuration = await resolveWorkflowConfiguration(input.workflowVersionId ?? existingRun?.workflowVersionId, input.workflowKey);
@@ -252,7 +278,12 @@ export async function executeConfiguredWorkflow(input: {
     let tokens: { in: number; out: number } | undefined;
     if (configuration.providerKey === "openai") {
       try {
-        const result = await callOpenAi(prompt.systemPrompt, JSON.stringify(input.inputSnapshot), configuration.modelName);
+        const result = await callOpenAi(
+          prompt.systemPrompt,
+          JSON.stringify(input.inputSnapshot),
+          configuration.modelName,
+          input.imageInputs,
+        );
         parsed = validateConfiguredJson(result.parsed, configuration.outputSchema?.schema);
         raw = result.raw;
         tokens = result.tokens;
@@ -411,9 +442,10 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
     : (await db.select().from(promptVersions).where(eq(promptVersions.status, "active")).limit(1))[0];
   if (!prompt) throw new Error("no active prompt version");
   const themes = await db.select().from(canonicalThemes).where(eq(canonicalThemes.status, "active"));
-  const [structuredSelections, customEntries] = await Promise.all([
+  const [structuredSelections, customEntries, fieldAnswers] = await Promise.all([
     db.select().from(recordStructuredSelections).where(eq(recordStructuredSelections.recordVersionId, recordVersionId)),
     db.select({ templateFieldId: recordCustomEntries.templateFieldId, categoryId: recordCustomEntries.categoryId, mappingStatus: recordCustomEntries.mappingStatus, mappedCanonicalOptionId: recordCustomEntries.mappedCanonicalOptionId }).from(recordCustomEntries).where(eq(recordCustomEntries.recordVersionId, recordVersionId)),
+    db.select().from(recordFieldAnswers).where(eq(recordFieldAnswers.recordVersionId, recordVersionId)),
   ]);
   const inputPayload = {
     sourceKind: record.sourceKind,
@@ -422,6 +454,7 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
     quantitative: version.quantitative,
     structuredSelections,
     customEntries,
+    fieldAnswers,
     reviewerInstruction: activeRun.reviewerInstruction,
   };
 

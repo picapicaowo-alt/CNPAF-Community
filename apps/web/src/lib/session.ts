@@ -4,6 +4,7 @@ import { sessions, users } from "@cnpaf/db/schema";
 import type { UserRole } from "@cnpaf/shared";
 import { db } from "./db";
 import { randomToken, sha256 } from "./crypto";
+import { useSecureSessionCookies } from "@/config/server";
 
 export const SESSION_COOKIE = "cnpaf_session";
 
@@ -15,6 +16,8 @@ export type SessionUser = {
   organizationId: string | null;
   locale: string;
   mustChangePassword: boolean;
+  passwordChangedAt: Date | null;
+  avatarUrl: string | null;
 };
 
 export async function createSession(userId: string): Promise<string> {
@@ -29,7 +32,7 @@ export async function createSession(userId: string): Promise<string> {
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureSessionCookies(),
     path: "/",
     expires: expiresAt,
   });
@@ -60,6 +63,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       locale: users.locale,
       status: users.status,
       mustChangePassword: users.mustChangePassword,
+      passwordChangedAt: users.passwordChangedAt,
+      avatarStorageKey: users.avatarStorageKey,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -75,6 +80,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     organizationId: row.organizationId,
     locale: row.locale,
     mustChangePassword: row.mustChangePassword,
+    passwordChangedAt: row.passwordChangedAt,
+    avatarUrl: row.avatarStorageKey ? "/api/v1/account/avatar" : null,
   };
 }
 

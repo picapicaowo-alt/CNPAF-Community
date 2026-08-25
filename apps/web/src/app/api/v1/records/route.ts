@@ -1,15 +1,52 @@
 import { after } from "next/server";
 import { NextResponse } from "next/server";
-import { draftBodySchema, submitBodySchema } from "@cnpaf/shared";
+import {
+  draftBodySchema,
+  reportFiltersSchema,
+  submitBodySchema,
+} from "@cnpaf/shared";
 import { requirePermission, requireUser, jsonError } from "@/lib/http";
 import { listRecordsForUser, submitRecord, upsertDraft } from "@/lib/records";
 import { processJobs } from "@/lib/jobs";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 
-export async function GET() {
+const recordFilterArrayKeys = [
+  "organizationIds",
+  "programIds",
+  "siteIds",
+  "locationIds",
+  "serviceTypeKeys",
+  "populationKeys",
+  "sourceOrigins",
+  "templateVersionIds",
+  "formVersionIds",
+  "collectorIds",
+  "reviewStatuses",
+  "researchUseStatuses",
+  "findingTypes",
+  "themeOrConcernIds",
+] as const;
+
+export async function GET(req: Request) {
   const { user, error } = await requireUser();
   if (error) return error;
-  const rows = await listRecordsForUser(user!);
+  const params = new URL(req.url).searchParams;
+  const rawFilters: Record<string, string | string[]> = {};
+  for (const key of ["dateFrom", "dateTo"] as const) {
+    const value = params.get(key);
+    if (value) rawFilters[key] = value;
+  }
+  for (const key of recordFilterArrayKeys) {
+    const values = params.getAll(key).filter(Boolean);
+    if (values.length) rawFilters[key] = values;
+  }
+  const parsed = reportFiltersSchema.safeParse(rawFilters);
+  if (!parsed.success)
+    return jsonError(parsed.error.issues[0]?.message ?? "Invalid record filters", 400);
+  const rows = await listRecordsForUser(
+    user!,
+    Object.keys(rawFilters).length ? parsed.data : undefined,
+  );
   return NextResponse.json({ records: rows });
 }
 

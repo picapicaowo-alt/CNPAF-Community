@@ -7,6 +7,8 @@ import {
   auditEvents,
   concerns,
   findingReviews,
+  notifications,
+  recordFieldAnswers,
   records,
   recordVersions,
   reviewDecisions,
@@ -47,6 +49,15 @@ export async function applyReview(user: SessionUser, recordId: string, body: Rev
     }
     const version = (await tx.select().from(recordVersions).where(eq(recordVersions.id, record.headVersionId)).limit(1))[0];
     if (!version) throw new ApiError("NOT_FOUND", "Record version not found", 404);
+    if (body.correctionFieldIds.length) {
+      const correctionFields = await tx.select({ id: recordFieldAnswers.templateFieldId })
+        .from(recordFieldAnswers)
+        .where(eq(recordFieldAnswers.recordVersionId, version.id));
+      const availableIds = new Set(correctionFields.map((field) => field.id));
+      const invalidIds = body.correctionFieldIds.filter((id) => !availableIds.has(id));
+      if (invalidIds.length)
+        throw new ApiError("BAD_REQUEST", "Correction fields do not belong to the reviewed record version", 400, { invalidIds });
+    }
 
     const [decision] = await tx.insert(reviewDecisions).values({
       recordId,
@@ -54,6 +65,7 @@ export async function applyReview(user: SessionUser, recordId: string, body: Rev
       reviewerId: user.id,
       action: body.action,
       annotation: body.annotation ?? null,
+      correctionFieldIds: body.correctionFieldIds,
       findingDecisions: body.findings,
     }).returning();
 
@@ -70,6 +82,15 @@ export async function applyReview(user: SessionUser, recordId: string, body: Rev
     const writeAudit = (values: typeof auditEvents.$inferInsert) => tx.insert(auditEvents).values(values);
     if (body.action === "needs_completion") {
       await tx.update(records).set({ reviewStatus: "needs_completion", recordStatus: "draft", updatedAt: new Date() }).where(eq(records.id, recordId));
+      await tx.insert(notifications).values({
+        userId: record.createdById,
+        kindKey: "record_needs_completion",
+        title: "Submission needs an update",
+        body: body.annotation!.trim(),
+        entityType: "record",
+        entityId: record.id,
+        metadata: { taskId: record.taskId, recordVersionId: version.id },
+      });
       await audit({ actorId: user.id, action: "reject", entityType: "record", entityId: recordId, metadata: { decisionId: decision.id } }, writeAudit);
       return { decision };
     }
@@ -135,6 +156,15 @@ export async function applyReview(user: SessionUser, recordId: string, body: Rev
       ...(body.researchUseStatus ? { researchUseStatus: body.researchUseStatus } : {}),
       updatedAt: new Date(),
     }).where(eq(records.id, recordId));
+    await tx.insert(notifications).values({
+      userId: record.createdById,
+      kindKey: "record_approved",
+      title: "Submission approved",
+      body: body.annotation?.trim() || "Your submission passed human review.",
+      entityType: "record",
+      entityId: record.id,
+      metadata: { taskId: record.taskId, recordVersionId: version.id },
+    });
     await audit({ actorId: user.id, action: "approve", entityType: "record", entityId: recordId, metadata: { decisionId: decision.id } }, writeAudit);
     return { decision };
   });

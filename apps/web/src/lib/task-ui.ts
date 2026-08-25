@@ -10,6 +10,8 @@ export type TaskAssignment = {
   declinedAt?: string | null;
   declineReason?: string | null;
   recordId?: string | null;
+  recordStatus?: string | null;
+  recordReviewStatus?: string | null;
 };
 
 export type TaskSummary = {
@@ -43,11 +45,12 @@ export type TaskSummary = {
     nameZh: string;
     versionNumber: number;
   };
+  assignments: TaskAssignment[];
   myAssignment: TaskAssignment | null;
 };
 
 export type TaskDetailResponse = {
-  task: Omit<TaskSummary, "myAssignment">;
+  task: Omit<TaskSummary, "myAssignment" | "assignments">;
   myAssignment: TaskAssignment | null;
   assignments: TaskAssignment[];
 };
@@ -79,4 +82,23 @@ export function taskTone(
   if (["declined", "cancelled"].includes(status)) return "red";
   if (["assigned", "draft"].includes(status)) return "amber";
   return "neutral";
+}
+
+const TASK_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
+  all: { zh: "全部", en: "All" },
+  draft: { zh: "草稿", en: "Draft" },
+  open: { zh: "开放", en: "Open" },
+  closed: { zh: "已关闭", en: "Closed" },
+  archived: { zh: "已归档", en: "Archived" },
+  assigned: { zh: "已分配", en: "Assigned" },
+  in_progress: { zh: "进行中", en: "In progress" },
+  completed: { zh: "已完成", en: "Completed" },
+  declined: { zh: "已拒绝", en: "Declined" },
+  cancelled: { zh: "已取消", en: "Cancelled" },
+};
+
+export function taskStatusLabel(status: string, locale: "zh" | "en") {
+  return (
+    TASK_STATUS_LABELS[status]?.[locale] ?? status.replaceAll("_", " ")
+  );
 }

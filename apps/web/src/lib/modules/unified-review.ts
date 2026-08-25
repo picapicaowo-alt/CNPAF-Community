@@ -5,6 +5,7 @@ import {
   findingReviews,
   privacyFlags,
   recordCustomEntries,
+  recordFieldAnswers,
   records,
   recordVersions,
   safetyFlags,
@@ -25,6 +26,18 @@ type UnifiedDecision = z.infer<typeof unifiedReviewDecisionBodySchema>;
 
 function resource(record: typeof records.$inferSelect) {
   return { organizationId: record.organizationId, programId: record.programId, siteId: record.siteId, serviceKey: record.sourceKind, researchUse: record.researchUseStatus };
+}
+
+async function loadFieldAnswers(recordVersionId?: string | null) {
+  if (!recordVersionId) return [];
+  return db
+    .select()
+    .from(recordFieldAnswers)
+    .where(eq(recordFieldAnswers.recordVersionId, recordVersionId))
+    .orderBy(
+      recordFieldAnswers.sectionSortOrder,
+      recordFieldAnswers.fieldSortOrder,
+    );
 }
 
 export async function getUnifiedReviewInbox(userId: string) {
@@ -87,7 +100,12 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     summary: "Privacy review required",
     createdAt: privacyRow.flag.createdAt,
     scope: resource(privacyRow.record),
-    detail: { flag: privacyRow.flag, record: privacyRow.record, recordVersion: privacyRow.version },
+    detail: {
+      flag: privacyRow.flag,
+      record: privacyRow.record,
+      recordVersion: privacyRow.version,
+      fieldAnswers: await loadFieldAnswers(privacyRow.version.id),
+    },
   };
   if (safetyRow && can("safety.view", safetyRow.record)) return {
     id: safetyRow.flag.id,
@@ -98,7 +116,11 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     summary: safetyRow.flag.statement,
     createdAt: safetyRow.flag.createdAt,
     scope: resource(safetyRow.record),
-    detail: { flag: safetyRow.flag, record: safetyRow.record },
+    detail: {
+      flag: safetyRow.flag,
+      record: safetyRow.record,
+      fieldAnswers: await loadFieldAnswers(safetyRow.flag.recordVersionId),
+    },
   };
   if (recordRow && can("records.review", recordRow.record)) return {
     id: recordRow.record.id,
@@ -109,7 +131,11 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     summary: `${recordRow.record.sourceKind} record`,
     createdAt: recordRow.record.updatedAt,
     scope: resource(recordRow.record),
-    detail: { record: recordRow.record, recordVersion: recordRow.version },
+    detail: {
+      record: recordRow.record,
+      recordVersion: recordRow.version,
+      fieldAnswers: await loadFieldAnswers(recordRow.version.id),
+    },
   };
   if (findingRow && (can("ai.review_findings", findingRow.record) || can("findings.review", findingRow.record))) return {
     id: findingRow.finding.id,
@@ -120,7 +146,12 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     summary: findingRow.finding.statement,
     createdAt: findingRow.finding.createdAt,
     scope: resource(findingRow.record),
-    detail: { finding: findingRow.finding, aiRun: findingRow.run, record: findingRow.record },
+    detail: {
+      finding: findingRow.finding,
+      aiRun: findingRow.run,
+      record: findingRow.record,
+      fieldAnswers: await loadFieldAnswers(findingRow.run.recordVersionId),
+    },
   };
   if (customRow && can("taxonomy.approve_mapping", customRow.record)) return {
     id: customRow.entry.id,
@@ -131,7 +162,15 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     summary: customRow.entry.customText,
     createdAt: customRow.entry.createdAt,
     scope: resource(customRow.record),
-    detail: { customEntry: customRow.entry, record: customRow.record, recordVersion: { id: customRow.version.id, versionNumber: customRow.version.versionNumber } },
+    detail: {
+      customEntry: customRow.entry,
+      record: customRow.record,
+      recordVersion: {
+        id: customRow.version.id,
+        versionNumber: customRow.version.versionNumber,
+      },
+      fieldAnswers: await loadFieldAnswers(customRow.version.id),
+    },
   };
   throw new ApiError("NOT_FOUND", "Review item not found", 404);
 }
