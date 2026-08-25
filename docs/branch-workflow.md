@@ -1,25 +1,32 @@
-# Branch workflow (one repo, two lines)
+# Branch workflow: one repo, four module branches
 
-Repo: https://github.com/picapicaowo-alt/CNPAF-Community
+Repository: `picapicaowo-alt/CNPAF-Community`.
 
-We use **two long-lived branches** in this monorepo—not two GitHub repos.
+CNPAF Collect uses four long-lived branches in the same Git repository:
 
-| Branch | Owns | Typical paths |
-|--------|------|----------------|
-| `cursor/backend` | API, data layer, server libs, infra | `packages/db`, `packages/shared`, `apps/web/src/app/api`, `apps/web/src/lib`, `docker-compose.yml`, `Dockerfile`, `.env.example` |
-| `cursor/frontend` | PWA UI, client behavior | `apps/web/src/app` (pages), `apps/web/src/components`, `apps/web/public`, `apps/web/src/app/globals.css`, `apps/web/src/lib/offline.ts` |
+| Branch | Work lane |
+| --- | --- |
+| `cursor/database` | Schema, migrations, seed and database tests |
+| `cursor/backend` | API, contracts, authorization and domain services |
+| `cursor/ai` | AI workflow/provider/review/provenance code |
+| `cursor/frontend` | React/Next UI, PWA and browser feature clients |
 
-`packages/shared` holds Zod contracts and i18n used by both sides—coordinate changes that touch API shapes.
+The complete path ownership, dependency order and cross-module rules are the
+canonical policy in [repository-strategy.md](repository-strategy.md).
 
-## Daily work
+## Daily workflow
 
-- Backend fixes and API changes → commit on `cursor/backend`
-- Pages, forms, ops UI → commit on `cursor/frontend`
-- Merge both into `main` when a slice is ready to integrate or deploy
+1. Start from the owning module branch.
+2. Pull the latest upstream dependency branch before changing a shared seam.
+3. Keep shared contracts, database migration and consuming code in explicit,
+   reviewable commits.
+4. Run `npm run check` on every branch and `npm run build` on the integrated
+   frontend line.
+5. Merge the verified integrated result to `main` for release.
 
 ## Running locally
 
-Still one Next.js app (UI + `/api/v1` in the same process):
+All branches use the same local stack:
 
 ```bash
 docker compose up -d postgres
@@ -28,8 +35,5 @@ npm run db:migrate && npm run db:seed
 npm run dev
 ```
 
-Open http://localhost:3000
-
-## Cross-branch API calls
-
-While developing on either branch, the UI uses relative paths (`/api/v1/...`) against the same origin. If the API is hosted separately later, set `NEXT_PUBLIC_API_URL` on the frontend branch.
+Open http://localhost:3000. The frontend uses same-origin `/api/v1` contracts;
+branch separation never changes runtime URLs.

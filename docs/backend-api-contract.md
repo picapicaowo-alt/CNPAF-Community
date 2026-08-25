@@ -75,6 +75,8 @@ Normalized scope response:
 | POST | `/admin/users/:id/reset-password` | `people.reset_password` | `resetPasswordBodySchema` |
 | GET/POST | `/admin/users/:id/affiliations` | `people.view` / `people.edit_affiliation` | `affiliationBodySchema` on POST |
 | DELETE | `/admin/users/:id/affiliations/:affiliationId` | `people.edit_affiliation` | — |
+| GET/POST | `/people-groups` | `people.view` / `people.manage_groups` | `personGroupCreateBodySchema` on POST; creates the group and selected members atomically |
+| PATCH | `/people-groups/:id` | `people.manage_groups` | `personGroupUpdateBodySchema`; updates group details and, when supplied, replaces `userIds` atomically |
 | GET/POST | `/admin/roles` | `roles.view` / `roles.manage` | `roleCreateBodySchema` on POST |
 | PATCH | `/admin/roles/:id` | `roles.manage` | `roleUpdateBodySchema` |
 | GET | `/admin/permissions` | `roles.view` | — |
@@ -83,7 +85,8 @@ Normalized scope response:
 Access replacement is atomic and audited with before/after state. Role/user access changes and administrator mutations to registries, templates, report templates, and AI configuration create `AuditEvent` rows with the actor and affected entity. Explicit deny wins over explicit allow and role grants. Role assignment dates and override expiry are enforced by the authorization service.
 
 `GET /admin/users` returns frontend-ready people cards: safe user profile,
-active roles, normalized access scopes, affiliations, and program memberships.
+active roles, normalized access scopes, affiliations, reusable people groups,
+and program memberships.
 It never returns password hashes, session tokens, or temporary passwords. Manual
 account creation and reset responses return a temporary password exactly once;
 the caller must deliver it through an approved channel.
@@ -94,9 +97,10 @@ the caller must deliver it through an approved channel.
 |---|---|---|---|
 | GET/POST | `/programs` | scoped `programs.view` / `programs.manage` | `programCreateBodySchema` on POST |
 | GET/PATCH | `/programs/:programId` | scoped `programs.view` / `programs.manage` | `programUpdateBodySchema` on PATCH |
-| POST | `/programs/:programId/memberships` | `programs.manage_membership` | `programMembershipBodySchema` |
+| POST | `/programs/:programId/memberships` | `programs.manage_membership` | `programMembershipRequestBodySchema`; accepts one `userId` or a validated `userIds[]` batch, written atomically |
 | DELETE | `/programs/:programId/memberships/:membershipId` | `programs.manage_membership` | deactivates the membership |
 | GET/POST | `/tasks` | assigned or scoped `tasks.view` / `tasks.create` | `taskCreateBodySchema` on POST |
+| POST | `/tasks/bulk` | scoped `tasks.assign` or `tasks.edit` per action | `taskBulkActionBodySchema`; validates the full selection before a transactional assign/status/reminder operation |
 | GET/PATCH | `/tasks/:taskId` | assignee or scoped `tasks.view` / `tasks.edit` | human-readable program/location/form DTO |
 | POST | `/tasks/:taskId/assignments` | `tasks.assign` | `taskAssignmentBodySchema` |
 | PATCH | `/tasks/:taskId/assignments/:assignmentId` | assignee or `tasks.edit` | `taskAssignmentTransitionBodySchema` |
@@ -107,6 +111,7 @@ the caller must deliver it through an approved channel.
 | GET | `/tasks/today` | authenticated assignee | currently actionable assignments |
 | GET | `/tasks/:taskId/package` | assignee or scoped `tasks.view` | pinned task, assignment, form version, org-visible registry items, sync contract, content hash |
 | GET/POST | `/locations?q=&latitude=&longitude=` | scoped `locations.view` / `locations.manage` | fuzzy/alias/proximity search; `locationCreateBodySchema` on POST |
+| GET/PATCH | `/locations/:locationId` | scoped `locations.view` / `locations.manage` | fetch or update a location; PATCH also handles approve/archive status transitions |
 | POST | `/locations/:locationId/aliases` | `locations.manage` | `locationAliasBodySchema` |
 | POST | `/locations/:locationId/merge` | `locations.manage` | `locationMergeBodySchema` |
 | GET | `/notifications` | `notifications.view` | caller's persisted in-app notifications |
@@ -133,12 +138,13 @@ together.
 | Method | Path | Permission | Request contract |
 |---|---|---|---|
 | GET | `/config/registries/:registryKey` | authenticated | optional `?status=active` |
-| POST | `/config/registries/:registryKey/items` | `services.manage` | `registryItemBodySchema` |
-| PATCH | `/config/registries/:registryKey/items/:id` | `services.manage` | `registryItemUpdateBodySchema` |
-| POST | `/config/registries/:registryKey/items/:id/archive` | `services.manage` | — |
+| POST | `/config/registries/:registryKey/items` | `services.manage`; `site_type` also accepts `locations.manage` | `registryItemBodySchema` |
+| PATCH | `/config/registries/:registryKey/items/:id` | `services.manage`; `site_type` also accepts `locations.manage` | `registryItemUpdateBodySchema` |
+| POST | `/config/registries/:registryKey/items/:id/archive` | `services.manage`; `site_type` also accepts `locations.manage` | — |
 | GET/POST | `/templates` | `templates.view` / `templates.create` | `templateCreateBodySchema` |
 | GET | `/templates/:id` | scoped `templates.view` | — |
 | POST | `/templates/:id/versions` | scoped `templates.edit` | `templateVersionCreateBodySchema` |
+| GET | `/templates/:id/versions/compare` | scoped `templates.view` | compares stable Section, field, and option Keys using `fromVersionId` and `toVersionId` |
 | GET/PATCH | `/template-versions/:id` | scoped `templates.view` / `templates.edit` | `templateVersionUpdateBodySchema` |
 | POST | `/template-versions/:id/publish` | scoped `templates.publish` | — |
 | POST | `/template-versions/:id/sections` | scoped `templates.edit` | `templateSectionBodySchema` |
@@ -149,6 +155,10 @@ together.
 
 Registry updates to active items create a new version and archive the old item. Published template version rows and all of their section/field/option children are protected by database triggers.
 
+Draft form structure is managed through `PATCH/DELETE /template-sections/:id` and `PATCH/DELETE /template-fields/:id`. Section, field, and option reorder endpoints accept the complete ordered ID list and update it atomically. Publishing validates non-empty sections, active field types, and at least one active option for every choice field before freezing the version.
+
+Quick capture uses `GET /quick-capture/forms` and `GET /quick-capture/forms/:versionId/package`. Both require `records.create`, enforce form scope, and expose only the current published version of forms whose version configuration explicitly enables `allowQuickCapture`.
+
 ### Records, privacy, safety, and custom mappings
 
 | Method | Path | Permission | Notes |
@@ -157,6 +167,8 @@ Registry updates to active items create a new version and archive the old item. 
 | POST | `/records` | `records.create` | draft upsert; `draftBodySchema` |
 | PUT | `/records` | `records.submit` | immutable snapshot; `submitBodySchema` |
 | GET | `/records/:id` | scoped record permission | approved-evidence mode never returns raw versions or attachments |
+| POST | `/records/:id/attachments` | scoped `records.edit_own` | draft versions only; bounded image/audio/video/document upload with normalized media kind |
+| GET | `/records/:id/attachments/:attachmentId` | scoped record permission | private inline media response for the current Record Version |
 | POST | `/records/:id/review-decisions` | scoped `records.review` | `reviewBodySchema` |
 | GET | `/review/inbox` | scoped `review.view` plus item capability | unified summaries; privacy-gated records only |
 | GET | `/review/items/:id` | scoped `review.view` plus item capability | type-specific detail without client-side queue dispatch |
@@ -184,6 +196,14 @@ The same draft shape is used by `POST /records` and `PUT /records`; submit addit
   "sourceKind": "configured_source_key",
   "siteId": "uuid",
   "templateVersionId": "uuid",
+  "fieldAnswers": [
+    {
+      "templateFieldId": "uuid",
+      "value": ["stable-option-key"],
+      "missingReasonKey": null,
+      "customText": null
+    }
+  ],
   "occurredAt": "2026-08-23T10:30:00-07:00",
   "structuredSelections": [
     { "templateFieldId": "uuid", "optionId": "uuid", "value": {} }
@@ -198,6 +218,15 @@ The same draft shape is used by `POST /records` and `PUT /records`; submit addit
   "piiAttestation": true
 }
 ```
+
+`fieldAnswers` is the canonical form-answer payload. The server validates each typed value against the pinned published field, then snapshots the form version, Section/field keys, field type, bilingual labels, original value, missing reason, and custom text in `record_field_answers`. Legacy `qualitative`, `quantitative`, and selection tables remain populated during the compatibility period.
+
+Returning a record uses `reviewBodySchema` with `action: "needs_completion"`,
+a required human-readable `annotation`, and optional `correctionFieldIds`. The
+field IDs are checked against the exact reviewed record version. The collector
+receives an in-app notification; reopening the task restores the same client
+record, pinned form version, and field answers, then creates a new immutable
+record version when resubmitted.
 
 ### AI classification and configuration
 
@@ -271,7 +300,7 @@ is an explicit human section update and is audited.
 
 `reportRunBodySchema.filters` and `exportJobBodySchema.filters` accept `dateFrom`, `dateTo`, `organizationIds`, `siteIds`, `serviceTypeKeys`, `populationKeys`, `sourceOrigins`, `templateVersionIds`, `findingTypes`, and `themeOrConcernIds`. Dates filter by `occurredAt`, then `submittedAt`, then evidence creation time. Reports store the exact filters, evidence policy, evidence IDs, distinct record/site/visit units by origin, and workflow/prompt/provider/model/output-schema provenance. `approvedOnly` is always `true`.
 
-Ask Collect performs permission, requested-scope, privacy, and research-use filtering before relevance ranking. Every returned statement has a structured `ApprovedFinding` citation. Saved answers are redacted if any cited source later becomes inaccessible.
+Ask Collect performs permission, requested-scope, privacy, and research-use filtering before relevance ranking. Every returned statement has a structured approved source citation. A Dataset conversation may opt into at most six bounded, supported images only after a human privacy-review attestation; audio, video, and documents are not sent to the current model. Saved answers are redacted if any cited finding or attachment later becomes inaccessible.
 
 `GET/POST/PATCH /jobs` is an internal worker administration endpoint protected by `settings.manage`; AI reviewers use the scoped `/ai/runs` endpoints instead.
 
@@ -279,18 +308,27 @@ Ask Collect performs permission, requested-scope, privacy, and research-use filt
 
 | Method | Path | Permission | Request contract / behavior |
 |---|---|---|---|
+| GET | `/records` | scoped Record visibility | canonical evidence query filters narrow the returned Records list |
+| GET | `/records/options` | authenticated; options limited to visible Records | Program, Location, Form Version, Collector, status, Research Use and advanced evidence filter labels; independent of `datasets.create` |
 | POST | `/records/:id/download` | scoped `records.download` | `dataDownloadBodySchema`; current approved version only; JSON/CSV/PDF |
 | POST | `/records/:id/share` | scoped `records.share` | `recordShareBodySchema`; creates an immutable one-record dataset version |
 | GET/POST | `/datasets` | scoped `datasets.download` or `datasets.create` / `datasets.create` | `datasetCreateBodySchema` on POST |
-| GET | `/datasets/:datasetId` | scoped `datasets.download` | dataset and immutable version history |
+| GET | `/datasets/:datasetId?versionId=` | scoped `datasets.download` | dataset/version history, selected frozen Record Versions, controlled shares and access logs allowed to the actor |
+| GET | `/datasets/:datasetId/attachments/:attachmentId?versionId=` | scoped `datasets.download` plus current frozen-record access | private media response only when `media_attachments` is included in that exact Dataset Version |
 | POST | `/datasets/:datasetId/refresh` | `datasets.refresh` | `datasetRefreshBodySchema`; creates the next frozen version |
 | POST | `/datasets/:datasetId/download` | `datasets.download` plus current record access | `dataDownloadBodySchema`; JSON/CSV |
 | POST | `/datasets/:datasetId/share` | `datasets.share` plus current record access | `datasetShareBodySchema`; returns the bearer token once |
 | POST | `/dataset-shares/:shareId/revoke` | scoped `datasets.share` | atomically revokes an active grant |
+| POST | `/datasets/:datasetId/archive` | scoped `datasets.archive` | reason required; retains versions and atomically revokes every active share |
 | GET | `/shared-datasets/:token` | authenticated, scoped recipient | re-checks share scope, expiry, dataset permission, and every frozen record |
 
+`POST /reports` accepts one optional `sourceDatasetVersionId`. When present it
+must be a ready active `approved_evidence` Dataset Version in the exact same
+organization/program scope. The resulting Report Version stores that foreign
+key and approved-finding citations with frozen Record Version provenance.
+
 A dataset version freezes exact `recordId + recordVersionId` pairs, the complete
-selection query, field policy, record count, and content hash. Refresh never
+selection query, field policy, record count, media manifest with per-file SHA-256 when included, and content hash. Submitted Record Versions reject later attachment uploads, so a frozen media manifest cannot drift. Refresh never
 mutates an earlier version. Every declared filter—date, organization, program,
 location, service/source type, population, source origin, form version,
 collector, review status, research-use status, finding type, and canonical
