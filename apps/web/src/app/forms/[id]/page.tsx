@@ -644,6 +644,27 @@ export default function FormEditorPage() {
       setBusy(false);
     }
   }
+  async function unpublish() {
+    if (
+      !template?.currentPublishedVersionId ||
+      !confirm(
+        locale === "zh"
+          ? "撤回当前发布版本并返回草稿？现有任务和历史记录仍保留原版本。"
+          : "Unpublish the current version and return to draft? Existing tasks and records keep their pinned version.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/templates/${id}/unpublish`, { method: "POST" });
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function setQuickCapture(enabled: boolean) {
     if (!currentVersion) return;
     setBusy(true);
@@ -745,6 +766,20 @@ export default function FormEditorPage() {
                 {locale === "zh" ? "发布" : "Publish"}
               </button>
             ) : null}
+            {!editable &&
+            currentVersion?.id === template?.currentPublishedVersionId &&
+            permissions.includes("templates.publish") &&
+            permissions.includes("templates.edit") ? (
+              <button
+                className="button button-secondary"
+                disabled={busy}
+                onClick={unpublish}
+                type="button"
+              >
+                <AppIcon name="unpublish" />
+                {locale === "zh" ? "撤回发布" : "Unpublish"}
+              </button>
+            ) : null}
           </>
         }
       />
@@ -753,8 +788,8 @@ export default function FormEditorPage() {
         <div className="feedback feedback-info">
           <span>
             {locale === "zh"
-              ? "当前是只读的已发布版本。"
-              : "This published version is read-only."}
+              ? "当前是只读的已发布版本。你可以创建并行草稿，或撤回发布后继续修改。"
+              : "This published version is read-only. Create a parallel draft, or unpublish it before continuing."}
           </span>
           {permissions.includes("templates.edit") ? (
             <button

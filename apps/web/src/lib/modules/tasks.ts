@@ -205,7 +205,16 @@ export async function createTask(actorId: string, input: TaskCreate, requestId?:
       .where(eq(templateVersions.id, input.templateVersionId)).limit(1).then((rows) => rows[0]),
   ]);
   if (!program || program.status !== "active") throw new ApiError("NOT_FOUND", "Active program not found", 404);
-  if (!form || form.version.status !== "published") throw new ApiError("BAD_REQUEST", "Task requires a published form version", 400);
+  if (
+    !form ||
+    form.version.status !== "published" ||
+    form.template.currentPublishedVersionId !== form.version.id
+  )
+    throw new ApiError(
+      "BAD_REQUEST",
+      "Task requires the form's current published version",
+      400,
+    );
   if (form.template.organizationId && form.template.organizationId !== program.organizationId) throw new ApiError("BAD_REQUEST", "Task form belongs to another organization", 400);
   await requireActiveRegistryItem("task_type", input.taskTypeKey, program.organizationId);
   await assertSiteInOrganization(input.siteId, program.organizationId);

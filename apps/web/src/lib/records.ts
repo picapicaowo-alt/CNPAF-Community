@@ -31,7 +31,6 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { ApiError } from "./api-error";
 import { contentHash } from "./crypto";
-import { enqueueAnalyze } from "./jobs";
 import { scanPrivacy } from "./pii";
 import type { SessionUser } from "./session";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
@@ -445,7 +444,7 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
     attribution: body.attribution ?? {},
     policy,
   });
-  const aiStatus = scan.status === "flagged" ? "skipped_privacy" : "queued";
+  const aiStatus = scan.status === "flagged" ? "skipped_privacy" : "not_required";
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from records where id = ${record.id} for update`);
     const lockedRecord = (await tx.select().from(records).where(eq(records.id, record.id)).limit(1))[0];
@@ -536,7 +535,6 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
     return { record: submittedRecord, version, duplicate: false, privacy: scan };
   });
 
-  if (!result.duplicate && scan.status !== "flagged") await enqueueAnalyze(result.version.id);
   return result;
 }
 

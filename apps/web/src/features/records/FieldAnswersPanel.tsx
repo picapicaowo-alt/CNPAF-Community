@@ -1,4 +1,5 @@
 import type { RecordFieldAnswer } from "./types";
+import { AppIcon } from "@/components/AppIcon";
 
 type Props = {
   answers: RecordFieldAnswer[];
@@ -31,8 +32,18 @@ export function FieldAnswersPanel({
   if (!answers.length) return null;
 
   return (
-    <section className="card stack">
-      <h2>{title ?? (locale === "zh" ? "表单回答" : "Form answers")}</h2>
+    <section className="card stack field-answers-card">
+      <div className="card-section-heading">
+        <span className="card-section-icon">
+          <AppIcon name="forms" />
+        </span>
+        <div>
+          <span className="eyebrow">
+            {locale === "zh" ? "原始提交" : "Original submission"}
+          </span>
+          <h2>{title ?? (locale === "zh" ? "表单回答" : "Form answers")}</h2>
+        </div>
+      </div>
       {[...sections.entries()].map(([sectionKey, sectionAnswers]) => {
         const section = sectionAnswers[0];
         return (

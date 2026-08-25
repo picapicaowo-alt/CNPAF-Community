@@ -345,6 +345,156 @@ export async function archiveTemplate(templateId: string) {
   return template;
 }
 
+export async function duplicateTemplate(
+  templateId: string,
+  actorId: string,
+  purpose: "form" | "template" = "form",
+) {
+  const bundle = await getTemplateBundle(templateId);
+  if (!bundle) throw new Error("Template not found");
+  const sourceVersion =
+    bundle.versions.find((version) => version.status === "draft") ??
+    bundle.versions.find(
+      (version) => version.id === bundle.template.currentPublishedVersionId,
+    ) ??
+    bundle.versions[0];
+  if (!sourceVersion) throw new Error("Template has no version to copy");
+  const source = await getTemplateVersionBundle(sourceVersion.id);
+  if (!source) throw new Error("Template version not found");
+  const suffixEn = purpose === "template" ? " (Template)" : " (Copy)";
+  const suffixZh = purpose === "template" ? "（模板）" : "（副本）";
+
+  return db.transaction(async (tx) => {
+    const [template] = await tx
+      .insert(templates)
+      .values({
+        key: copyKey(bundle.template.key),
+        templateTypeKey: bundle.template.templateTypeKey,
+        organizationId: bundle.template.organizationId,
+        status: "draft",
+        createdById: actorId,
+      })
+      .returning();
+    const [version] = await tx
+      .insert(templateVersions)
+      .values({
+        templateId: template.id,
+        version: 1,
+        status: "draft",
+        nameEn: `${source.version.nameEn}${suffixEn}`.slice(0, 240),
+        nameZh: `${source.version.nameZh}${suffixZh}`.slice(0, 240),
+        descriptionEn: source.version.descriptionEn,
+        descriptionZh: source.version.descriptionZh,
+        configuration: {
+          ...withoutReleaseNotes(
+            source.version.configuration as Record<string, unknown>,
+          ),
+          duplicatedFromTemplateId: templateId,
+          duplicatedFromVersionId: source.version.id,
+          savedAsReusableTemplate: purpose === "template",
+        },
+        createdById: actorId,
+      })
+      .returning();
+
+    const sectionMap = new Map<string, string>();
+    for (const section of source.sections) {
+      const [created] = await tx
+        .insert(templateSections)
+        .values({
+          templateVersionId: version.id,
+          key: section.key,
+          labelEn: section.labelEn,
+          labelZh: section.labelZh,
+          helpTextEn: section.helpTextEn,
+          helpTextZh: section.helpTextZh,
+          sortOrder: section.sortOrder,
+          configuration: section.configuration,
+        })
+        .returning();
+      sectionMap.set(section.id, created.id);
+    }
+    const fieldMap = new Map<string, string>();
+    for (const field of source.fields) {
+      const templateSectionId = sectionMap.get(field.templateSectionId);
+      if (!templateSectionId) continue;
+      const [created] = await tx
+        .insert(templateFields)
+        .values({
+          templateSectionId,
+          key: field.key,
+          fieldTypeKey: field.fieldTypeKey,
+          labelEn: field.labelEn,
+          labelZh: field.labelZh,
+          helpTextEn: field.helpTextEn,
+          helpTextZh: field.helpTextZh,
+          placeholderEn: field.placeholderEn,
+          placeholderZh: field.placeholderZh,
+          required: field.required,
+          allowMissingReason: field.allowMissingReason,
+          allowCustomEntry: field.allowCustomEntry,
+          sortOrder: field.sortOrder,
+          validation: field.validation,
+          visibilityConditions: field.visibilityConditions,
+          branchingLogic: field.branchingLogic,
+          canonicalMapping: field.canonicalMapping,
+          configuration: field.configuration,
+        })
+        .returning();
+      fieldMap.set(field.id, created.id);
+    }
+    for (const option of source.options) {
+      const templateFieldId = fieldMap.get(option.templateFieldId);
+      if (!templateFieldId) continue;
+      await tx.insert(templateFieldOptions).values({
+        templateFieldId,
+        key: option.key,
+        labelEn: option.labelEn,
+        labelZh: option.labelZh,
+        helpTextEn: option.helpTextEn,
+        helpTextZh: option.helpTextZh,
+        status: option.status,
+        sortOrder: option.sortOrder,
+        canonicalRegistryItemId: option.canonicalRegistryItemId,
+        configuration: option.configuration,
+      });
+    }
+    return { template, version };
+  });
+}
+
+export async function unpublishTemplate(templateId: string, actorId: string) {
+  const bundle = await getTemplateBundle(templateId);
+  if (!bundle) throw new Error("Template not found");
+  const published = bundle.versions.find(
+    (version) => version.id === bundle.template.currentPublishedVersionId,
+  );
+  if (!published) throw new Error("Template is not currently published");
+  const draft =
+    bundle.versions.find((version) => version.status === "draft") ??
+    (await createTemplateVersion(
+      templateId,
+      { fromVersionId: published.id },
+      actorId,
+    ));
+  const [template] = await db
+    .update(templates)
+    .set({
+      currentPublishedVersionId: null,
+      status: "draft",
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(templates.id, templateId),
+        eq(templates.currentPublishedVersionId, published.id),
+      ),
+    )
+    .returning();
+  if (!template) throw new Error("Template publication changed; try again");
+  return { template, version: draft, previousPublishedVersion: published };
+}
+
 export async function createTemplateVersion(templateId: string, input: TemplateVersionCreateInput, actorId: string) {
   const source = input.fromVersionId ? await getTemplateVersionBundle(input.fromVersionId) : null;
   const latest = (await db.select().from(templateVersions).where(eq(templateVersions.templateId, templateId)).orderBy(desc(templateVersions.version)).limit(1))[0];

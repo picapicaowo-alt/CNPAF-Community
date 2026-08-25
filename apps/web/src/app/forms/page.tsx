@@ -13,6 +13,7 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { FormPreviewPopover } from "@/features/forms/components/FormPreviewPopover";
 
 type Template = {
   id: string;
@@ -20,6 +21,7 @@ type Template = {
   templateTypeKey: string;
   status: string;
   currentPublishedVersionId?: string | null;
+  updatedAt?: string;
 };
 type Version = {
   id: string;
@@ -32,6 +34,7 @@ type Version = {
   usageCount?: number;
   sectionCount?: number;
   fieldCount?: number;
+  updatedAt?: string;
 };
 type FormCard = { template: Template; versions: Version[] };
 type StatusFilter = "all" | "draft" | "published";
@@ -155,9 +158,53 @@ export default function FormsPage() {
     }
   }
 
+  async function unpublishForm(card: FormCard, name: string) {
+    if (
+      !window.confirm(
+        locale === "zh"
+          ? `撤回“${name}”并返回草稿状态？现有任务与历史记录仍保留原发布版本。`
+          : `Unpublish “${name}” and return it to draft? Existing tasks and records keep their pinned version.`,
+      )
+    )
+      return;
+    setWorkingId(card.template.id);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/templates/${card.template.id}/unpublish`, {
+        method: "POST",
+      });
+      router.push(`/forms/${card.template.id}`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setWorkingId("");
+    }
+  }
+
+  async function duplicateForm(
+    card: FormCard,
+    purpose: "form" | "template",
+  ) {
+    setWorkingId(card.template.id);
+    setError("");
+    try {
+      const result = await apiFetch<{ template: { id: string } }>(
+        `/api/v1/templates/${card.template.id}/duplicate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ purpose }),
+        },
+      );
+      router.push(`/forms/${result.template.id}`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setWorkingId("");
+    }
+  }
+
   const canCreate = permissions.includes("templates.create");
   const canEdit = permissions.includes("templates.edit");
   const canArchive = permissions.includes("templates.archive");
+  const canPublish = permissions.includes("templates.publish");
 
   return (
     <div className="stack forms-manage-page">
@@ -180,7 +227,7 @@ export default function FormsPage() {
       {!loading ? (
         <div className="form-summary-strip">
           <div><strong>{forms.length}</strong><span>{locale === "zh" ? "全部表单" : "All forms"}</span></div>
-          <div><strong>{summary.published}</strong><span>{locale === "zh" ? "正在使用" : "Published"}</span></div>
+          <div><strong>{summary.published}</strong><span>{locale === "zh" ? "已发布" : "Published"}</span></div>
           <div><strong>{summary.drafts}</strong><span>{locale === "zh" ? "待完成草稿" : "Drafts to finish"}</span></div>
         </div>
       ) : null}
@@ -198,7 +245,11 @@ export default function FormsPage() {
             value={query}
           />
         </div>
-        <div className="segmented-control" aria-label="Status filter">
+        <div
+          aria-label={locale === "zh" ? "状态筛选" : "Status filter"}
+          className="segmented-control"
+          role="group"
+        >
           {(["all", "published", "draft"] as const).map((value) => (
             <button
               aria-pressed={statusFilter === value}
@@ -236,9 +287,15 @@ export default function FormsPage() {
                 : display.descriptionEn
               : null;
             return (
-              <article className="card stack-sm form-manage-card" key={template.id}>
-                <div className="row-between">
-                  <StatusPill tone="blue">{template.templateTypeKey}</StatusPill>
+              <article className="card form-manage-card" key={template.id}>
+                <div className="form-card-heading">
+                  <span className="form-icon-tile">
+                    <AppIcon name="forms" />
+                  </span>
+                  <div className="form-card-heading-copy">
+                    <span className="form-card-type">{template.templateTypeKey}</span>
+                    <h2>{name}</h2>
+                  </div>
                   <div className="row form-status-group">
                     {published ? (
                       <StatusPill tone="green">
@@ -253,7 +310,6 @@ export default function FormsPage() {
                   </div>
                 </div>
                 <div className="form-card-copy">
-                  <h2>{name}</h2>
                   <p className="muted">
                     {description ||
                       (locale === "zh" ? "尚未添加表单说明。" : "No description yet.")}
@@ -261,13 +317,19 @@ export default function FormsPage() {
                 </div>
                 <div className="form-card-meta">
                   <span>
+                    <AppIcon name="forms" />
                     {display?.fieldCount ?? 0} {locale === "zh" ? "个问题" : "questions"}
                   </span>
                   {published?.usageCount ? (
                     <span>
+                      <AppIcon name="tasks" />
                       {published.usageCount} {locale === "zh" ? "个任务使用" : "tasks using it"}
                     </span>
                   ) : null}
+                  <span>
+                    <AppIcon name="clock" />
+                    v{display?.version ?? "—"}
+                  </span>
                 </div>
                 <div className="form-card-actions">
                   {canEdit ? (
@@ -281,42 +343,99 @@ export default function FormsPage() {
                         ? locale === "zh"
                           ? "正在准备…"
                           : "Preparing…"
-                        : draft
-                          ? locale === "zh"
-                            ? "继续编辑草稿"
-                            : "Continue draft"
-                          : published
-                            ? locale === "zh"
-                              ? "撤回并编辑"
-                              : "Create editable draft"
-                            : locale === "zh"
-                              ? "编辑表单"
-                              : "Edit form"}
+                        : locale === "zh"
+                          ? draft
+                            ? "继续编辑"
+                            : "编辑"
+                          : draft
+                            ? "Continue editing"
+                            : "Edit"}
                     </button>
                   ) : null}
-                  <Link
-                    className="button button-secondary"
-                    href={`/forms/${template.id}?preview=1`}
-                  >
-                    {locale === "zh" ? "预览" : "Preview"}
-                  </Link>
+                  {display ? (
+                    <FormPreviewPopover
+                      description={description ?? null}
+                      formId={template.id}
+                      locale={locale}
+                      name={name}
+                      versionId={display.id}
+                    />
+                  ) : null}
+                  <details className="action-menu">
+                    <summary
+                      aria-label={locale === "zh" ? "更多表单操作" : "More form actions"}
+                      title={locale === "zh" ? "更多操作" : "More actions"}
+                    >
+                      <AppIcon name="more" />
+                      <span className="sr-only">
+                        {locale === "zh" ? "更多操作" : "More actions"}
+                      </span>
+                    </summary>
+                    <div className="action-menu-panel">
+                      {published && canEdit && canPublish ? (
+                        <button
+                          disabled={workingId === template.id}
+                          onClick={() => void unpublishForm(card, name)}
+                          type="button"
+                        >
+                          <AppIcon name="unpublish" />
+                          <span>
+                            <strong>{locale === "zh" ? "撤回发布" : "Unpublish"}</strong>
+                            <small>
+                              {locale === "zh" ? "返回草稿继续修改" : "Return to an editable draft"}
+                            </small>
+                          </span>
+                        </button>
+                      ) : null}
+                      {canCreate ? (
+                        <>
+                          <button
+                            disabled={workingId === template.id}
+                            onClick={() => void duplicateForm(card, "form")}
+                            type="button"
+                          >
+                            <AppIcon name="copy" />
+                            <span>
+                              <strong>{locale === "zh" ? "复制表单" : "Duplicate form"}</strong>
+                              <small>{locale === "zh" ? "创建独立草稿副本" : "Create a separate draft copy"}</small>
+                            </span>
+                          </button>
+                          <button
+                            disabled={workingId === template.id}
+                            onClick={() => void duplicateForm(card, "template")}
+                            type="button"
+                          >
+                            <AppIcon name="template" />
+                            <span>
+                              <strong>{locale === "zh" ? "另存为模板" : "Save as template"}</strong>
+                              <small>{locale === "zh" ? "创建可复用起点" : "Create a reusable starting point"}</small>
+                            </span>
+                          </button>
+                        </>
+                      ) : null}
+                      {canArchive ? (
+                        <button
+                          className="danger"
+                          disabled={workingId === template.id}
+                          onClick={() => void removeForm(card, name)}
+                          type="button"
+                        >
+                          <AppIcon name="trash" />
+                          <span>
+                            <strong>{locale === "zh" ? "删除表单" : "Delete form"}</strong>
+                            <small>{locale === "zh" ? "历史数据仍会保留" : "Historical data remains available"}</small>
+                          </span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </details>
                 </div>
-                {published && !draft ? (
+                {published ? (
                   <p className="caption form-version-note">
                     {locale === "zh"
-                      ? "撤回会复制为新草稿，现有任务仍使用原发布版。"
-                      : "Editing creates a new draft; current tasks stay on the published version."}
+                      ? "编辑会创建新草稿；撤回发布后，现有任务仍保留原版本。"
+                      : "Editing creates a draft; unpublishing keeps existing tasks pinned to their version."}
                   </p>
-                ) : null}
-                {canArchive ? (
-                  <button
-                    className="form-remove-button"
-                    disabled={workingId === template.id}
-                    onClick={() => void removeForm(card, name)}
-                    type="button"
-                  >
-                    {locale === "zh" ? "删除表单" : "Remove form"}
-                  </button>
                 ) : null}
               </article>
             );

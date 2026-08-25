@@ -94,6 +94,10 @@ export async function queueClassification(input: {
   });
   if (!run) throw new Error("Could not create AI run");
   await enqueueAnalyze(input.recordVersionId, `ai-run:${run.id}`, run.id);
+  await db
+    .update(records)
+    .set({ aiStatus: "queued", updatedAt: new Date() })
+    .where(eq(records.headVersionId, input.recordVersionId));
   await audit({ actorId: input.actorId, action: "ai_run.queued", entityType: "ai_run", entityId: run.id, afterState: run });
   return run;
 }

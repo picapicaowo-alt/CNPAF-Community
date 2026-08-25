@@ -98,7 +98,11 @@ export default function NewTaskPage() {
           );
           const published = bundles.flatMap(({ template, versions }) =>
             versions
-              .filter((version) => version.status === "published")
+              .filter(
+                (version) =>
+                  version.status === "published" &&
+                  version.id === template.currentPublishedVersionId,
+              )
               .map((version) => ({ ...version, templateId: template.id })),
           );
           setPrograms(activePrograms);

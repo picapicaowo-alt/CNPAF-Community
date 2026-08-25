@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { aiFindings, aiRuns, approvedFindings, attachments, safetyFlags } from "@cnpaf/db/schema";
 import { db } from "@/lib/db";
 import { requireUser, jsonError } from "@/lib/http";
@@ -20,7 +20,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
   const headId = bundle.record.headVersionId;
   const run = headId
-    ? (await db.select().from(aiRuns).where(eq(aiRuns.recordVersionId, headId)).limit(1))[0]
+    ? (await db.select().from(aiRuns).where(eq(aiRuns.recordVersionId, headId)).orderBy(desc(aiRuns.createdAt)).limit(1))[0]
     : null;
   const findings = run
     ? await db.select().from(aiFindings).where(eq(aiFindings.aiRunId, run.id))

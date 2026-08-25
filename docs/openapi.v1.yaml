@@ -116,6 +116,10 @@ paths:
     delete: { tags: [Configuration], operationId: archiveTemplate, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /templates/{id}/versions:
     post: { tags: [Configuration], operationId: createTemplateVersion, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /templates/{id}/duplicate:
+    post: { tags: [Configuration], operationId: duplicateTemplate, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /templates/{id}/unpublish:
+    post: { tags: [Configuration], operationId: unpublishTemplate, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /templates/{id}/versions/compare:
     get: { tags: [Configuration], operationId: compareTemplateVersions, parameters: [{ $ref: '#/components/parameters/Id' }, { name: fromVersionId, in: query, required: true, schema: { type: string, format: uuid } }, { name: toVersionId, in: query, required: true, schema: { type: string, format: uuid } }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /template-versions/{id}:

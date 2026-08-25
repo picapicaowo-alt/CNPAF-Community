@@ -10,6 +10,16 @@ import { ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
 type RegistryItem = { key: string; labelEn: string; labelZh: string };
+type LibraryTemplate = {
+  templateId: string;
+  versionId: string;
+  nameEn: string;
+  nameZh: string;
+  descriptionEn?: string | null;
+  descriptionZh?: string | null;
+  fieldCount?: number;
+  sectionCount?: number;
+};
 
 function keyFrom(value: string) {
   return value
@@ -25,6 +35,7 @@ export default function NewFormPage() {
   const router = useRouter();
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [types, setTypes] = useState<RegistryItem[]>([]);
+  const [libraryTemplates, setLibraryTemplates] = useState<LibraryTemplate[]>([]);
   const [step, setStep] = useState<"choose" | "name">("choose");
   const [presetKey, setPresetKey] = useState<string | null>(null);
   const [key, setKey] = useState("");
@@ -43,11 +54,50 @@ export default function NewFormPage() {
       apiFetch<{ items: RegistryItem[] }>(
         "/api/v1/config/registries/template_type?status=active",
       ),
+      apiFetch<{ templates: { id: string }[] }>("/api/v1/templates"),
     ])
-      .then(([me, result]) => {
+      .then(async ([me, result, templateResult]) => {
         setOrganizationId(me.user.organizationId ?? null);
         setTypes(result.items ?? []);
         setType(result.items?.[0]?.key ?? "");
+        const bundles = await Promise.all(
+          (templateResult.templates ?? []).map((template) =>
+            apiFetch<{
+              versions: Array<{
+                id: string;
+                nameEn: string;
+                nameZh: string;
+                descriptionEn?: string | null;
+                descriptionZh?: string | null;
+                configuration?: Record<string, unknown>;
+                fieldCount?: number;
+                sectionCount?: number;
+              }>;
+            }>(`/api/v1/templates/${template.id}`)
+              .then((bundle) => ({ templateId: template.id, ...bundle }))
+              .catch(() => ({ templateId: template.id, versions: [] })),
+          ),
+        );
+        setLibraryTemplates(
+          bundles.flatMap(({ templateId, versions }) =>
+            versions
+              .filter(
+                (version) =>
+                  version.configuration?.savedAsReusableTemplate === true,
+              )
+              .slice(0, 1)
+              .map((version) => ({
+                templateId,
+                versionId: version.id,
+                nameEn: version.nameEn,
+                nameZh: version.nameZh,
+                descriptionEn: version.descriptionEn,
+                descriptionZh: version.descriptionZh,
+                fieldCount: version.fieldCount,
+                sectionCount: version.sectionCount,
+              })),
+          ),
+        );
       })
       .catch((caught) => setError(errorMessage(caught)));
   }, []);
@@ -104,6 +154,24 @@ export default function NewFormPage() {
     }
   }
 
+  async function useLibraryTemplate(templateId: string) {
+    setSaving(true);
+    setError("");
+    try {
+      const result = await apiFetch<{ template: { id: string } }>(
+        `/api/v1/templates/${templateId}/duplicate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ purpose: "form" }),
+        },
+      );
+      router.replace(`/forms/${result.template.id}`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="stack form-create-page">
       <PageHeader
@@ -134,6 +202,55 @@ export default function NewFormPage() {
 
       {step === "choose" ? (
         <section className="stack">
+          {libraryTemplates.length ? (
+            <div className="stack-sm form-library-section">
+              <div className="section-title">
+                <div>
+                  <h2>{locale === "zh" ? "我的模板" : "My templates"}</h2>
+                  <p className="muted">
+                    {locale === "zh"
+                      ? "从团队保存的表单结构创建独立草稿。"
+                      : "Create an independent draft from a form your team saved."}
+                  </p>
+                </div>
+              </div>
+              <div className="preset-grid preset-grid-library">
+                {libraryTemplates.map((template) => (
+                  <button
+                    className="preset-card preset-card-library"
+                    disabled={saving}
+                    key={template.versionId}
+                    onClick={() => void useLibraryTemplate(template.templateId)}
+                    type="button"
+                  >
+                    <div className="row-between">
+                      <span className="empty-icon"><AppIcon name="template" /></span>
+                      <StatusPill tone="violet">
+                        {locale === "zh" ? "团队模板" : "Team template"}
+                      </StatusPill>
+                    </div>
+                    <span className="preset-card-title">
+                      {locale === "zh" ? template.nameZh : template.nameEn}
+                    </span>
+                    <span className="muted">
+                      {(locale === "zh"
+                        ? template.descriptionZh
+                        : template.descriptionEn) ||
+                        (locale === "zh" ? "无模板说明" : "No template description")}
+                    </span>
+                    <span className="caption">
+                      {template.sectionCount ?? 0} {locale === "zh" ? "个章节" : "sections"} · {template.fieldCount ?? 0}{" "}
+                      {locale === "zh" ? "个问题" : "questions"}
+                    </span>
+                    <span className="inline-link">
+                      {locale === "zh" ? "使用这个模板" : "Use this template"}
+                      <AppIcon name="arrow" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="section-title">
             <div>
               <h2>{locale === "zh" ? "常用业务模板" : "Common workflows"}</h2>

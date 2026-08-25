@@ -26,7 +26,15 @@ export type AppIconName =
   | "image"
   | "audio"
   | "video"
-  | "file";
+  | "file"
+  | "edit"
+  | "eye"
+  | "copy"
+  | "template"
+  | "unpublish"
+  | "trash"
+  | "clock"
+  | "info";
 
 const paths: Record<AppIconName, React.ReactNode> = {
   home: (
@@ -167,6 +175,55 @@ const paths: Record<AppIconName, React.ReactNode> = {
     <>
       <path d="M6 2h9l4 4v16H6z" />
       <path d="M14 2v5h5M9 12h6M9 16h4" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </>
+  ),
+  template: (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5Z" />
+      <path d="M4 5.5v16M8 7h8M8 11h6" />
+    </>
+  ),
+  unpublish: (
+    <>
+      <path d="M12 3v12M7 8l5-5 5 5" />
+      <path d="M5 14v6h14v-6" />
+      <path d="m4 4 16 16" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
     </>
   ),
 };

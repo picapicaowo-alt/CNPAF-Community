@@ -4,7 +4,6 @@ import type { z } from "zod";
 import type { privacyResolveBodySchema } from "@cnpaf/shared";
 import { db } from "./db";
 import { getAccessContext, evaluateAuthorization } from "./authorization";
-import { enqueueAnalyze } from "./jobs";
 import { contentHash } from "./crypto";
 import { audit } from "./audit";
 import { ApiError } from "./api-error";
@@ -63,14 +62,13 @@ export async function resolvePrivacyFlag(input: {
         updatedAt: new Date(),
       }).where(and(eq(privacyFlags.id, input.flagId), eq(privacyFlags.status, "open"))).returning();
       if (!flag) throw new ApiError("CONFLICT", "Privacy flag changed concurrently", 409);
-      const [updatedRecord] = await tx.update(records).set({ privacyStatus: "clear", aiStatus: "queued", updatedAt: new Date() })
+      const [updatedRecord] = await tx.update(records).set({ privacyStatus: "clear", aiStatus: "not_required", updatedAt: new Date() })
         .where(and(eq(records.id, row.record.id), eq(records.headVersionId, row.version.id))).returning();
       if (!updatedRecord) throw new ApiError("CONFLICT", "Record changed concurrently", 409);
       await audit({ actorId: input.actorId, action: "privacy.dismissed", entityType: "privacy_flag", entityId: input.flagId, beforeState: row.flag, afterState: flag, reason: input.body.notes ?? null }, (values) => tx.insert(auditEvents).values(values));
       return flag;
     });
-    await enqueueAnalyze(row.version.id, `privacy-dismissed:${row.version.id}`);
-    return { flag: dismissed, recordVersion: row.version, queuedForAi: true };
+    return { flag: dismissed, recordVersion: row.version, queuedForAi: false };
   }
 
   const safeText = input.body.resolution === "redacted" ? input.body.redactedText?.trim() : row.version.qualitative;
@@ -131,13 +129,12 @@ export async function resolvePrivacyFlag(input: {
     const [updatedRecord] = await tx.update(records).set({
       headVersionId: version.id,
       privacyStatus: input.body.resolution,
-      aiStatus: "queued",
+      aiStatus: "not_required",
       updatedAt: new Date(),
     }).where(and(eq(records.id, row.record.id), eq(records.headVersionId, row.version.id))).returning();
     if (!updatedRecord) throw new ApiError("CONFLICT", "Record changed concurrently", 409);
     await audit({ actorId: input.actorId, action: `privacy.${input.body.resolution}`, entityType: "privacy_flag", entityId: input.flagId, beforeState: row.flag, afterState: flag, reason: input.body.notes ?? null, metadata: { clearedRecordVersionId: version.id } }, (values) => tx.insert(auditEvents).values(values));
     return { flag, version };
   });
-  await enqueueAnalyze(result.version.id, `privacy-clearance:${result.version.id}`);
-  return { flag: result.flag, recordVersion: result.version, queuedForAi: true };
+  return { flag: result.flag, recordVersion: result.version, queuedForAi: false };
 }
