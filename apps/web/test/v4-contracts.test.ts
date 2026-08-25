@@ -3,11 +3,33 @@ import test from "node:test";
 import {
   aiFindingReviewBodySchema,
   askConversationBodySchema,
+  compareFormVersionSnapshots,
+  datasetArchiveBodySchema,
+  datasetFieldPolicySchema,
+  draftBodySchema,
+  editableReportCreateBodySchema,
+  formFieldValidationError,
+  formRatingValues,
   locationCreateBodySchema,
   manualAccountCreateBodySchema,
+  personGroupCreateBodySchema,
+  personGroupUpdateBodySchema,
+  programUpdateBodySchema,
+  programMembershipRequestBodySchema,
+  reportSectionAiDraftBodySchema,
   reportFiltersSchema,
+  resolveFormBranchAction,
+  resolveRuntimeFormVisibility,
+  reviewBodySchema,
   sourceKindPolicySchema,
+  taskCreateBodySchema,
+  taskBulkActionBodySchema,
   taskAssignmentTransitionBodySchema,
+} from "@cnpaf/shared";
+import type {
+  FormAnswers,
+  RuntimeFormField,
+  RuntimeFormSection,
 } from "@cnpaf/shared";
 import { matchesEvidenceFilters } from "../src/lib/evidence-filters";
 import { toCsv, toSimplePdf } from "../src/lib/export-format";
@@ -71,6 +93,62 @@ test("V4 evidence filters apply every declared scope dimension", () => {
 test("security-sensitive filter and Ask scopes reject unknown fields", () => {
   assert.equal(reportFiltersSchema.safeParse({ ignoredBroadeningFilter: ["x"] }).success, false);
   assert.equal(askConversationBodySchema.safeParse({ scope: { ignoredBroadeningFilter: ["x"] } }).success, false);
+  assert.equal(
+    askConversationBodySchema.safeParse({
+      scope: {},
+      datasetVersionId: ids.form,
+      includeMedia: true,
+    }).success,
+    true,
+  );
+  assert.equal(
+    askConversationBodySchema.safeParse({
+      scope: { datasetVersionId: ids.form },
+    }).success,
+    false,
+  );
+});
+
+test("Dataset media and AI media use require explicit contract fields", () => {
+  assert.equal(
+    datasetFieldPolicySchema.safeParse({
+      include: ["structured_answers", "media_attachments"],
+      exclude: [],
+    }).success,
+    true,
+  );
+  assert.equal(
+    reportSectionAiDraftBodySchema.safeParse({
+      instruction: "Draft from approved evidence only.",
+      idempotencyKey: "media-test-001",
+      includeMedia: true,
+    }).success,
+    true,
+  );
+  assert.equal(
+    askConversationBodySchema.safeParse({
+      scope: {},
+      datasetVersionId: ids.form,
+      includeMedia: "yes",
+    }).success,
+    false,
+  );
+});
+
+test("Dataset archive requires an auditable reason", () => {
+  assert.equal(datasetArchiveBodySchema.safeParse({}).success, false);
+  assert.equal(datasetArchiveBodySchema.safeParse({ reason: "Superseded by a reviewed Dataset Version" }).success, true);
+});
+
+test("an initial report accepts one pinned source kind, never two", () => {
+  const input = {
+    organizationId: ids.organization,
+    programId: ids.program,
+    title: "Initial report",
+    sections: [{ sectionKey: "summary", title: "Summary", content: "", sortOrder: 0 }],
+  };
+  assert.equal(editableReportCreateBodySchema.safeParse({ ...input, sourceDatasetVersionId: ids.form }).success, true);
+  assert.equal(editableReportCreateBodySchema.safeParse({ ...input, sourceDatasetVersionId: ids.form, sourceReportArtifactId: ids.canonical }).success, false);
 });
 
 test("AI finding edits and re-runs require explicit reviewer input", () => {
@@ -84,6 +162,348 @@ test("task decline remains distinct and requires a reason", () => {
   assert.equal(taskAssignmentTransitionBodySchema.safeParse({ status: "declined" }).success, false);
   assert.equal(taskAssignmentTransitionBodySchema.safeParse({ status: "declined", declineReason: "Schedule conflict" }).success, true);
   assert.equal(taskAssignmentTransitionBodySchema.safeParse({ status: "cancelled" }).success, true);
+});
+
+test("task creation requires at least one assignee in the atomic workflow", () => {
+  const base = {
+    programId: ids.program,
+    templateVersionId: ids.form,
+    taskTypeKey: "configured_task_type",
+    title: "Collection task",
+  };
+  assert.equal(taskCreateBodySchema.safeParse(base).success, false);
+  assert.equal(
+    taskCreateBodySchema.safeParse({ ...base, assigneeIds: [ids.collector] })
+      .success,
+    true,
+  );
+});
+
+test("bulk task actions require bounded task and assignee selections", () => {
+  assert.equal(
+    taskBulkActionBodySchema.safeParse({
+      action: "assign",
+      taskIds: [ids.canonical],
+      assigneeIds: [ids.collector],
+    }).success,
+    true,
+  );
+  assert.equal(
+    taskBulkActionBodySchema.safeParse({ action: "close", taskIds: [] })
+      .success,
+    false,
+  );
+  assert.equal(
+    taskBulkActionBodySchema.safeParse({
+      action: "assign",
+      taskIds: [ids.canonical],
+      assigneeIds: [],
+    }).success,
+    false,
+  );
+});
+
+test("program details are editable without allowing stable key mutation", () => {
+  assert.equal(
+    programUpdateBodySchema.safeParse({
+      nameZh: "更新后的项目名",
+      nameEn: "Updated program name",
+      descriptionZh: "新的说明",
+      descriptionEn: null,
+    }).success,
+    true,
+  );
+  assert.equal(
+    programUpdateBodySchema.safeParse({ key: "renamed-internal-key" }).success,
+    false,
+  );
+});
+
+test("program membership requests accept a bounded multi-person selection", () => {
+  assert.equal(
+    programMembershipRequestBodySchema.safeParse({
+      userIds: [ids.collector, ids.canonical],
+      membershipRoleKey: "member",
+    }).success,
+    true,
+  );
+  assert.equal(
+    programMembershipRequestBodySchema.safeParse({
+      userIds: [ids.collector, ids.collector],
+      membershipRoleKey: "member",
+    }).success,
+    false,
+  );
+});
+
+test("people groups support cross-department membership without duplicate users", () => {
+  assert.equal(
+    personGroupCreateBodySchema.safeParse({
+      key: "usc-interdisciplinary-team",
+      nameEn: "USC Interdisciplinary Team",
+      nameZh: "USC 跨学院小组",
+      userIds: [ids.collector, ids.canonical],
+    }).success,
+    true,
+  );
+  assert.equal(
+    personGroupCreateBodySchema.safeParse({
+      key: "usc-team",
+      nameEn: "USC Team",
+      nameZh: "USC 小组",
+      userIds: [ids.collector, ids.collector],
+    }).success,
+    false,
+  );
+  assert.equal(
+    personGroupUpdateBodySchema.safeParse({ userIds: [] }).success,
+    true,
+  );
+});
+
+test("form version comparison identifies stable-key changes and moves", () => {
+  const base = {
+    version: {
+      id: "version-1",
+      version: 1,
+      nameEn: "Form",
+      nameZh: "表单",
+      configuration: {},
+    },
+    sections: [
+      {
+        id: "section-1",
+        key: "profile",
+        labelEn: "Profile",
+        labelZh: "资料",
+        sortOrder: 0,
+      },
+    ],
+    fields: [
+      {
+        id: "field-1",
+        templateSectionId: "section-1",
+        key: "age",
+        fieldTypeKey: "number",
+        labelEn: "Age",
+        labelZh: "年龄",
+        required: false,
+        allowMissingReason: false,
+        allowCustomEntry: false,
+        sortOrder: 0,
+      },
+    ],
+    options: [],
+  };
+  const comparison = compareFormVersionSnapshots(base, {
+    ...base,
+    version: { ...base.version, id: "version-2", version: 2 },
+    sections: [
+      ...base.sections,
+      {
+        id: "section-2",
+        key: "follow-up",
+        labelEn: "Follow-up",
+        labelZh: "跟进",
+        sortOrder: 1,
+      },
+    ],
+    fields: [
+      {
+        ...base.fields[0]!,
+        templateSectionId: "section-2",
+        labelZh: "参与者年龄",
+      },
+    ],
+  });
+  assert.equal(comparison.summary.added, 1);
+  assert.equal(comparison.summary.moved, 1);
+  assert.equal(comparison.summary.modified, 1);
+  assert.deepEqual(
+    comparison.changes.map((change) => [change.changeType, change.key]),
+    [
+      ["added", "follow-up"],
+      ["moved", "age"],
+      ["modified", "age"],
+    ],
+  );
+});
+
+test("field-level answers preserve typed values and missing reasons", () => {
+  const parsed = draftBodySchema.safeParse({
+    clientRecordId: ids.canonical,
+    idempotencyKey: "field-answer-draft",
+    localVersion: 1,
+    sourceKind: "configured_source",
+    templateVersionId: ids.form,
+    fieldAnswers: [
+      { templateFieldId: ids.location, value: ["option-a", "option-b"] },
+      {
+        templateFieldId: ids.collector,
+        value: null,
+        missingReasonKey: "not_observed",
+      },
+    ],
+  });
+  assert.equal(parsed.success, true);
+  assert.equal(
+    draftBodySchema.safeParse({
+      clientRecordId: ids.canonical,
+      idempotencyKey: "empty-answer-draft",
+      localVersion: 1,
+      sourceKind: "configured_source",
+      templateVersionId: ids.form,
+      fieldAnswers: [{ templateFieldId: ids.location, value: null }],
+    }).success,
+    false,
+  );
+});
+
+test("conditional form visibility ignores stale answers from hidden fields", () => {
+  const sections: RuntimeFormSection[] = [
+    {
+      id: "section-1",
+      key: "screening",
+      labelEn: "Screening",
+      labelZh: "筛选",
+      sortOrder: 0,
+    },
+    {
+      id: "section-2",
+      key: "follow-up",
+      labelEn: "Follow-up",
+      labelZh: "跟进",
+      sortOrder: 1,
+      configuration: {
+        visibilityConditions: [
+          { fieldKey: "eligible", operator: "answered" },
+        ],
+      },
+    },
+  ];
+  const field = (
+    id: string,
+    key: string,
+    templateSectionId: string,
+    sortOrder: number,
+  ): RuntimeFormField => ({
+    id,
+    key,
+    templateSectionId,
+    sortOrder,
+    fieldTypeKey: "short_answer",
+    labelEn: key,
+    labelZh: key,
+    required: false,
+    allowMissingReason: false,
+    allowCustomEntry: false,
+    validation: {},
+  });
+  const fields = [
+    field("field-1", "eligible", "section-1", 0),
+    {
+      ...field("field-2", "details", "section-1", 1),
+      visibilityConditions: [
+        { fieldKey: "eligible", operator: "equals" as const, value: "yes" },
+      ],
+    },
+    {
+      ...field("field-3", "follow_up", "section-2", 0),
+      visibilityConditions: [
+        { fieldKey: "details", operator: "answered" as const },
+      ],
+    },
+  ];
+  const answers: FormAnswers = {
+    "field-1": { value: "yes" },
+    "field-2": { value: "saved stale answer" },
+  };
+  assert.deepEqual(
+    resolveRuntimeFormVisibility({ answers, fields, sections }).visibleFields.map(
+      (candidate) => candidate.key,
+    ),
+    ["eligible", "details", "follow_up"],
+  );
+  answers["field-1"] = { value: "no" };
+  assert.deepEqual(
+    resolveRuntimeFormVisibility({ answers, fields, sections }).visibleFields.map(
+      (candidate) => candidate.key,
+    ),
+    ["eligible"],
+  );
+});
+
+test("form branching uses stable answer keys and ignores hidden source fields", () => {
+  const fields: RuntimeFormField[] = [
+    {
+      id: "field-1",
+      key: "eligible",
+      templateSectionId: "section-1",
+      sortOrder: 0,
+      fieldTypeKey: "single_select",
+      labelEn: "Eligible",
+      labelZh: "符合条件",
+      required: false,
+      allowMissingReason: false,
+      allowCustomEntry: false,
+      validation: {},
+      branchingLogic: [
+        { operator: "equals", value: "no", action: "end_form" },
+      ],
+    },
+  ];
+  const answers: FormAnswers = { "field-1": { value: "no" } };
+  assert.deepEqual(
+    resolveFormBranchAction({
+      answers,
+      fields,
+      sectionId: "section-1",
+      visibleFieldIds: new Set(["field-1"]),
+    }),
+    {
+      operator: "equals",
+      value: "no",
+      action: "end_form",
+      sourceFieldKey: "eligible",
+    },
+  );
+  assert.equal(
+    resolveFormBranchAction({
+      answers,
+      fields,
+      sectionId: "section-1",
+      visibleFieldIds: new Set(),
+    }),
+    null,
+  );
+});
+
+test("rating fields generate bounded integer scales from configured limits", () => {
+  assert.deepEqual(formRatingValues({ min: 1, max: 5 }), [1, 2, 3, 4, 5]);
+  assert.deepEqual(formRatingValues({ min: 1, max: 10 }), [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  ]);
+  assert.equal(formFieldValidationError("rating", { min: 10, max: 5 }), "Rating minimum cannot exceed its maximum");
+  assert.equal(formFieldValidationError("rating", { min: 1, max: 21 }), "Rating maximum cannot exceed 20");
+  assert.equal(formFieldValidationError("rating", { min: "1", max: 5 }), "Rating limits must be finite numbers");
+  assert.deepEqual(formRatingValues({ min: 1, max: 21 }), []);
+});
+
+test("returning a record requires a reason and preserves field targets", () => {
+  assert.equal(
+    reviewBodySchema.safeParse({ action: "needs_completion" }).success,
+    false,
+  );
+  const parsed = reviewBodySchema.safeParse({
+    action: "needs_completion",
+    annotation: "Please correct the participant count.",
+    correctionFieldIds: [ids.location],
+  });
+  assert.equal(parsed.success, true);
+  assert.deepEqual(
+    parsed.success ? parsed.data.correctionFieldIds : [],
+    [ids.location],
+  );
 });
 
 test("manual account provisioning cannot reference an unrelated role assignment", () => {
