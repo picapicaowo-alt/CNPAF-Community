@@ -2,26 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/LocaleProvider";
-
-type Flag = { id: string; statement: string; status: string; createdAt: string };
+import { listSafetyFlags, reviewSafetyFlag } from "@/features/operations/api";
+import type { SafetyFlagSummary } from "@/features/operations/types";
 
 export default function SafetyPage() {
   const { t } = useI18n();
-  const [flags, setFlags] = useState<Flag[]>([]);
+  const [flags, setFlags] = useState<SafetyFlagSummary[]>([]);
   async function load() {
-    const d = await fetch("/api/v1/safety").then((r) => r.json());
-    setFlags(d.flags ?? []);
+    setFlags(await listSafetyFlags());
   }
   useEffect(() => {
     load();
   }, []);
   async function close(id: string) {
-    await fetch("/api/v1/safety", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status: "reviewed" }),
-    });
-    load();
+    await reviewSafetyFlag(id);
+    await load();
   }
   return (
     <div className="stack">

@@ -1,5 +1,4 @@
-import type { Attribution, SourceKind } from "@cnpaf/shared";
-import { getSourceKindHandler } from "@cnpaf/shared";
+import type { Attribution, SourceKind, SourceKindPolicy } from "@cnpaf/shared";
 
 export type PiiHit = {
   kind: string;
@@ -51,17 +50,18 @@ function applyRedactions(text: string, hits: PiiHit[]): string {
 }
 
 /**
- * SourceKind-aware scan. Never send unsanitized field text to an external model.
- * Professor names / literature titles in attribution are allowed identifiers.
+ * Policy-aware scan. Never send unsanitized field text to an external model.
+ * Only attribution identifiers explicitly allowed by the active source policy
+ * are exempted from the qualitative-text scan.
  */
 export function scanPrivacy(input: {
   sourceKind: SourceKind | string;
   qualitative: string;
   attribution: Attribution;
+  policy?: Pick<SourceKindPolicy, "allowedIdentifierFields" | "privacyDisposition">;
 }): PrivacyScanResult {
-  const handler = getSourceKindHandler(input.sourceKind);
   const allowed = new Set(
-    (handler?.allowedIdentifierFields ?? [])
+    (input.policy?.allowedIdentifierFields ?? [])
       .map((field) => String(input.attribution[field] ?? "").trim())
       .filter(Boolean)
       .map((v) => v.toLowerCase()),
@@ -69,7 +69,7 @@ export function scanPrivacy(input: {
 
   const hits = collectHits(input.qualitative).filter((hit) => {
     if (allowed.has(hit.excerpt.trim().toLowerCase())) return false;
-    if (input.sourceKind !== "field_visit" && (hit.kind === "honorific" || hit.kind === "name_intro")) {
+    if (input.policy?.privacyDisposition === "redact" && (hit.kind === "honorific" || hit.kind === "name_intro")) {
       const looksLikeResident = /住户|老人|参与者|病人|resident|participant/i.test(input.qualitative);
       return looksLikeResident;
     }
@@ -80,7 +80,7 @@ export function scanPrivacy(input: {
     return { status: "clear", hits: [], redactedText: input.qualitative };
   }
 
-  if (input.sourceKind === "field_visit") {
+  if ((input.policy?.privacyDisposition ?? "flag") === "flag") {
     return {
       status: "flagged",
       hits,

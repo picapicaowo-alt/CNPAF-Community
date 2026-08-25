@@ -3,28 +3,19 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useI18n } from "@/components/LocaleProvider";
-
-type Finding = {
-  id: string;
-  kind: string;
-  statement: string;
-  origin?: string | null;
-  evidence: { text: string; start: number; end: number }[];
-  suggestedCanonicalThemeId?: string | null;
-};
+import { getReviewRecord, submitRecordReview } from "@/features/operations/api";
+import type { ReviewFinding, ReviewRecord } from "@/features/operations/types";
 
 export default function ReviewPage() {
   const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<ReviewRecord | null>(null);
   const [annotation, setAnnotation] = useState("");
   const [decisions, setDecisions] = useState<Record<string, { decision: string; editedStatement?: string }>>({});
 
   useEffect(() => {
-    fetch(`/api/v1/records/${params.id}`)
-      .then((r) => r.json())
-      .then((d) => {
+    void getReviewRecord(params.id).then((d) => {
         setData(d);
         const init: Record<string, { decision: string }> = {};
         for (const f of d.findings ?? []) {
@@ -36,7 +27,7 @@ export default function ReviewPage() {
 
   if (!data?.record) return <p>Loading…</p>;
   const head = data.versions?.[0];
-  const findings: Finding[] = data.findings ?? [];
+  const findings: ReviewFinding[] = data.findings ?? [];
 
   async function act(action: "approve" | "needs_completion") {
     const findingsPayload = Object.entries(decisions).map(([findingId, v]) => ({
@@ -44,12 +35,12 @@ export default function ReviewPage() {
       decision: v.decision,
       editedStatement: v.editedStatement,
     }));
-    const res = await fetch(`/api/v1/records/${params.id}/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, annotation, findings: findingsPayload }),
+    await submitRecordReview(params.id, {
+      action,
+      annotation,
+      findings: findingsPayload,
     });
-    if (res.ok) router.push("/ops");
+    router.push("/ops");
   }
 
   return (

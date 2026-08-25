@@ -1,29 +1,47 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useI18n } from "./LocaleProvider";
+import { flushOutbox } from "@/lib/offline";
 
 const CAPTURE_LOCK = "cnpaf.capturing";
 
 export function ServiceWorkerRegistrar() {
+  const pathname = usePathname();
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").then((reg) => {
-      if (reg.waiting) setWaiting(reg.waiting);
-      reg.addEventListener("updatefound", () => {
-        const sw = reg.installing;
-        sw?.addEventListener("statechange", () => {
-          if (sw.state === "installed" && reg.waiting) setWaiting(reg.waiting);
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => {
+        if (reg.waiting) setWaiting(reg.waiting);
+        reg.addEventListener("updatefound", () => {
+          const sw = reg.installing;
+          sw?.addEventListener("statechange", () => {
+            if (sw.state === "installed" && reg.waiting)
+              setWaiting(reg.waiting);
+          });
         });
-      });
-    });
-    if (navigator.storage?.persist) navigator.storage.persist().catch(() => undefined);
+      })
+      .catch(() => undefined);
+    if (navigator.storage?.persist)
+      navigator.storage.persist().catch(() => undefined);
+    const synchronize = () => {
+      void flushOutbox();
+    };
+    if (navigator.onLine) synchronize();
+    window.addEventListener("online", synchronize);
+    return () => window.removeEventListener("online", synchronize);
   }, []);
 
-  if (!waiting) return null;
+  useEffect(() => {
+    if (navigator.onLine && pathname !== "/login") void flushOutbox();
+  }, [pathname]);
+
+  if (!waiting || pathname === "/login") return null;
   return (
-    <div className="banner" style={{ marginBottom: 12 }}>
+    <div className="banner update-banner">
       <div>App update available. 有新版本。</div>
       <button
         className="btn secondary"

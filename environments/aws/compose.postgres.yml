@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CNPAF_DB_USER:?Set CNPAF_DB_USER}
+      POSTGRES_PASSWORD: ${CNPAF_DB_PASSWORD:?Set CNPAF_DB_PASSWORD}
+      POSTGRES_DB: ${CNPAF_DB_NAME:?Set CNPAF_DB_NAME}
+    ports:
+      - "127.0.0.1:${CNPAF_DB_PORT:?Set CNPAF_DB_PORT}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres-data:

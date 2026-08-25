@@ -1,18 +1,29 @@
 import { auditEvents } from "@cnpaf/db/schema";
 import { db } from "./db";
 
+type AuditValues = typeof auditEvents.$inferInsert;
+export type AuditWriter = (values: AuditValues) => PromiseLike<unknown>;
+
 export async function audit(input: {
   actorId?: string | null;
   action: string;
   entityType: string;
   entityId: string;
   metadata?: Record<string, unknown>;
-}) {
-  await db.insert(auditEvents).values({
+  targetUserId?: string | null;
+  beforeState?: unknown;
+  afterState?: unknown;
+  reason?: string | null;
+}, writer: AuditWriter = (values) => db.insert(auditEvents).values(values)) {
+  await writer({
     actorId: input.actorId ?? null,
     action: input.action,
     entityType: input.entityType,
     entityId: input.entityId,
+    targetUserId: input.targetUserId ?? null,
+    beforeState: input.beforeState,
+    afterState: input.afterState,
+    reason: input.reason ?? null,
     metadata: input.metadata ?? {},
   });
 }

@@ -1,11 +1,14 @@
 node_modules
+*.pem
 .next
+next-env.d.ts
 dist
 .env
 .env.local
 *.log
 .DS_Store
 uploads
+.storage-migration
 apps/web/public/sw.js.map
 .turbo
 coverage

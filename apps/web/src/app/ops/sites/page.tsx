@@ -2,16 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/components/LocaleProvider";
-
-type Site = { id: string; name: string; siteType: string; canonicalStatus: string; region: string | null };
+import { listOpsSites, mergeOpsSite } from "@/features/operations/api";
+import type { OpsSite } from "@/features/operations/types";
 
 export default function SitesPage() {
   const { t } = useI18n();
-  const [sites, setSites] = useState<Site[]>([]);
+  const [sites, setSites] = useState<OpsSite[]>([]);
   const [into, setInto] = useState("");
   async function load() {
-    const d = await fetch("/api/v1/sites?q=").then((r) => r.json());
-    setSites(d.sites ?? []);
+    setSites(await listOpsSites());
   }
   useEffect(() => {
     load();
@@ -33,13 +32,7 @@ export default function SitesPage() {
               <button
                 className="btn secondary"
                 type="button"
-                onClick={() =>
-                  fetch("/api/v1/sites", {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ fromId: s.id, intoId: into }),
-                  }).then(load)
-                }
+                onClick={() => void mergeOpsSite(s.id, into).then(load)}
               >
                 Merge
               </button>

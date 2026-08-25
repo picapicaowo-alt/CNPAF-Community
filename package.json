@@ -15,7 +15,14 @@
     "docker:up": "docker compose up -d postgres",
     "docker:down": "docker compose down",
     "docker:app": "docker compose --profile app up --build",
-    "db:studio": "npm run studio -w @cnpaf/db"
+    "db:studio": "npm run studio -w @cnpaf/db",
+    "test:backend": "npm run test:backend -w @cnpaf/web && npm run test:migrations -w @cnpaf/db",
+    "test:e2e:full-chain": "node scripts/full-chain-e2e.mjs",
+    "storage:migrate": "tsx scripts/storage-migration.ts",
+    "env:check": "node scripts/check-environment.mjs",
+    "typecheck": "tsc -p apps/web/tsconfig.json --noEmit && tsc -p packages/shared/tsconfig.json --noEmit && tsc -p packages/db/tsconfig.json --noEmit",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "check": "npm run typecheck && npm run check:architecture && npm run test:backend"
   },
   "engines": {
     "node": ">=20"

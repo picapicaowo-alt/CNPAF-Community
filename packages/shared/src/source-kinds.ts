@@ -1,72 +1,37 @@
-import type { SourceKind } from "./lookups";
+import { z } from "zod";
 import type { Attribution } from "./attribution";
 
-export type SourceKindHandler = {
-  key: SourceKind;
-  requiresVisit: boolean;
-  requiresSite: boolean;
-  requiresActivity: boolean;
-  requiresPiiAttestation: boolean;
-  validateAttribution(attribution: Attribution): string[];
-  allowedIdentifierFields: (keyof Attribution)[];
-};
+const attributionFieldSchema = z.enum([
+  "professorName",
+  "affiliation",
+  "attributionPermission",
+  "quotePermission",
+  "title",
+  "url",
+  "authors",
+  "year",
+]);
 
-function req(value: string | undefined, label: string): string[] {
-  if (!value || !value.trim()) return [`Missing ${label}`];
-  return [];
-}
+// Source-kind behavior is data, not a closed TypeScript union. Administrators
+// publish this policy in config_registry_items.metadata.policy.
+export const sourceKindPolicySchema = z.object({
+  requiresVisit: z.boolean().default(false),
+  requiresSite: z.boolean().default(false),
+  requiresActivity: z.boolean().default(false),
+  requiresPiiAttestation: z.boolean().default(true),
+  requiredAttributionFields: z.array(attributionFieldSchema).default([]),
+  allowedIdentifierFields: z.array(attributionFieldSchema).default([]),
+  privacyDisposition: z.enum(["flag", "redact"]).default("flag"),
+  defaultConcernOriginKey: z.string().min(1).max(120),
+}).strict();
 
-export const fieldVisitHandler: SourceKindHandler = {
-  key: "field_visit",
-  requiresVisit: true,
-  requiresSite: true,
-  requiresActivity: true,
-  requiresPiiAttestation: true,
-  allowedIdentifierFields: [],
-  validateAttribution: () => [],
-};
+export type SourceKindPolicy = z.infer<typeof sourceKindPolicySchema>;
 
-export const professorInterviewHandler: SourceKindHandler = {
-  key: "professor_interview",
-  requiresVisit: false,
-  requiresSite: false,
-  requiresActivity: false,
-  requiresPiiAttestation: false,
-  allowedIdentifierFields: ["professorName", "affiliation"],
-  validateAttribution: (a) => [
-    ...req(a.professorName, "professorName"),
-    ...req(a.attributionPermission, "attributionPermission"),
-    ...req(a.quotePermission, "quotePermission"),
-  ],
-};
-
-export const literatureHandler: SourceKindHandler = {
-  key: "literature",
-  requiresVisit: false,
-  requiresSite: false,
-  requiresActivity: false,
-  requiresPiiAttestation: false,
-  allowedIdentifierFields: ["title", "authors", "url"],
-  validateAttribution: (a) => [...req(a.title, "title")],
-};
-
-export const otherHandler: SourceKindHandler = {
-  key: "other",
-  requiresVisit: false,
-  requiresSite: false,
-  requiresActivity: false,
-  requiresPiiAttestation: false,
-  allowedIdentifierFields: [],
-  validateAttribution: () => [],
-};
-
-export const SOURCE_KIND_HANDLERS: Record<SourceKind, SourceKindHandler> = {
-  field_visit: fieldVisitHandler,
-  professor_interview: professorInterviewHandler,
-  literature: literatureHandler,
-  other: otherHandler,
-};
-
-export function getSourceKindHandler(key: string): SourceKindHandler | undefined {
-  return SOURCE_KIND_HANDLERS[key as SourceKind];
+export function validateSourceAttribution(policy: SourceKindPolicy, attribution: Attribution) {
+  return policy.requiredAttributionFields.flatMap((field) => {
+    const value = attribution[field];
+    return value === undefined || value === null || String(value).trim() === ""
+      ? [`Missing ${field}`]
+      : [];
+  });
 }

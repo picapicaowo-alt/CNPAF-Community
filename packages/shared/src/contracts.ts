@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { CONCERN_ORIGINS, MISSING_REASONS, SOURCE_KINDS } from "./lookups";
 
 export const uuidSchema = z.string().uuid();
 
 export const quantitativeValueSchema = z.object({
-  reason: z.enum(MISSING_REASONS),
+  reason: z.string().min(1),
   value: z.number().nullable(),
 });
 
@@ -21,14 +20,52 @@ export const attributionSchema = z
   })
   .partial();
 
+export const recordFieldAnswerSchema = z
+  .object({
+    templateFieldId: uuidSchema,
+    value: z
+      .union([
+        z.string().max(100_000),
+        z.number(),
+        z.boolean(),
+        z.array(z.string().min(1).max(160)).max(1000),
+      ])
+      .nullable()
+      .default(null),
+    missingReasonKey: z.string().min(1).max(120).nullable().optional(),
+    customText: z.string().max(20_000).nullable().optional(),
+  })
+  .refine(
+    (answer) =>
+      answer.value !== null ||
+      Boolean(answer.missingReasonKey) ||
+      Boolean(answer.customText?.trim()),
+    "A value, missing reason, or custom answer is required",
+  );
+
 export const draftBodySchema = z.object({
   clientRecordId: uuidSchema,
   idempotencyKey: z.string().min(8).max(80),
   localVersion: z.number().int().min(1),
-  sourceKind: z.enum(SOURCE_KINDS),
+  sourceKind: z.string().min(1).max(120),
   siteId: uuidSchema.nullable().optional(),
+  programId: uuidSchema.nullable().optional(),
+  taskId: uuidSchema.nullable().optional(),
+  taskAssignmentId: uuidSchema.nullable().optional(),
   visitId: uuidSchema.nullable().optional(),
   activityDefinitionId: uuidSchema.nullable().optional(),
+  templateVersionId: uuidSchema.nullable().optional(),
+  fieldAnswers: z.array(recordFieldAnswerSchema).max(5000).default([]),
+  structuredSelections: z.array(z.object({
+    templateFieldId: uuidSchema,
+    optionId: uuidSchema,
+    value: z.record(z.unknown()).default({}),
+  })).default([]),
+  customEntries: z.array(z.object({
+    templateFieldId: uuidSchema,
+    categoryId: uuidSchema.nullable().optional(),
+    customText: z.string().min(1).max(20_000),
+  })).default([]),
   qualitative: z.string().default(""),
   quantitative: z.record(quantitativeValueSchema).default({}),
   attribution: attributionSchema.default({}),
@@ -45,17 +82,47 @@ export const loginBodySchema = z.object({
   password: z.string().min(8),
 });
 
+export const changePasswordBodySchema = z.object({
+  currentPassword: z.string().min(8).max(200),
+  newPassword: z.string().min(12).max(200),
+}).refine((value) => value.currentPassword !== value.newPassword, {
+  message: "New password must differ from current password",
+  path: ["newPassword"],
+});
+
 export const inviteBodySchema = z.object({
   email: z.string().email(),
-  role: z.enum(["volunteer", "coordinator", "admin"]),
+  roleId: uuidSchema.optional(),
+  roleKey: z.string().min(1).max(120).optional(),
+  role: z.string().min(1).max(120).optional(),
+  organizationId: uuidSchema.nullable().optional(),
+  initialScopes: z
+    .object({
+      organizationIds: z.array(uuidSchema).default([]),
+      programIds: z.array(uuidSchema).default([]),
+      siteIds: z.array(uuidSchema).default([]),
+      locationIds: z.array(uuidSchema).default([]),
+      serviceIds: z.array(uuidSchema).default([]),
+      serviceKeys: z.array(z.string().min(1)).default([]),
+      templateIds: z.array(uuidSchema).default([]),
+      formIds: z.array(uuidSchema).default([]),
+      dataClasses: z.array(z.string().min(1)).default([]),
+      researchUse: z.array(z.string().min(1)).default([]),
+    })
+    .partial()
+    .strict()
+    .default({}),
   name: z.string().min(1).max(120).optional(),
+}).strict().refine((value) => value.roleId || value.roleKey || value.role, {
+  message: "roleId or roleKey is required",
+  path: ["roleId"],
 });
 
 export const acceptInviteBodySchema = z.object({
   token: z.string().min(8),
   name: z.string().min(1).max(120),
-  password: z.string().min(8),
-});
+  password: z.string().min(12).max(200),
+}).strict();
 
 export const siteCreateBodySchema = z.object({
   name: z.string().min(1).max(200),
@@ -63,11 +130,13 @@ export const siteCreateBodySchema = z.object({
   region: z.string().max(120).optional(),
   organizationId: uuidSchema.nullable().optional(),
   organizationName: z.string().max(200).optional(),
-});
+}).strict();
 
 export const reviewBodySchema = z.object({
   action: z.enum(["approve", "needs_completion"]),
   annotation: z.string().max(4000).optional(),
+  correctionFieldIds: z.array(uuidSchema).max(200).default([]),
+  researchUseStatus: z.string().min(1).max(120).optional(),
   findings: z
     .array(
       z.object({
@@ -75,11 +144,18 @@ export const reviewBodySchema = z.object({
         decision: z.enum(["approve", "edit", "reject"]),
         editedStatement: z.string().optional(),
         canonicalThemeId: uuidSchema.nullable().optional(),
-        origin: z.enum(CONCERN_ORIGINS).optional(),
-      }),
+        origin: z.string().min(1).optional(),
+      }).strict(),
     )
     .default([]),
-});
+}).strict().refine(
+  (value) =>
+    value.action !== "needs_completion" || Boolean(value.annotation?.trim()),
+  {
+    message: "A correction reason is required when returning a record",
+    path: ["annotation"],
+  },
+);
 
 export const evidenceSchema = z.object({
   text: z.string(),
@@ -104,7 +180,7 @@ export const aiOutputSchema = z.object({
     z.object({
       statement: z.string(),
       suggestedCanonicalKey: z.string(),
-      origin: z.enum(CONCERN_ORIGINS),
+      origin: z.string().min(1),
       confidence: z.number().min(0).max(1),
       evidence: z.array(evidenceSchema).min(1),
     }),

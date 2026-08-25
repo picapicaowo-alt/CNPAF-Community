@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/http";
 import { audit } from "@/lib/audit";
 import { destroySession } from "@/lib/session";
+import { deleteObject } from "@/lib/storage";
 
 export async function GET() {
   const { user, error } = await requireUser();
@@ -27,10 +28,32 @@ export async function GET() {
 export async function DELETE() {
   const { user, error } = await requireUser();
   if (error) return error;
+  const account = (
+    await db
+      .select({ avatarStorageKey: users.avatarStorageKey })
+      .from(users)
+      .where(eq(users.id, user!.id))
+      .limit(1)
+  )[0];
   await db
     .update(users)
-    .set({ status: "deleted", email: `deleted+${user!.id}@invalid.local`, name: "Deleted user", updatedAt: new Date() })
+    .set({
+      status: "deleted",
+      email: `deleted+${user!.id}@invalid.local`,
+      name: "Deleted user",
+      avatarStorageKey: null,
+      avatarMimeType: null,
+      updatedAt: new Date(),
+    })
     .where(eq(users.id, user!.id));
+  if (account?.avatarStorageKey) {
+    await deleteObject(account.avatarStorageKey).catch((cleanupError) =>
+      console.error("Could not delete account avatar", {
+        userId: user!.id,
+        cleanupError,
+      }),
+    );
+  }
   await audit({ actorId: user!.id, action: "delete", entityType: "user", entityId: user!.id });
   await destroySession();
   return NextResponse.json({ ok: true });

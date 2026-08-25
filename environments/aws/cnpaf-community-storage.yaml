@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CNPAF Community private S3 storage and least-privilege EC2 role
+
+Resources:
+  CommunityBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub cnpaf-community-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: RetireNoncurrentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+          - Id: ExpireDevDatabaseBackups
+            Status: Enabled
+            Prefix: cnpaf/community/dev/backups/database/
+            ExpirationInDays: 14
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 14
+          - Id: ExpireProdDatabaseBackups
+            Status: Enabled
+            Prefix: cnpaf/community/prod/backups/database/
+            ExpirationInDays: 35
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 35
+
+  CommunityInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cnpaf-community-ec2-s3
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: cnpaf-community-prefix-storage
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadBucketMetadata
+                Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource: !GetAtt CommunityBucket.Arn
+              - Sid: ManageCommunityObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub ${CommunityBucket.Arn}/cnpaf/community/dev/*
+                  - !Sub ${CommunityBucket.Arn}/cnpaf/community/prod/*
+
+  CommunityInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: cnpaf-community-ec2-s3
+      Roles:
+        - !Ref CommunityInstanceRole
+
+Outputs:
+  BucketName:
+    Value: !Ref CommunityBucket
+  InstanceRoleArn:
+    Value: !GetAtt CommunityInstanceRole.Arn
+  InstanceProfileName:
+    Value: !Ref CommunityInstanceProfile
+  DevPrefix:
+    Value: !Sub s3://${CommunityBucket}/cnpaf/community/dev
+  ProdPrefix:
+    Value: !Sub s3://${CommunityBucket}/cnpaf/community/prod

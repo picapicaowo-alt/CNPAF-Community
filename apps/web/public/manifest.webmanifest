@@ -1,13 +1,25 @@
 {
-  "name": "CNPAF Collect",
+  "name": "CNPAF Community",
   "short_name": "CNPAF",
-  "description": "Field intelligence for CNPAF volunteers",
-  "start_url": "/capture",
+  "description": "Secure field collection, review, and research evidence workflows for CNPAF",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f4efe4",
-  "theme_color": "#0f5c4c",
+  "background_color": "#edf2f3",
+  "theme_color": "#075f98",
   "lang": "zh",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    {
+      "src": "/cnpaf-logo.webp",
+      "sizes": "640x640",
+      "type": "image/webp",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
   ]
 }

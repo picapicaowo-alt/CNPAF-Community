@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { count, eq, sql } from "drizzle-orm";
 import { jobs } from "@cnpaf/db/schema";
 import { db } from "@/lib/db";
+import { storageBackend } from "@/lib/storage";
 
 export async function GET() {
   try {
@@ -11,6 +12,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       db: true,
+      storage: storageBackend(),
       jobs: { queued: Number(queued[0]?.n ?? 0), dead: Number(dead[0]?.n ?? 0) },
     });
   } catch (err) {

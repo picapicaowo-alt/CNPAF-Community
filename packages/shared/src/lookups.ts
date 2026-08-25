@@ -120,11 +120,11 @@ export const LOOKUPS: LookupRow[] = [
   { category: "job_status", key: "dead", nameZh: "死信 Dead letter", nameEn: "Dead letter 死信", sortOrder: 5 },
 ];
 
-export const SOURCE_KINDS = ["field_visit", "professor_interview", "literature", "other"] as const;
-export type SourceKind = (typeof SOURCE_KINDS)[number];
+export const SOURCE_KINDS: readonly string[] = ["field_visit", "professor_interview", "literature", "other"];
+export type SourceKind = string;
 
-export const SITE_TYPES = ["adhc", "nursing_home", "school", "university", "other"] as const;
-export type SiteType = (typeof SITE_TYPES)[number];
+export const SITE_TYPES: readonly string[] = ["adhc", "nursing_home", "school", "university", "other"];
+export type SiteType = string;
 
 export const MISSING_REASONS = [
   "recorded",
@@ -133,7 +133,7 @@ export const MISSING_REASONS = [
   "unknown",
   "refused",
 ] as const;
-export type MissingReason = (typeof MISSING_REASONS)[number];
+export type MissingReason = string;
 
 export const CONCERN_ORIGINS = [
   "field_observation",
@@ -141,10 +141,9 @@ export const CONCERN_ORIGINS = [
   "expert_interview",
   "literature",
 ] as const;
-export type ConcernOrigin = (typeof CONCERN_ORIGINS)[number];
+export type ConcernOrigin = string;
 
-export const USER_ROLES = ["volunteer", "coordinator", "admin"] as const;
-export type UserRole = (typeof USER_ROLES)[number];
+export type UserRole = string;
 
 export function lookupsByCategory(category: LookupCategory): LookupRow[] {
   return LOOKUPS.filter((row) => row.category === category).sort(
