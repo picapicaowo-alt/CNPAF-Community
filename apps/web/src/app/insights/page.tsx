@@ -160,76 +160,63 @@ export default function InsightsPage() {
         </div>
       ) : null}
       {analytics ? (
-        <div className="grid-2">
-          <Link className="card insight-card blue card-interactive" href="/insights/changes">
-            <h2>{locale === "zh" ? "发生了什么变化？" : "What changed?"}</h2>
-            <p>
-              {locale === "zh"
-                ? `当前授权范围内共有 ${analytics.authorizedRecordCount} 条记录。`
-                : `${analytics.authorizedRecordCount} records are currently in your authorized scope.`}
-            </p>
-            <span className="inline-link">
-              {locale === "zh" ? "打开趋势分析" : "Open trend analysis"}
-              <AppIcon name="arrow" />
-            </span>
-          </Link>
-          <Link
-            className="card insight-card amber card-interactive"
-            href="/insights/attention"
-          >
-            <h2>
-              {locale === "zh" ? "什么需要关注？" : "What needs attention?"}
-            </h2>
-            <p>
-              {locale === "zh"
-                ? `已批准证据中共有 ${totalConcerns} 个关注点。`
-                : `${totalConcerns} concerns appear in approved evidence.`}
-            </p>
-            <span className="inline-link">
-              {locale === "zh" ? "打开关注点分析" : "Open concern analysis"}
-              <AppIcon name="arrow" />
-            </span>
-          </Link>
-          <Link
-            className="card insight-card violet card-interactive"
-            href="/insights/gaps"
-          >
-            <h2>
-              {locale === "zh"
-                ? "我们还不知道什么？"
-                : "What do we still not know?"}
-            </h2>
-            <p>
-              {lowestCompletion
-                ? `${lowestCompletion.sourceKind}: ${Math.round(lowestCompletion.rate * 100)}% ${locale === "zh" ? "完成率" : "completion"}`
+        <div className="insight-register" aria-label={locale === "zh" ? "洞察索引" : "Insight index"}>
+          {[
+            {
+              href: "/insights/changes",
+              title: locale === "zh" ? "发生了什么变化？" : "What changed?",
+              detail:
+                locale === "zh"
+                  ? `当前授权范围内共有 ${analytics.authorizedRecordCount} 条记录。`
+                  : `${analytics.authorizedRecordCount} records are currently in your authorized scope.`,
+              value: analytics.authorizedRecordCount,
+              unit: locale === "zh" ? "条记录" : "records",
+            },
+            {
+              href: "/insights/attention",
+              title: locale === "zh" ? "什么需要关注？" : "What needs attention?",
+              detail:
+                locale === "zh"
+                  ? "定位已批准证据中的风险与关注点。"
+                  : "Locate risks and concerns in approved evidence.",
+              value: totalConcerns,
+              unit: locale === "zh" ? "个关注点" : "concerns",
+            },
+            {
+              href: "/insights/gaps",
+              title: locale === "zh" ? "我们还不知道什么？" : "What do we still not know?",
+              detail: lowestCompletion
+                ? `${lowestCompletion.sourceKind} · ${locale === "zh" ? "最低完成率" : "lowest completion"}`
                 : locale === "zh"
                   ? "目前没有足够的完成率数据。"
-                  : "There is not enough completion data yet."}
-            </p>
-            <span className="inline-link">
-              {locale === "zh" ? "打开证据缺口" : "Open evidence gaps"}
+                  : "There is not enough completion data yet.",
+              value: lowestCompletion ? Math.round(lowestCompletion.rate * 100) : "—",
+              unit: lowestCompletion ? "%" : "",
+            },
+            {
+              href: "/insights/coverage",
+              title: locale === "zh" ? "下一步在哪里采集？" : "Where should we collect more?",
+              detail:
+                locale === "zh"
+                  ? "使用任务与地点覆盖情况补齐证据缺口。"
+                  : "Use task and location coverage to close evidence gaps.",
+              value: "→",
+              unit: locale === "zh" ? "采集建议" : "guidance",
+            },
+          ].map((item, index) => (
+            <Link className="insight-register-row" href={item.href} key={item.href}>
+              <span className="insight-register-rank">0{index + 1}</span>
+              <span className="insight-register-copy">
+                <strong>{item.title}</strong>
+                <span>{item.detail}</span>
+              </span>
+              <span className="insight-register-value">
+                <strong>{item.value}</strong>
+                <span>{item.unit}</span>
+              </span>
               <AppIcon name="arrow" />
-            </span>
-          </Link>
-          <Link
-            className="card insight-card green card-interactive"
-            href="/insights/coverage"
-          >
-            <h2>
-              {locale === "zh"
-                ? "下一步在哪里采集？"
-                : "Where should we collect more?"}
-            </h2>
-            <p>
-              {locale === "zh"
-                ? "使用任务与地点覆盖情况来补齐证据缺口。"
-                : "Use task and location coverage to close evidence gaps."}
-            </p>
-            <span className="inline-link">
-              {locale === "zh" ? "打开采集建议" : "Open collection guidance"}
-              <AppIcon name="arrow" />
-            </span>
-          </Link>
+            </Link>
+          ))}
         </div>
       ) : null}
       <section>

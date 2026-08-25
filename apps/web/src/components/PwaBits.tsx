@@ -39,7 +39,7 @@ export function ServiceWorkerRegistrar() {
     if (navigator.onLine && pathname !== "/login") void flushOutbox();
   }, [pathname]);
 
-  if (!waiting) return null;
+  if (!waiting || pathname === "/login") return null;
   return (
     <div className="banner update-banner">
       <div>App update available. 有新版本。</div>

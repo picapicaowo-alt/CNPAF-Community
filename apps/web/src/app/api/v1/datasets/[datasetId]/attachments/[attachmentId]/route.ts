@@ -1,6 +1,6 @@
 import { getDatasetAttachmentFile } from "@/lib/modules/datasets";
 import { requirePermission } from "@/lib/http";
-import { getObject } from "@/lib/storage";
+import { getObjectStream } from "@/lib/storage";
 import { inlineContentDisposition } from "@/lib/attachments";
 import { apiErrorResponse } from "@/lib/api-error";
 
@@ -19,12 +19,12 @@ export async function GET(
       attachmentId,
       versionId,
     );
-    const { body, contentType } = await getObject(attachment.storageKey);
-    return new Response(new Uint8Array(body), {
+    const { body, contentLength, contentType } = await getObjectStream(attachment.storageKey);
+    return new Response(body, {
       headers: {
         "Cache-Control": "private, max-age=3600",
         "Content-Disposition": inlineContentDisposition(attachment.storageKey),
-        "Content-Length": String(body.length),
+        "Content-Length": String(contentLength ?? attachment.byteSize),
         "Content-Type": contentType || attachment.mimeType,
         "X-Content-Type-Options": "nosniff",
       },

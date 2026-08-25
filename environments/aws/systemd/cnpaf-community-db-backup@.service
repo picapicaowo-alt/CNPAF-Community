@@ -1,0 +1,16 @@
+[Unit]
+Description=CNPAF Community %i PostgreSQL backup to S3
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=docker
+ExecStart=/usr/local/sbin/cnpaf-community-db-backup %i
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target

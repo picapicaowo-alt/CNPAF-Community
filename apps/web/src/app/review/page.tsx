@@ -12,12 +12,14 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { reviewItemLabel, reviewItemSummary } from "@/lib/display-labels";
 import { taskDate } from "@/lib/task-ui";
 
 type ReviewItem = {
   id: string;
   itemType: string;
   recordId: string;
+  sourceKind?: string;
   status: string;
   priority: number;
   summary: string;
@@ -96,7 +98,7 @@ export default function ReviewInboxPage() {
               ? locale === "zh"
                 ? "全部"
                 : "All"
-              : type.replaceAll("_", " ")}{" "}
+              : reviewItemLabel(type, locale)}{" "}
             {type === "all" ? items.length : counts[type]}
           </button>
         ))}
@@ -118,11 +120,13 @@ export default function ReviewInboxPage() {
             >
               <div className="row">
                 <StatusPill tone={itemTone[item.itemType] ?? "neutral"}>
-                  {item.itemType.replaceAll("_", " ")}
+                  {reviewItemLabel(item.itemType, locale)}
                 </StatusPill>
               </div>
               <div>
-                <div className="list-row-title">{item.summary}</div>
+                <div className="list-row-title">
+                  {reviewItemSummary(item, locale)}
+                </div>
                 <div className="list-row-subtitle">
                   {locale === "zh" ? "记录" : "Record"} ·{" "}
                   {item.recordId.slice(0, 8)}

@@ -109,6 +109,53 @@ svg {
   max-width: 100%;
   height: auto;
 }
+.brand-slogan {
+  display: grid;
+  gap: 10px;
+}
+.brand-slogan-en,
+.brand-slogan-zh {
+  display: block;
+}
+.brand-slogan-en {
+  max-width: 720px;
+  font-size: clamp(2.5rem, 4.6vw, 5.75rem);
+  font-weight: 790;
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+.brand-slogan-zh {
+  color: var(--brand-orange);
+  font-size: clamp(1.35rem, 2vw, 2.4rem);
+  font-weight: 720;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+.brand-slogan-compact {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.brand-slogan-compact .brand-slogan-en {
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+  font-weight: 730;
+  letter-spacing: -0.026em;
+  line-height: 1.2;
+}
+.brand-slogan-compact .brand-slogan-zh {
+  font-size: 0.82rem;
+  letter-spacing: 0.05em;
+}
+.dashboard-slogan {
+  margin-top: -4px;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--navy);
+  box-shadow: 0 10px 30px rgba(8, 47, 87, 0.16);
+  color: white;
+}
 
 :focus-visible {
   outline: 3px solid rgba(9, 103, 190, 0.25);
@@ -2659,6 +2706,10 @@ input[type="radio"] {
   letter-spacing: -0.05em;
   text-wrap: balance;
 }
+.auth-slogan {
+  max-width: 720px;
+  margin-bottom: 22px;
+}
 .auth-brand-panel p {
   max-width: 520px;
   color: #c7d9e9;
@@ -4564,6 +4615,15 @@ input[type="radio"] {
   .auth-brand-panel h1 {
     margin-top: 0;
     font-size: 2.15rem;
+  }
+  .auth-slogan {
+    margin-bottom: 18px;
+  }
+  .auth-slogan .brand-slogan-en {
+    font-size: clamp(2.35rem, 12vw, 3.6rem);
+  }
+  .auth-slogan .brand-slogan-zh {
+    font-size: 1.35rem;
   }
   .auth-brand-panel p {
     margin-bottom: 0;

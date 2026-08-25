@@ -31,6 +31,14 @@ type NavItem = {
   aliases?: string[];
 };
 
+type WorkSurface = "field" | "evidence" | "admin";
+
+function workSurfaceForRole(roleKey?: string): WorkSurface {
+  if (roleKey === "volunteer") return "field";
+  if (roleKey === "admin") return "admin";
+  return "evidence";
+}
+
 const navItems: NavItem[] = [
   { href: "/dashboard", labelEn: "Home", labelZh: "首页", icon: "home" },
   {
@@ -310,6 +318,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     ].includes(item.href),
   );
   const primaryRole = me?.roles[0];
+  const workSurface = workSurfaceForRole(primaryRole?.key);
+  const routeSection = pathname.split("/")[1] || "dashboard";
   const roleLabel = primaryRole
     ? locale === "zh"
       ? primaryRole.nameZh
@@ -341,7 +351,12 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     return <PasswordChangeGate locale={locale} />;
 
   return (
-    <div className="app-frame">
+    <div
+      className={`app-frame work-surface-${workSurface}`}
+      data-role-key={primaryRole?.key ?? "member"}
+      data-route-section={routeSection}
+      data-work-surface={workSurface}
+    >
       <aside
         className="app-sidebar"
         aria-label={locale === "zh" ? "主导航" : "Primary navigation"}

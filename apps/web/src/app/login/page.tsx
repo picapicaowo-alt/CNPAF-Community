@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BrandSlogan } from "@/components/BrandSlogan";
 import { useI18n } from "@/components/LocaleProvider";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
@@ -40,15 +41,11 @@ export default function LoginPage() {
             label="Chinese Psychological Assistance Foundation"
             priority
           />
-          <h1>
-            {locale === "zh"
-              ? "让每一份社区声音都有清晰去向。"
-              : "Give every community voice a clear path forward."}
-          </h1>
+          <BrandSlogan className="auth-slogan" />
           <p>
             {locale === "zh"
-              ? "安全采集、协作审核，并把已批准的证据转化为可信洞察。"
-              : "Collect safely, review together, and turn approved evidence into trusted insight."}
+              ? "让每一份社区声音都有清晰去向：安全采集、协作审核，并把已批准的证据转化为可信洞察。"
+              : "Give every community voice a clear path forward, collect safely, review together, and turn approved evidence into trusted insight."}
           </p>
         </div>
         <span className="auth-footnote">

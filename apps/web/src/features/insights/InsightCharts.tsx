@@ -44,21 +44,21 @@ type Props = {
 };
 
 const PALETTE = {
-  ink: "#183247",
-  grid: "#e4ebf1",
-  blue: "#1876b9",
-  blueOpen: "#b9d9ec",
-  gold: "#c88a22",
-  goldOpen: "#f0d7a5",
-  violet: "#7561a8",
-  violetOpen: "#d8cfee",
-  green: "#2a846f",
-  greenOpen: "#b9dfd4",
-  neutral: "#92a5b3",
-  neutralOpen: "#dbe4ea",
-  chartGold: "#c89200",
-  chartBlue: "#258fc2",
-  chartPink: "#d84d7f",
+  ink: "#18323f",
+  grid: "#dce5e7",
+  blue: "#0873b8",
+  blueOpen: "#b9dbea",
+  gold: "#d86615",
+  goldOpen: "#f4cda8",
+  violet: "#607a87",
+  violetOpen: "#d4dfe3",
+  green: "#116b4e",
+  greenOpen: "#b9dccd",
+  neutral: "#7f929a",
+  neutralOpen: "#dce4e6",
+  chartGold: "#df6d1a",
+  chartBlue: "#0873b8",
+  chartPink: "#116b4e",
 };
 
 type TrendSeriesKey = "started" | "submitted" | "approved";
@@ -74,9 +74,9 @@ const TREND_SERIES: Array<{
 ];
 
 const tooltipStyle = {
-  border: "1px solid #d9e3eb",
-  borderRadius: 12,
-  boxShadow: "0 10px 30px rgba(24, 50, 71, 0.12)",
+  border: "1px solid #cad7db",
+  borderRadius: 8,
+  boxShadow: "0 12px 28px rgba(20, 56, 72, 0.12)",
   color: PALETTE.ink,
   fontSize: 13,
 };

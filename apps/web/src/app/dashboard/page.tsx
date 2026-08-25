@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
+import { BrandSlogan } from "@/components/BrandSlogan";
 import { useI18n } from "@/components/LocaleProvider";
 import {
   EmptyState,
@@ -135,6 +136,7 @@ export default function DashboardPage() {
           title={locale === "zh" ? "今天" : "Today"}
           description={greeting}
         />
+        <BrandSlogan className="dashboard-slogan" compact />
         <NotificationPanel
           locale={locale}
           notifications={notifications}
@@ -258,16 +260,68 @@ export default function DashboardPage() {
   const needsUpdate = records.filter(
     (record) => record.reviewStatus === "needs_completion",
   ).length;
+  const adminView = permissions.has("people.create_account");
+  const attentionItems = [
+    {
+      href: "/review",
+      icon: "review" as const,
+      count: reviewItems.length,
+      label: locale === "zh" ? "待人工审核" : "Records need review",
+      detail:
+        locale === "zh"
+          ? "核对来源、附件与隐私标记"
+          : "Verify sources, attachments, and privacy flags",
+      action: locale === "zh" ? "进入审核" : "Open review",
+      priority: reviewItems.length > 0,
+    },
+    {
+      href: "/tasks",
+      icon: "tasks" as const,
+      count: tasks.length,
+      label: locale === "zh" ? "今日到期任务" : "Tasks due today",
+      detail:
+        locale === "zh"
+          ? "检查采集进度与人员安排"
+          : "Check collection progress and assignments",
+      action: locale === "zh" ? "查看任务" : "View tasks",
+      priority: false,
+    },
+    {
+      href: "/records",
+      icon: "records" as const,
+      count: needsUpdate,
+      label: locale === "zh" ? "需补充的提交" : "Submissions need an update",
+      detail:
+        locale === "zh"
+          ? "退回采集人补齐缺失证据"
+          : "Return incomplete evidence to collectors",
+      action: locale === "zh" ? "打开记录" : "Open records",
+      priority: needsUpdate > 0,
+    },
+  ];
   return (
-    <div className="stack">
+    <div className={`stack staff-command ${adminView ? "staff-command-admin" : "staff-command-evidence"}`}>
       <PageHeader
-        title={locale === "zh" ? "首页" : "Home"}
+        title={
+          adminView
+            ? locale === "zh"
+              ? "管理概览"
+              : "Administration"
+            : locale === "zh"
+              ? "证据登记"
+              : "Evidence docket"
+        }
         description={
           locale === "zh"
-            ? "所有需要你关注的工作，都在一个地方。"
-            : "Everything that needs your attention, in one place."
+            ? adminView
+              ? "查看待处理事项，并进入人员、表单与系统配置。"
+              : "先处理有风险或缺失的证据，再安排今天的采集工作。"
+            : adminView
+              ? "Review pending work, then manage people, forms, and configuration."
+              : "Resolve risky or incomplete evidence before scheduling collection work."
         }
       />
+      <BrandSlogan className="dashboard-slogan" compact />
       <NotificationPanel
         locale={locale}
         notifications={notifications}
@@ -282,36 +336,33 @@ export default function DashboardPage() {
       />
       <section>
         <div className="section-title">
-          <h2>{locale === "zh" ? "需要关注" : "Needs your attention"}</h2>
+          <h2>{locale === "zh" ? "处置队列" : "Action queue"}</h2>
+          <span className="caption">
+            {locale === "zh" ? "按证据风险排序" : "Ordered by evidence risk"}
+          </span>
         </div>
-        <div className="grid-3">
-          <Link className="card stat-card card-interactive" href="/review">
-            <div className="stat-value">{reviewItems.length}</div>
-            <div className="stat-label">
-              {locale === "zh" ? "待人工审核" : "Records need review"}
-            </div>
-            <div className="stat-link">
-              {locale === "zh" ? "打开审核 →" : "Review now →"}
-            </div>
-          </Link>
-          <Link className="card stat-card card-interactive" href="/tasks">
-            <div className="stat-value">{tasks.length}</div>
-            <div className="stat-label">
-              {locale === "zh" ? "今日到期任务" : "Tasks due today"}
-            </div>
-            <div className="stat-link">
-              {locale === "zh" ? "查看任务 →" : "View tasks →"}
-            </div>
-          </Link>
-          <Link className="card stat-card card-interactive" href="/records">
-            <div className="stat-value">{needsUpdate}</div>
-            <div className="stat-label">
-              {locale === "zh" ? "需补充的提交" : "Submissions need an update"}
-            </div>
-            <div className="stat-link">
-              {locale === "zh" ? "打开记录 →" : "Open records →"}
-            </div>
-          </Link>
+        <div className="attention-register">
+          {attentionItems.map((item, index) => (
+            <Link
+              className={`attention-row ${item.priority ? "is-priority" : ""}`}
+              href={item.href}
+              key={item.href}
+            >
+              <span className="attention-sequence">0{index + 1}</span>
+              <span className="attention-icon" aria-hidden="true">
+                <AppIcon name={item.icon} />
+              </span>
+              <span className="attention-copy">
+                <strong>{item.label}</strong>
+                <span>{item.detail}</span>
+              </span>
+              <strong className="attention-count">{item.count}</strong>
+              <span className="attention-action">
+                {item.action}
+                <AppIcon name="arrow" />
+              </span>
+            </Link>
+          ))}
         </div>
       </section>
 

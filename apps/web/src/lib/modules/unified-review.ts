@@ -55,11 +55,11 @@ export async function getUnifiedReviewInbox(userId: string) {
   const canReviewFinding = (record: typeof records.$inferSelect) => can("ai.review_findings", record)
     || can("findings.review", record);
   const items = [
-    ...recordRows.filter((record) => can("records.review", record)).map((record) => ({ id: record.id, itemType: "record" as const, recordId: record.id, status: record.reviewStatus, priority: 20, summary: `${record.sourceKind} record`, createdAt: record.updatedAt, scope: resource(record) })),
-    ...privacyRows.filter(({ record }) => can("privacy.view", record)).map(({ flag, record }) => ({ id: flag.id, itemType: "privacy_flag" as const, recordId: record.id, status: flag.status, priority: 100, summary: "Privacy review required", createdAt: flag.createdAt, scope: resource(record) })),
-    ...safetyRows.filter(({ record }) => can("safety.view", record)).map(({ flag, record }) => ({ id: flag.id, itemType: "safety_flag" as const, recordId: record.id, status: flag.status, priority: 110, summary: flag.statement, createdAt: flag.createdAt, scope: resource(record) })),
-    ...customRows.filter(({ record }) => can("taxonomy.approve_mapping", record)).map(({ entry, record }) => ({ id: entry.id, itemType: "custom_entry" as const, recordId: record.id, status: entry.mappingStatus, priority: 10, summary: entry.customText, createdAt: entry.createdAt, scope: resource(record) })),
-    ...findingRows.filter(({ record }) => canReviewFinding(record)).map(({ finding, record }) => ({ id: finding.id, itemType: "ai_finding" as const, recordId: record.id, status: "pending", priority: finding.safetySuspect ? 90 : 15, summary: finding.statement, createdAt: finding.createdAt, scope: resource(record) })),
+    ...recordRows.filter((record) => can("records.review", record)).map((record) => ({ id: record.id, itemType: "record" as const, recordId: record.id, sourceKind: record.sourceKind, status: record.reviewStatus, priority: 20, summary: `${record.sourceKind} record`, createdAt: record.updatedAt, scope: resource(record) })),
+    ...privacyRows.filter(({ record }) => can("privacy.view", record)).map(({ flag, record }) => ({ id: flag.id, itemType: "privacy_flag" as const, recordId: record.id, sourceKind: record.sourceKind, status: flag.status, priority: 100, summary: "Privacy review required", createdAt: flag.createdAt, scope: resource(record) })),
+    ...safetyRows.filter(({ record }) => can("safety.view", record)).map(({ flag, record }) => ({ id: flag.id, itemType: "safety_flag" as const, recordId: record.id, sourceKind: record.sourceKind, status: flag.status, priority: 110, summary: flag.statement, createdAt: flag.createdAt, scope: resource(record) })),
+    ...customRows.filter(({ record }) => can("taxonomy.approve_mapping", record)).map(({ entry, record }) => ({ id: entry.id, itemType: "custom_entry" as const, recordId: record.id, sourceKind: record.sourceKind, status: entry.mappingStatus, priority: 10, summary: entry.customText, createdAt: entry.createdAt, scope: resource(record) })),
+    ...findingRows.filter(({ record }) => canReviewFinding(record)).map(({ finding, record }) => ({ id: finding.id, itemType: "ai_finding" as const, recordId: record.id, sourceKind: record.sourceKind, status: "pending", priority: finding.safetySuspect ? 90 : 15, summary: finding.statement, createdAt: finding.createdAt, scope: resource(record) })),
   ];
   return items.sort((left, right) => right.priority - left.priority || right.createdAt.getTime() - left.createdAt.getTime());
 }
@@ -95,6 +95,7 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     id: privacyRow.flag.id,
     itemType: "privacy_flag" as const,
     recordId: privacyRow.record.id,
+    sourceKind: privacyRow.record.sourceKind,
     status: privacyRow.flag.status,
     priority: 100,
     summary: "Privacy review required",
@@ -111,6 +112,7 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     id: safetyRow.flag.id,
     itemType: "safety_flag" as const,
     recordId: safetyRow.record.id,
+    sourceKind: safetyRow.record.sourceKind,
     status: safetyRow.flag.status,
     priority: 110,
     summary: safetyRow.flag.statement,
@@ -126,6 +128,7 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     id: recordRow.record.id,
     itemType: "record" as const,
     recordId: recordRow.record.id,
+    sourceKind: recordRow.record.sourceKind,
     status: recordRow.record.reviewStatus,
     priority: 20,
     summary: `${recordRow.record.sourceKind} record`,
@@ -141,6 +144,7 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     id: findingRow.finding.id,
     itemType: "ai_finding" as const,
     recordId: findingRow.record.id,
+    sourceKind: findingRow.record.sourceKind,
     status: "pending",
     priority: findingRow.finding.safetySuspect ? 90 : 15,
     summary: findingRow.finding.statement,
@@ -157,6 +161,7 @@ export async function getUnifiedReviewItem(userId: string, itemId: string) {
     id: customRow.entry.id,
     itemType: "custom_entry" as const,
     recordId: customRow.record.id,
+    sourceKind: customRow.record.sourceKind,
     status: customRow.entry.mappingStatus,
     priority: 10,
     summary: customRow.entry.customText,

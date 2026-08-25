@@ -5,6 +5,7 @@ import {
   approvedFindings,
   concerns,
   auditEvents,
+  jobs,
   records,
   recordVersions,
   privacyFlags,
@@ -444,7 +445,7 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
     attribution: body.attribution ?? {},
     policy,
   });
-  const aiStatus = scan.status === "flagged" ? "skipped_privacy" : "not_required";
+  const aiStatus = scan.status === "flagged" ? "skipped_privacy" : "queued";
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from records where id = ${record.id} for update`);
     const lockedRecord = (await tx.select().from(records).where(eq(records.id, record.id)).limit(1))[0];
@@ -531,7 +532,19 @@ export async function submitRecord(user: SessionUser, body: SubmitBody) {
       }
     }
     await audit({ actorId: user.id, action: "submit", entityType: "record", entityId: lockedRecord.id, metadata: { versionId: version.id, privacy: scan.status } }, (values) => tx.insert(auditEvents).values(values));
-    if (scan.status === "flagged") await tx.insert(privacyFlags).values({ recordId: lockedRecord.id, recordVersionId: version.id, status: "open", hits: scan.hits });
+    if (scan.status === "flagged") {
+      await tx.insert(privacyFlags).values({ recordId: lockedRecord.id, recordVersionId: version.id, status: "open", hits: scan.hits });
+    } else {
+      await tx
+        .insert(jobs)
+        .values({
+          kind: "analyze_record_version",
+          recordVersionId: version.id,
+          status: "queued",
+          idempotencyKey: `classify:${version.id}`,
+        })
+        .onConflictDoNothing({ target: jobs.idempotencyKey });
+    }
     return { record: submittedRecord, version, duplicate: false, privacy: scan };
   });
 

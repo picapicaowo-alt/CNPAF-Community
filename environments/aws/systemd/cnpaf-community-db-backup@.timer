@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily CNPAF Community %i PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+Unit=cnpaf-community-db-backup@%i.service
+
+[Install]
+WantedBy=timers.target

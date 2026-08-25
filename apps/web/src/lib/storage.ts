@@ -1,5 +1,7 @@
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -95,6 +97,58 @@ export async function getObject(key: string): Promise<{ body: Buffer; contentTyp
   if (config.backend !== "local") throw new Error("Local storage is not configured");
   const body = await readFile(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ config.directory, key));
   return { body };
+}
+
+export type StorageObjectStream = {
+  body: ReadableStream<Uint8Array>;
+  contentLength?: number;
+  contentType?: string;
+};
+
+async function getLocalObjectStream(
+  directory: string,
+  key: string,
+): Promise<StorageObjectStream> {
+  assertSafeKey(key);
+  const full = path.join(directory, key);
+  const metadata = await stat(full);
+  return {
+    body: Readable.toWeb(createReadStream(full)) as ReadableStream<Uint8Array>,
+    contentLength: metadata.size,
+  };
+}
+
+/**
+ * Streams user-facing downloads so large S3 objects do not need to be copied
+ * into the web process heap. Buffer-based getObject remains available for the
+ * explicitly bounded AI/image processing paths.
+ */
+export async function getObjectStream(key: string): Promise<StorageObjectStream> {
+  if (storageBackend() === "s3") {
+    const { client, config } = getS3();
+    try {
+      const out = await client.send(
+        new GetObjectCommand({
+          Bucket: config.bucket,
+          Key: objectKey(key, config.prefix),
+        }),
+      );
+      if (!out.Body) throw new Error("S3 object body is empty");
+      return {
+        body: out.Body.transformToWebStream(),
+        contentLength: out.ContentLength,
+        contentType: out.ContentType,
+      };
+    } catch (error) {
+      const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+      const name = (error as { name?: string }).name;
+      if (!config.fallbackLocalDirectory || (status !== 404 && name !== "NoSuchKey" && name !== "NotFound")) throw error;
+      return getLocalObjectStream(config.fallbackLocalDirectory, key);
+    }
+  }
+  const config = getStorageRuntimeConfig();
+  if (config.backend !== "local") throw new Error("Local storage is not configured");
+  return getLocalObjectStream(config.directory, key);
 }
 
 export async function deleteObject(key: string) {

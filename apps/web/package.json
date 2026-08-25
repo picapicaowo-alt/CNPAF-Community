@@ -14,6 +14,7 @@
     "@cnpaf/db": "0.1.0",
     "@cnpaf/shared": "0.1.0",
     "@electric-sql/pglite": "^0.2.17",
+    "@phosphor-icons/react": "^2.1.10",
     "ajv": "^8.17.1",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.45.2",

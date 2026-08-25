@@ -14,11 +14,18 @@ import {
 import { FieldAnswersPanel } from "@/features/records/FieldAnswersPanel";
 import type { RecordFieldAnswer } from "@/features/records/types";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import {
+  reviewItemLabel,
+  reviewItemSummary,
+  sourceKindLabel,
+  workflowLabel,
+} from "@/lib/display-labels";
 
 type ReviewItem = {
   id: string;
   itemType: string;
   recordId: string;
+  sourceKind?: string;
   status: string;
   priority: number;
   summary: string;
@@ -167,7 +174,7 @@ export default function ReviewDetailPage() {
         {locale === "zh" ? "返回审核" : "Back to review"}
       </Link>
       <PageHeader
-        title={item.summary}
+        title={reviewItemSummary(item, locale)}
         description={
           locale === "zh"
             ? "先查看证据，再作出人工决定。"
@@ -175,7 +182,7 @@ export default function ReviewDetailPage() {
         }
         actions={
           <StatusPill tone={item.priority >= 90 ? "red" : "blue"}>
-            {item.itemType.replaceAll("_", " ")}
+            {reviewItemLabel(item.itemType, locale)}
           </StatusPill>
         }
       />
@@ -184,9 +191,11 @@ export default function ReviewDetailPage() {
         <div className="stack">
           <div className="card stack-sm">
             <div className="row">
-              <StatusPill>{String(record.sourceKind ?? "record")}</StatusPill>
               <StatusPill>
-                {String(record.privacyStatus ?? item.status)}
+                {sourceKindLabel(String(record.sourceKind ?? "record"), locale)}
+              </StatusPill>
+              <StatusPill>
+                {workflowLabel(String(record.privacyStatus ?? item.status), locale)}
               </StatusPill>
             </div>
             <h2>{locale === "zh" ? "提交内容" : "Submitted content"}</h2>
@@ -280,7 +289,7 @@ export default function ReviewDetailPage() {
               onClick={() => decide(action)}
               type="button"
             >
-              {action.replaceAll("_", " ")}
+              {workflowLabel(action, locale)}
             </button>
           ))}
         </aside>
