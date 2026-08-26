@@ -127,9 +127,12 @@ if (!existingTemplate) {
     // Create the parent first, then publish the version atomically to satisfy the
     // database-level circular reference without disabling constraints.
     await tx.insert(templates).values({ id: templateId, key: "community-access-follow-up", templateTypeKey: "activity", organizationId, status: "draft", createdById: admin.id });
-    await tx.insert(templateVersions).values({ id: templateVersionId, templateId, version: 1, status: "published", nameEn: "Community Access and Follow-up Visit", nameZh: "社区服务可及性与跟进访视表", descriptionEn: "Structured operational follow-up for accessibility, language, transportation, and program preference observations.", descriptionZh: "用于记录无障碍、语言、交通接送与活动偏好的结构化运营访视。", configuration: { fixture: SCENARIO_KEY }, publishedAt: daysAgo(30), createdById: admin.id });
+    await tx.insert(templateVersions).values({ id: templateVersionId, templateId, version: 1, status: "draft", nameEn: "Community Access and Follow-up Visit", nameZh: "社区服务可及性与跟进访视表", descriptionEn: "Structured operational follow-up for accessibility, language, transportation, and program preference observations.", descriptionZh: "用于记录无障碍、语言、交通接送与活动偏好的结构化运营访视。", configuration: { fixture: SCENARIO_KEY }, createdById: admin.id });
     await tx.insert(templateSections).values({ id: sectionId, templateVersionId, key: "visit-observation", labelEn: "Visit observation", labelZh: "访视观察", helpTextEn: "Record de-identified operational observations only.", helpTextZh: "仅记录已去标识化的运营观察。", sortOrder: 0 });
     await tx.insert(templateFields).values(fieldDefinitions.map((field, index) => ({ id: stableUuid(`field:${field.key}`), templateSectionId: sectionId, ...field, sortOrder: index, allowMissingReason: false, allowCustomEntry: false, validation: field.fieldTypeKey === "rating_scale" ? { min: 1, max: 5 } : {}, configuration: { fixture: SCENARIO_KEY } })));
+    // Published versions are immutable by trigger, so publish only after every
+    // section and field has been inserted.
+    await tx.update(templateVersions).set({ status: "published", publishedAt: daysAgo(30), updatedAt: new Date() }).where(eq(templateVersions.id, templateVersionId));
     await tx.update(templates).set({ status: "published", currentPublishedVersionId: templateVersionId, updatedAt: new Date() }).where(eq(templates.id, templateId));
   });
 }
@@ -169,10 +172,13 @@ for (const workflow of workflows) {
     const recordStatus = fixture.status === "draft" || fixture.status === "needs_completion" ? "draft" : "submitted";
     const reviewStatus = fixture.status;
     const assignmentStatus = fixture.status === "draft" ? "in_progress" : "completed";
-    await db.insert(taskAssignments).values({ id: assignmentId, taskId: task.id, assigneeId: collector.id, assignedById: admin.id, status: assignmentStatus, assignedAt: daysAgo(18), startedAt: daysAgo(Math.max(fixture.days + 1, 1)), completedAt: assignmentStatus === "completed" ? occurredAt : null, recordId }).onConflictDoNothing();
     const exists = (await db.select({ id: records.id }).from(records).where(eq(records.id, recordId)).limit(1))[0];
     if (exists) continue;
     await db.transaction(async (tx) => {
+      // The record and assignment reference each other. Insert the assignment
+      // without its record link, create the record, then complete the link in
+      // the same transaction so both foreign keys remain enforced.
+      await tx.insert(taskAssignments).values({ id: assignmentId, taskId: task.id, assigneeId: collector.id, assignedById: admin.id, status: assignmentStatus, assignedAt: daysAgo(18), startedAt: daysAgo(Math.max(fixture.days + 1, 1)), completedAt: assignmentStatus === "completed" ? occurredAt : null }).onConflictDoNothing();
       await tx.insert(records).values({ id: recordId, clientRecordId: stableUuid(`client:${workflow.key}:${index}`), sourceKind: "field_visit", siteId: location.id, organizationId, programId: program.id, taskId: task.id, taskAssignmentId: assignmentId, createdById: collector.id, collectionPurpose: "operational", researchUseStatus: fixture.status === "approved" ? "approved_for_research" : "not_assessed", recordStatus, reviewStatus, aiStatus: "not_required", privacyStatus: "clear", headVersionId: versionId, completenessScore: "1.000", createdAt: occurredAt, updatedAt: occurredAt });
       await tx.insert(recordVersions).values({ id: versionId, recordId, versionNumber: 1, occurredAt, submittedAt: snapshot ? occurredAt : null, submittedById: snapshot ? collector.id : null, templateVersionId: actualVersionId, quantitative: {}, qualitative: `${fixture.staff} ${fixture.next}`, attribution: {}, piiAttestation: true, contentLanguage: "en", localVersion: 1, serverVersion: 1, isSnapshot: snapshot, createdAt: occurredAt, updatedAt: occurredAt });
       const valuesByKey: Record<string, string | number | boolean | string[]> = { "attendance-estimate": fixture.attendance, "mobility-access-rating": fixture.mobility, "language-access": [...fixture.languages], "transport-barriers": fixture.transport, "program-preferences": fixture.preferences, "follow-up-required": fixture.followUp, "staff-observation": fixture.staff, "next-action": fixture.next };
@@ -183,6 +189,7 @@ for (const workflow of workflows) {
         if (fixture.status === "needs_completion") await tx.insert(annotations).values({ id: stableUuid(`annotation:${workflow.key}:${index}`), recordId, recordVersionId: versionId, authorId: reviewer.id, body: "Please identify the transportation source and observation window before resubmitting.", visibleToVolunteer: true, createdAt: daysAgo(Math.max(fixture.days - 1, 0)) });
       }
       await tx.insert(auditEvents).values({ id: stableUuid(`audit:${workflow.key}:${index}`), actorId: collector.id, action: snapshot ? "submit" : "draft.saved", entityType: "record", entityId: recordId, afterState: { fixture: SCENARIO_KEY, status: fixture.status }, metadata: { workflow: workflow.key }, createdAt: occurredAt });
+      await tx.update(taskAssignments).set({ recordId, updatedAt: occurredAt }).where(eq(taskAssignments.id, assignmentId));
     });
   }
   createdSummary.push({ workflow: workflow.key, task: task.title, states: workflow.records.map((record) => record.status) });
@@ -191,7 +198,9 @@ for (const workflow of workflows) {
 console.log(JSON.stringify({ ok: true, target: TARGET, fixture: SCENARIO_KEY, program: program.nameEn, workflows: createdSummary }, null, 2));
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
