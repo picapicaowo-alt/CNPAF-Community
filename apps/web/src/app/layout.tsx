@@ -27,6 +27,15 @@ export const metadata: Metadata = {
   description:
     "Secure field collection, review, and research evidence workflows for CNPAF.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   appleWebApp: {
     capable: true,
     title: "CNPAF Community",
@@ -35,7 +44,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#075f98",
+  themeColor: "#3366FF",
   width: "device-width",
   initialScale: 1,
 };
@@ -46,7 +55,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh" suppressHydrationWarning>
+    <html data-scroll-behavior="smooth" lang="zh" suppressHydrationWarning>
       <body className={cnpafSans.variable}>
         <template
           data-impeccable-contract="43c0ea9d"

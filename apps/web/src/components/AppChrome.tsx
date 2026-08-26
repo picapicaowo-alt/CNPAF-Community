@@ -103,7 +103,6 @@ const parentRoutes: Array<{
   { match: (path) => path.startsWith("/people/"), href: "/people", labelEn: "People", labelZh: "人员" },
   { match: (path) => path.startsWith("/programs/"), href: "/programs", labelEn: "Programs", labelZh: "项目" },
   { match: (path) => path.startsWith("/locations/"), href: "/locations", labelEn: "Locations", labelZh: "地点" },
-  { match: () => true, href: "/dashboard", labelEn: "Home", labelZh: "首页" },
 ];
 
 function initials(name: string) {
@@ -437,12 +436,9 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             </span>
             <span className="mobile-brand-copy">
               <strong>CNPAF Community</strong>
-              <span>{me?.user.name ?? roleLabel}</span>
+              <span>{roleLabel}</span>
             </span>
           </Link>
-          <div className="mobile-user">
-            <span className="status-pill status-green">{roleLabel}</span>
-          </div>
         </header>
         <main className="app-main">
           {parentRoute ? (

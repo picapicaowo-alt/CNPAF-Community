@@ -550,7 +550,7 @@ export const taskCreateBodySchema = taskBodyBaseSchema.extend({
   (value) => !value.opensAt || !value.closesAt || Date.parse(value.opensAt) < Date.parse(value.closesAt),
   { message: "closesAt must be after opensAt", path: ["closesAt"] },
 );
-export const taskUpdateBodySchema = taskBodyBaseSchema.omit({ programId: true, templateVersionId: true }).partial().extend({
+export const taskUpdateBodySchema = taskBodyBaseSchema.omit({ programId: true }).partial().extend({
   status: z.enum(["draft", "open", "closed", "cancelled", "archived"]).optional(),
 }).strict();
 export const taskAssignmentBodySchema = z.object({

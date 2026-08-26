@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import {
   auditEvents,
   configRegistries,
@@ -289,6 +289,62 @@ export async function updateTask(actorId: string, taskId: string, input: TaskUpd
     input.taskTypeKey !== before.taskTypeKey
   )
     await requireActiveRegistryItem("task_type", input.taskTypeKey, before.organizationId);
+  if (
+    input.templateVersionId !== undefined &&
+    input.templateVersionId !== before.templateVersionId
+  ) {
+    if (!["draft", "open"].includes(before.status))
+      throw new ApiError(
+        "INVALID_TRANSITION",
+        "The collection form can only be changed on a draft or open task",
+        409,
+      );
+    const startedAssignments = await db
+      .select({ id: taskAssignments.id })
+      .from(taskAssignments)
+      .where(
+        and(
+          eq(taskAssignments.taskId, taskId),
+          or(
+            inArray(taskAssignments.status, ["in_progress", "completed"]),
+            isNotNull(taskAssignments.recordId),
+          ),
+        ),
+      )
+      .limit(1);
+    if (startedAssignments.length)
+      throw new ApiError(
+        "CONFLICT",
+        "The collection form is locked because collection has already started",
+        409,
+      );
+    const form = await db
+      .select({ version: templateVersions, template: templates })
+      .from(templateVersions)
+      .innerJoin(templates, eq(templateVersions.templateId, templates.id))
+      .where(eq(templateVersions.id, input.templateVersionId))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (
+      !form ||
+      form.version.status !== "published" ||
+      form.template.currentPublishedVersionId !== form.version.id
+    )
+      throw new ApiError(
+        "BAD_REQUEST",
+        "Task requires the form's current published version",
+        400,
+      );
+    if (
+      form.template.organizationId &&
+      form.template.organizationId !== before.organizationId
+    )
+      throw new ApiError(
+        "BAD_REQUEST",
+        "Task form belongs to another organization",
+        400,
+      );
+  }
   await assertSiteInOrganization(input.siteId === undefined ? before.siteId : input.siteId, before.organizationId);
   const opensAt = input.opensAt === undefined ? before.opensAt : input.opensAt ? new Date(input.opensAt) : null;
   const closesAt = input.closesAt === undefined ? before.closesAt : input.closesAt ? new Date(input.closesAt) : null;

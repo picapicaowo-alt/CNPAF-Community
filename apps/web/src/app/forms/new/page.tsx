@@ -348,8 +348,8 @@ export default function NewFormPage() {
               </h2>
               <p className="muted">
                 {locale === "zh"
-                  ? "先确认名称即可创建，其他内容可稍后在编辑器中调整。"
-                  : "Confirm the names now; everything else can be changed in the editor."}
+                  ? "确认名称后进入编辑器，继续设置问题、逻辑与发布内容。"
+                  : "Confirm the names to continue into the editor for questions, logic, and publishing."}
               </p>
             </div>
             <button

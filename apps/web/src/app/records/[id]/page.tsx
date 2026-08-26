@@ -15,6 +15,7 @@ import { FieldAnswersPanel } from "@/features/records/FieldAnswersPanel";
 import type { RecordFieldAnswer } from "@/features/records/types";
 import { downloadRecord } from "@/features/records/api";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { workflowLabel } from "@/lib/display-labels";
 import type { AttachmentSummary } from "@cnpaf/shared";
 import { AttachmentGallery } from "@/features/attachments/components/AttachmentGallery";
 
@@ -330,11 +331,11 @@ export default function RecordDetail() {
             <dl className="definition-list">
               <div className="definition-row">
                 <dt>{locale === "zh" ? "记录状态" : "Record status"}</dt>
-                <dd>{record.recordStatus}</dd>
+                <dd>{workflowLabel(record.recordStatus, locale)}</dd>
               </div>
               <div className="definition-row">
                 <dt>{locale === "zh" ? "当前版本" : "Current version"}</dt>
-                <dd>v{head?.versionNumber ?? "—"}</dd>
+                <dd>v{head?.versionNumber ?? "-"}</dd>
               </div>
               <div className="definition-row">
                 <dt>{locale === "zh" ? "创建时间" : "Created"}</dt>

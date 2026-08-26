@@ -1,36 +1,55 @@
 :root {
-  --canvas: #f4f6f9;
-  --surface: #ffffff;
-  --surface-soft: #f8fafc;
-  --surface-blue: #edf5fc;
-  --surface-green: #e8faf2;
-  --surface-amber: #fff5e3;
-  --surface-red: #fff0f0;
-  --surface-violet: #f3edff;
-  --ink: #172230;
-  --muted: #5f6f82;
-  --muted-strong: #45566a;
-  --line: #dce3eb;
-  --line-strong: #c8d3df;
-  --navy: #0a3c6b;
-  --navy-deep: #082f57;
-  --blue: #1769aa;
-  --blue-dark: #0f568f;
-  --brand-orange: #ff8200;
-  --green: #04734a;
-  --amber: #a84f00;
-  --red: #d53f45;
-  --violet: #7050c8;
-  --shadow-sm: 0 1px 2px rgba(20, 38, 59, 0.035);
-  --shadow-md: 0 18px 48px rgba(20, 38, 59, 0.11);
+  color-scheme: light;
+  --canvas: #edf2f3;
+  --surface: #fbfcfc;
+  --surface-soft: #f3f6f6;
+  --surface-blue: #edf1ff;
+  --surface-green: #e7f5ef;
+  --surface-amber: #fff1df;
+  --surface-red: #fbe9e9;
+  --surface-violet: #eeeaf5;
+  --ink: #18323f;
+  --muted: #5b707a;
+  --muted-strong: #405964;
+  --line: #cad7db;
+  --line-strong: #aebfc5;
+  --navy: #3366ff;
+  --navy-deep: #2448b8;
+  --blue: #3366ff;
+  --blue-dark: #264fd5;
+  --brand-orange: #e86f19;
+  --green: #116b4e;
+  --amber: #9a500f;
+  --red: #af343b;
+  --violet: #65538f;
+  --chart-blue-100: #bfeaf5;
+  --chart-blue-200: #8bd5e9;
+  --chart-blue-400: #3a9bcf;
+  --chart-blue-500: #036eb7;
+  --chart-pink-100: #fbf5f7;
+  --chart-pink-200: #f5e2e8;
+  --chart-pink-400: #e5b4c4;
+  --chart-pink-500: #d58fa8;
+  --chart-purple-100: #f7f4fa;
+  --chart-purple-200: #ece4f4;
+  --chart-purple-400: #c5b0dc;
+  --chart-purple-500: #a68bc7;
+  --chart-yellow-100: #fffdf4;
+  --chart-yellow-200: #fff6cb;
+  --chart-yellow-400: #ffda65;
+  --chart-yellow-500: #ffbf00;
+  --shadow-sm: 0 5px 14px rgba(20, 56, 72, 0.06);
+  --shadow-md: 0 18px 44px rgba(20, 56, 72, 0.11);
   --radius-sm: 8px;
   --radius: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
   --font:
-    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "PingFang SC", "Noto Sans SC", sans-serif;
+    var(--font-cnpaf), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    ui-sans-serif, system-ui, sans-serif;
+  --font-data: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --content-max: 1320px;
+  --sidebar-width: 232px;
 }
 
 * {
@@ -148,15 +167,6 @@ svg {
   font-size: 0.82rem;
   letter-spacing: 0.05em;
 }
-.dashboard-slogan {
-  margin-top: -4px;
-  padding: 16px 20px;
-  border-radius: var(--radius-lg);
-  background: var(--navy);
-  box-shadow: 0 10px 30px rgba(8, 47, 87, 0.16);
-  color: white;
-}
-
 :focus-visible {
   outline: 3px solid rgba(9, 103, 190, 0.25);
   outline-offset: 2px;
@@ -5110,6 +5120,151 @@ input[type="radio"] {
   padding-top: 2px;
 }
 
+/* Task filters stay compact until the user asks for the full set. */
+.task-filter-card {
+  overflow: hidden;
+  padding: 0;
+}
+.task-filter-toggle {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.task-filter-toggle:hover {
+  background: #fbfdff;
+}
+.task-filter-toggle-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--chart-blue-100);
+  color: var(--chart-blue-500);
+}
+.task-filter-toggle-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.task-filter-toggle-copy {
+  display: grid;
+  gap: 2px;
+}
+.task-filter-toggle-copy strong {
+  font-size: 13px;
+}
+.task-filter-toggle-copy > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.task-filter-count {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--chart-purple-200);
+  color: #765aa0;
+  font-size: 10px;
+  font-weight: 720;
+}
+.task-filter-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 700;
+}
+.task-filter-action > span {
+  font-size: 17px;
+  transition: transform 0.16s ease;
+}
+.task-filter-card.expanded .task-filter-action > span {
+  transform: rotate(180deg);
+}
+.task-filter-content {
+  padding: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* Make the task-to-form handoff explicit at publishing time. */
+.task-form-link-card {
+  border-color: var(--chart-purple-200);
+  background: linear-gradient(145deg, var(--surface), var(--chart-purple-100));
+}
+.task-form-link-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+.task-form-link-heading > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--chart-purple-200);
+  color: #765aa0;
+}
+.task-form-link-heading svg {
+  width: 17px;
+  height: 17px;
+}
+.task-form-link-heading h2,
+.task-form-link-heading p {
+  margin: 0;
+}
+.task-form-link-heading p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.task-form-link-selection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--chart-purple-200);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+}
+.task-form-link-selection span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 9px;
+}
+.task-form-link-selection strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-form-link-selection small {
+  align-self: center;
+  color: #765aa0;
+  font-weight: 750;
+}
+.task-form-link-flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 9px;
+  font-weight: 680;
+}
+.task-form-link-flow b {
+  color: var(--chart-purple-500);
+  font-weight: 500;
+}
+
 /* Records filters stay compact until the next interaction asks for detail. */
 .records-filter-card {
   padding: 0;
@@ -6069,10 +6224,10 @@ input[type="radio"] {
   display: grid;
   min-height: 42px;
   place-items: center;
-  border: 1px solid rgb(200 138 34 / calc(0.16 + var(--heat) * 0.48));
+  border: 1px solid rgb(255 191 0 / calc(0.18 + var(--heat) * 0.48));
   border-radius: 8px;
-  background: rgb(200 138 34 / calc(0.07 + var(--heat) * 0.55));
-  color: #684b18;
+  background: rgb(255 191 0 / calc(0.08 + var(--heat) * 0.52));
+  color: #6f5500;
   font-size: 10px;
   font-weight: 750;
 }
@@ -6177,6 +6332,21 @@ input[type="radio"] {
   }
   .records-filter-toggle {
     grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .task-filter-toggle {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .task-filter-count {
+    display: none;
+  }
+  .task-filter-action {
+    font-size: 0;
+  }
+  .task-filter-action > span {
+    font-size: 16px;
+  }
+  .task-filter-content > .row-between {
+    align-items: flex-start;
   }
   .records-filter-count {
     display: none;

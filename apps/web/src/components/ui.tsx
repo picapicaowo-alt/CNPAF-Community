@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppIcon, type AppIconName } from "./AppIcon";
+import { useI18n } from "./LocaleProvider";
 
 export function PageHeader({
   title,
@@ -59,8 +62,13 @@ export function EmptyState({
 }
 
 export function LoadingState({ rows = 3 }: { rows?: number }) {
+  const { locale } = useI18n();
   return (
-    <div className="loading-list" aria-label="Loading" aria-busy="true">
+    <div
+      className="loading-list"
+      aria-label={locale === "zh" ? "正在加载" : "Loading"}
+      aria-busy="true"
+    >
       {Array.from({ length: rows }, (_, index) => (
         <div className="skeleton-row" key={index} />
       ))}
@@ -75,10 +83,11 @@ export function ErrorState({
   message: string;
   retry?: () => void;
 }) {
+  const { locale } = useI18n();
   return (
     <div className="feedback feedback-error" role="alert">
       <div>
-        <strong>Something went wrong</strong>
+        <strong>{locale === "zh" ? "加载失败" : "Something went wrong"}</strong>
         <p>{message}</p>
       </div>
       {retry ? (
@@ -87,7 +96,7 @@ export function ErrorState({
           onClick={retry}
           type="button"
         >
-          Try again
+          {locale === "zh" ? "重试" : "Try again"}
         </button>
       ) : null}
     </div>

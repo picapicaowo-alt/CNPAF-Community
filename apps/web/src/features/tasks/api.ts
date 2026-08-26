@@ -5,6 +5,7 @@ export type TaskUpdate = Partial<
   Pick<
     TaskSummary,
     | "siteId"
+    | "templateVersionId"
     | "taskTypeKey"
     | "title"
     | "instructions"

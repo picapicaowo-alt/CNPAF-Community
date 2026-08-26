@@ -146,6 +146,22 @@ const admin = await ApiSession.login("admin@cnpaf.local");
 const identity = await admin.request("/api/v1/auth/me");
 const organizationId = identity.user.organizationId;
 assert.ok(organizationId, "Admin must belong to an organization");
+assert.ok(
+  identity.roles.some((role) => role.key === "admin"),
+  "Admin account must resolve the admin role",
+);
+for (const permission of [
+  "people.create_account",
+  "tasks.create",
+  "templates.create",
+  "review.view",
+  "records.view",
+]) {
+  assert.ok(
+    identity.permissions.includes(permission),
+    `Admin account is missing required permission ${permission}`,
+  );
+}
 
 const people = await admin.request("/api/v1/admin/users?limit=250");
 const peopleByEmail = new Map(people.users.map((user) => [user.email, user]));

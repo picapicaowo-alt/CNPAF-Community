@@ -15,7 +15,9 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("zh");
   useEffect(() => {
     const stored = localStorage.getItem("cnpaf.locale") as Locale | null;
-    if (stored === "en" || stored === "zh") setLocaleState(stored);
+    const nextLocale = stored === "en" || stored === "zh" ? stored : "zh";
+    setLocaleState(nextLocale);
+    document.documentElement.lang = nextLocale;
   }, []);
   const setLocale = (l: Locale) => {
     setLocaleState(l);
