@@ -67,7 +67,10 @@ AI provider and model selection come from the published workflow version. With
 no API key, seeded development workflows use the deterministic local provider.
 When `OPENAI_API_KEY` is present, seeding publishes all four AI workflows against
 the OpenAI Responses API using `AI_MODEL` (default `gpt-5.4-mini`). Set
-`AI_PROVIDER=local_heuristic` to explicitly keep local analysis.
+`AI_PROVIDER=local_heuristic` to explicitly keep local analysis. Administrators
+with `ai.configure_workflows` can then switch the model used by all current
+published OpenAI workflows from **More → AI model**; the change is audited and
+applies to new runs only.
 
 For the Docker deployment profile, keep the production key in ignored
 `.env.prod-ai` and layer it over the normal deployment environment:
