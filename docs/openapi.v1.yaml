@@ -167,6 +167,7 @@ paths:
     get: { tags: [Records], operationId: getRecordFilterOptions, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /records/{id}:
     get: { tags: [Records], operationId: getRecord, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '404': { $ref: '#/components/responses/NotFound' } } }
+    patch: { tags: [Records], operationId: applyRecordLifecycle, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /records/{id}/attachments:
     post: { tags: [Records], operationId: createRecordAttachment, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /records/{id}/attachments/{attachmentId}:

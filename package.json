@@ -12,6 +12,7 @@
     "db:generate": "npm run generate -w @cnpaf/db",
     "db:migrate": "npm run migrate -w @cnpaf/db",
     "db:seed": "npm run seed -w @cnpaf/db",
+    "db:seed:dev-scenarios": "tsx scripts/seed-dev-scenarios.ts",
     "docker:up": "docker compose up -d postgres",
     "docker:down": "docker compose down",
     "docker:app": "docker compose --profile app up --build",

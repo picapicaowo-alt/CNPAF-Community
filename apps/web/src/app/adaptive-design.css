@@ -9,6 +9,449 @@
   scrollbar-width: thin;
 }
 
+/* 2026 evidence-workspace alignment contract.
+   One 16/14/12 type ladder and a 24/16/12 spacing rhythm keep every workflow
+   legible without erasing the denser reviewer and administrator surfaces. */
+:root {
+  --type-body: 15px;
+  --type-ui: 14px;
+  --type-meta: 12px;
+  --space-panel: 24px;
+  --space-flow: 16px;
+  --space-control: 12px;
+}
+
+body {
+  font-size: var(--type-body);
+  line-height: 1.62;
+}
+
+.app-main {
+  padding-top: 36px;
+}
+
+.page-header {
+  min-height: 76px;
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  font-size: clamp(2rem, 2.5vw, 2.65rem);
+  line-height: 1.12;
+}
+
+.page-header p,
+.muted,
+.card p,
+.data-table {
+  font-size: var(--type-ui);
+}
+
+.caption,
+.eyebrow,
+.status-pill,
+.data-table th,
+.definition-row dt,
+.definition-row dd {
+  font-size: var(--type-meta);
+}
+
+.card {
+  padding: var(--space-panel);
+}
+
+.stack { gap: var(--space-flow); }
+.stack-sm { gap: var(--space-control); }
+
+.data-table th,
+.data-table td {
+  padding-block: 14px;
+  vertical-align: middle;
+}
+
+.records-data-table th:nth-child(2),
+.records-data-table td:nth-child(2) {
+  min-width: 330px;
+}
+
+.records-data-table .table-link {
+  display: block;
+  max-width: 48ch;
+  color: var(--ink);
+  font-size: var(--type-ui);
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+.records-data-table .table-link:hover {
+  color: var(--blue-dark);
+}
+
+.records-data-table td > .caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+}
+
+.record-reference {
+  color: var(--blue-dark);
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-ai-panel {
+  gap: 0;
+}
+
+.insight-ai-heading {
+  align-items: flex-start;
+  padding: 20px 24px;
+}
+
+.insight-ai-heading h2 {
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.insight-ai-heading p {
+  max-width: 82ch;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.insight-ai-body {
+  min-height: 210px;
+  max-height: 620px;
+  padding: 24px;
+  background: #fbfcfd;
+}
+
+.ai-copilot-empty {
+  display: grid;
+  gap: 18px;
+}
+
+.ai-copilot-generate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #cfe0ec;
+  border-radius: var(--radius);
+  background: linear-gradient(120deg, #f4f9fc, #fbfcfd 62%);
+}
+
+.ai-copilot-generate-icon,
+.ai-thinking-orbit {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #c5dceb;
+  border-radius: 50%;
+  background: white;
+  color: var(--blue);
+}
+
+.ai-copilot-generate strong {
+  display: block;
+  font-size: 15px;
+}
+
+.ai-copilot-generate p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.insight-ai-prompts {
+  gap: 12px;
+}
+
+.insight-ai-prompts button {
+  min-height: 82px;
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ai-copilot-thinking {
+  min-height: 230px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 18px;
+  padding: 28px;
+  border: 1px solid #cfdfeb;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f4f9fc, white 64%);
+}
+
+.ai-thinking-orbit {
+  position: relative;
+  flex: 0 0 auto;
+  animation: ai-evidence-pulse 1.8s ease-in-out infinite;
+}
+
+.ai-copilot-thinking > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ai-copilot-thinking strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.ai-copilot-thinking p {
+  margin: 0 0 14px;
+  color: var(--blue-dark);
+  font-size: 14px;
+}
+
+.ai-copilot-thinking ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-copilot-thinking li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #7a8b93;
+  font-size: 13px;
+}
+
+.ai-copilot-thinking li > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
+  font-family: var(--font-data);
+  font-size: 11px;
+}
+
+.ai-copilot-thinking li.is-active {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ai-copilot-thinking li.is-active > span {
+  border-color: var(--blue);
+  color: var(--blue);
+  box-shadow: 0 0 0 4px rgba(3, 110, 183, 0.09);
+}
+
+.ai-copilot-thinking li.is-complete > span {
+  border-color: #8bc9b2;
+  background: var(--surface-green);
+  color: var(--green);
+}
+
+.ai-copilot-inline-thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-blue);
+  color: var(--blue-dark);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.ai-thinking-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.ai-thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ai-thinking-dot 1.1s ease-in-out infinite;
+}
+
+.ai-thinking-dots i:nth-child(2) { animation-delay: 0.14s; }
+.ai-thinking-dots i:nth-child(3) { animation-delay: 0.28s; }
+
+.insight-ai-compose {
+  padding: 16px 18px 18px;
+}
+
+.ai-prompt-composer > textarea {
+  min-height: 96px;
+  padding: 16px 18px 12px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.dataset-chat-message {
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.record-revision-card {
+  display: grid;
+  gap: 22px;
+  border-color: #b9d4e6;
+  box-shadow: 0 16px 38px rgba(20, 56, 72, 0.08);
+}
+
+.record-revision-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.record-revision-heading h2,
+.record-revision-heading p,
+.record-revision-heading .eyebrow {
+  margin-bottom: 0;
+}
+
+.record-revision-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.record-revision-sections {
+  display: grid;
+  gap: 18px;
+}
+
+.record-revision-sections fieldset {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.record-revision-sections legend {
+  padding: 0 7px;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.record-revision-sections label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.record-revision-sections input,
+.record-revision-sections textarea,
+.record-archive-confirm textarea {
+  width: 100%;
+}
+
+.record-revision-boolean {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.record-revision-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.record-archive-confirm {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(300px, 1.2fr) auto;
+  align-items: end;
+  gap: 18px;
+  border-color: #e5b9bc;
+  background: #fffafa;
+}
+
+.record-archive-confirm h2,
+.record-archive-confirm p {
+  margin-bottom: 0;
+}
+
+.record-archive-confirm p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.record-review-history ol {
+  display: grid;
+  gap: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.record-review-history li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+
+.record-review-marker {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-green);
+  color: var(--green);
+}
+
+.record-review-marker svg { width: 14px; }
+.record-review-history strong { font-size: 13px; }
+.record-review-history p,
+.record-review-history small { display: block; margin: 1px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+@keyframes ai-evidence-pulse {
+  50% { box-shadow: 0 0 0 9px rgba(3, 110, 183, 0.08); transform: rotate(8deg); }
+}
+
+@keyframes ai-thinking-dot {
+  0%, 65%, 100% { opacity: 0.35; transform: translateY(0); }
+  32% { opacity: 1; transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-thinking-orbit,
+  .ai-thinking-dots i { animation: none; }
+}
+
+@media (max-width: 899px) {
+  .app-main { padding-top: 22px; }
+  .card { padding: 18px; }
+  .ai-copilot-generate,
+  .record-archive-confirm { grid-template-columns: 1fr; align-items: stretch; }
+  .ai-copilot-generate-icon { display: none; }
+  .ai-copilot-generate .button { width: 100%; }
+  .insight-ai-body { padding: 16px; }
+  .ai-copilot-thinking { padding: 20px 16px; }
+  .record-revision-actions { align-items: stretch; flex-direction: column-reverse; }
+  .record-revision-actions .button { width: 100%; }
+}
+
 *::selection {
   background: #cce7f5;
   color: var(--navy-deep);
@@ -3213,4 +3656,32 @@ h3 {
     width: 100%;
     min-height: 48px;
   }
+}
+
+/* Final cascade checkpoint for the shared evidence workspace. */
+.page-header { min-height: 76px; margin-bottom: 24px; }
+.page-header h1 { font-size: clamp(2rem, 2.5vw, 2.65rem); }
+.page-header p { font-size: 15px; }
+.card { padding: var(--space-panel); }
+.data-table { font-size: 14px; }
+.data-table th { font-size: 12px; }
+.definition-row dt,
+.definition-row dd { font-size: 12px; }
+.insight-ai-panel { gap: 0; }
+.insight-ai-heading { align-items: flex-start; padding: 20px 24px; }
+.insight-ai-heading h2 { font-size: 18px; line-height: 1.35; }
+.insight-ai-heading p { max-width: 82ch; margin-top: 3px; font-size: 13px; line-height: 1.55; }
+.insight-ai-body { min-height: 210px; max-height: 620px; padding: 24px; }
+.insight-ai-prompts { gap: 12px; }
+.insight-ai-prompts button { min-height: 82px; padding: 14px; font-size: 14px; line-height: 1.5; }
+.ai-copilot-thinking { min-height: 230px; align-items: flex-start; justify-content: flex-start; gap: 18px; padding: 28px; }
+.insight-ai-compose { padding: 16px 18px 18px; }
+.ai-prompt-composer > textarea { min-height: 96px; padding: 16px 18px 12px; font-size: 15px; line-height: 1.6; }
+.dataset-chat-message { font-size: 15px; line-height: 1.7; }
+.records-data-table .table-link { font-size: 14px; line-height: 1.45; }
+
+@media (max-width: 899px) {
+  .card { padding: 18px; }
+  .insight-ai-body { padding: 16px; }
+  .ai-copilot-thinking { padding: 20px 16px; }
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { reviewBodySchema, uuidSchema } from "./contracts";
+import { recordFieldAnswerSchema, reviewBodySchema, uuidSchema } from "./contracts";
 
 export const permissionEffectSchema = z.enum(["allow", "deny"]);
 export const scopeReferenceSchema = z.object({
@@ -451,6 +451,22 @@ export const askAiOutputSchema = z.object({
     claim: z.string().min(1).max(4000),
   })).max(100),
 });
+
+export const recordLifecycleBodySchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("save_revision"),
+    reason: z.string().min(1).max(2000),
+    qualitative: z.string().max(100_000),
+    fieldAnswers: z.array(recordFieldAnswerSchema).max(5000),
+  }).strict(),
+  z.object({
+    action: z.literal("submit_revision"),
+  }).strict(),
+  z.object({
+    action: z.literal("archive"),
+    reason: z.string().min(1).max(2000),
+  }).strict(),
+]);
 
 export const exportJobBodySchema = z.object({
   exportTypeKey: z.string().min(1).max(120),

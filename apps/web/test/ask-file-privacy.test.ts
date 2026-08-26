@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { strToU8, zipSync } from "fflate";
-import { extractAskFileTextForPrivacy } from "../src/lib/ask-collect";
+import { approvedRecordStatement, extractAskFileTextForPrivacy } from "../src/lib/ask-collect";
 
 test("conversation text attachments are available to the server privacy scan", async () => {
   assert.equal(
@@ -30,4 +30,14 @@ test("legacy Office files fail closed when they cannot be privacy-screened", asy
     () => extractAskFileTextForPrivacy("legacy.doc", "application/msword", Buffer.from("binary")),
     /convert it to \.docx or \.xlsx/,
   );
+});
+
+test("an approved record snapshot becomes a concrete citable statement without AI findings", () => {
+  const statement = approvedRecordStatement(
+    { occurredAt: new Date("2026-08-20T17:00:00.000Z"), qualitative: "Reviewer-cleared operational note." },
+    [{ labelEn: "Transportation barriers", labelZh: "交通接送障碍", value: "Pickup window was too broad.", customText: null, missingReasonKey: null }],
+  );
+  assert.match(statement, /Transportation barriers \/ 交通接送障碍/);
+  assert.match(statement, /Pickup window was too broad/);
+  assert.match(statement, /Reviewer-cleared operational note/);
 });

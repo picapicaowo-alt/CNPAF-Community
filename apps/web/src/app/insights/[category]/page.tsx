@@ -16,6 +16,7 @@ import {
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { sourceKindLabel } from "@/lib/display-labels";
+import { recordDisplayName, recordReference } from "@/features/records/display";
 
 const InsightCharts = dynamic(() => import("@/features/insights/InsightCharts"), {
   ssr: false,
@@ -196,6 +197,10 @@ export default function InsightCategoryPage() {
   const visibleRecords = showAll ? activeRecords : activeRecords.slice(0, 6);
   const canAsk = permissions.some((permission) =>
     ["chat.ask_collect", "ask_collect.use"].includes(permission),
+  );
+  const locationNameById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location.name])),
+    [locations],
   );
 
   const metrics = (() => {
@@ -389,7 +394,10 @@ export default function InsightCategoryPage() {
                 <Link href={`/records/${record.id}`} key={record.id}>
                   <span className="insight-record-id">
                     <AppIcon name="records" />
-                    <span><strong>{record.id.slice(0, 8).toUpperCase()}</strong><small>{sourceKindLabel(record.sourceKind, locale)}</small></span>
+                    <span>
+                      <strong>{recordDisplayName(record, locale, { locationName: record.siteId ? locationNameById.get(record.siteId) : null })}</strong>
+                      <small>{recordReference(record)}</small>
+                    </span>
                   </span>
                   <span className="insight-record-status">
                     <StatusPill tone={statusTone(record.reviewStatus)}>{statusLabel(record.reviewStatus, locale)}</StatusPill>

@@ -34,6 +34,7 @@ import type {
 } from "@/features/datasets/types";
 import { fetchRecordFilterOptions } from "@/features/records/api";
 import { RecordsFiltersPanel } from "@/features/records/components/RecordsFiltersPanel";
+import { recordDisplayName, recordReference } from "@/features/records/display";
 import { recordFilterStateFromParams } from "@/features/records/model";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { sourceKindLabel, workflowLabel } from "@/lib/display-labels";
@@ -561,11 +562,18 @@ function RecordsContent() {
                       ) : null}
                       <td>
                         <Link className="table-link" href={`/records/${row.id}`}>
-                          {row.id.slice(0, 8).toUpperCase()}
+                          {recordDisplayName(
+                            row,
+                            locale,
+                            {
+                              locationName: location?.name,
+                              formName: row.templateVersionId ? formById.get(row.templateVersionId) : null,
+                            },
+                          )}
                         </Link>
                         <div className="caption">
-                          {collectorById.get(row.createdById) ??
-                            row.createdById.slice(0, 8)}
+                          <span className="record-reference">{recordReference(row)}</span>
+                          <span>{collectorById.get(row.createdById) ?? (locale === "zh" ? "未知采集员" : "Unknown collector")}</span>
                         </div>
                       </td>
                       <td>

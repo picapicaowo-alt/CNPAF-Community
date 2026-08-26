@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   approvedFindings,
@@ -7,6 +7,7 @@ import {
   askMessages,
   askMessageSources,
   datasetRecords,
+  recordFieldAnswers,
   records,
   recordVersions,
 } from "@cnpaf/db/schema";
@@ -171,6 +172,34 @@ function searchableStatement(value: unknown) {
   return (value as { statement?: string } | null)?.statement?.trim() ?? "";
 }
 
+function readableEvidenceValue(value: unknown): string {
+  if (value == null || value === "") return "Not provided";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return value.map(readableEvidenceValue).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+export function approvedRecordStatement(
+  version: Pick<typeof recordVersions.$inferSelect, "qualitative" | "occurredAt">,
+  answers: Array<Pick<typeof recordFieldAnswers.$inferSelect, "labelEn" | "labelZh" | "value" | "customText" | "missingReasonKey">>,
+) {
+  const fields = answers.map((answer) => {
+    const label = answer.labelEn === answer.labelZh
+      ? answer.labelEn
+      : `${answer.labelEn} / ${answer.labelZh}`;
+    const value = answer.customText?.trim()
+      || (answer.missingReasonKey ? `Missing: ${answer.missingReasonKey}` : readableEvidenceValue(answer.value));
+    return `${label}: ${value}`;
+  });
+  const parts = [
+    version.occurredAt ? `Occurred: ${version.occurredAt.toISOString()}` : "",
+    ...fields,
+    version.qualitative.trim() ? `Reviewed source notes: ${version.qualitative.trim()}` : "",
+  ].filter(Boolean);
+  return parts.join("\n").slice(0, 20_000);
+}
+
 function relevanceScore(question: string, statement: string) {
   const normalizedQuestion = question.toLocaleLowerCase();
   const normalizedStatement = statement.toLocaleLowerCase();
@@ -261,6 +290,53 @@ export async function addAskMessage(
     statement: searchableStatement(approved.approvedValue) || "Approved evidence",
     sourceType: "approved_finding" as const,
   }));
+  // A record-level conversation is explicitly scoped to approved records. The
+  // reviewed snapshot itself is therefore a valid source even when reviewers
+  // approved the submission without separately accepting AI findings.
+  const requestedRecordIds = requestedScope.recordIds ?? [];
+  const approvedRecordRows = requestedRecordIds.length
+    ? await db
+        .select({ record: records, version: recordVersions })
+        .from(records)
+        .innerJoin(recordVersions, eq(records.headVersionId, recordVersions.id))
+        .where(and(inArray(records.id, requestedRecordIds), eq(records.reviewStatus, "approved")))
+    : [];
+  const approvedRecordVersionIds = approvedRecordRows.map(({ version }) => version.id);
+  const approvedRecordAnswers = approvedRecordVersionIds.length
+    ? await db
+        .select()
+        .from(recordFieldAnswers)
+        .where(inArray(recordFieldAnswers.recordVersionId, approvedRecordVersionIds))
+        .orderBy(recordFieldAnswers.sectionSortOrder, recordFieldAnswers.fieldSortOrder)
+    : [];
+  const answersByVersion = new Map<string, typeof approvedRecordAnswers>();
+  for (const answer of approvedRecordAnswers) {
+    answersByVersion.set(answer.recordVersionId, [
+      ...(answersByVersion.get(answer.recordVersionId) ?? []),
+      answer,
+    ]);
+  }
+  const approvedRecordSources = approvedRecordRows
+    .filter(({ record, version }) =>
+      matchesEvidenceFilters(evidenceScope, record, version, null) &&
+      ["clear", "redacted"].includes(record.privacyStatus) &&
+      record.researchUseStatus !== "restricted" &&
+      evaluateAuthorization(access, "records.view_approved", {
+        organizationId: record.organizationId,
+        programId: record.programId,
+        siteId: record.siteId,
+        serviceKey: record.sourceKind,
+        researchUse: record.researchUseStatus,
+        dataClassification: "approved_evidence",
+      }).allowed,
+    )
+    .map(({ record, version }) => ({
+      id: version.id,
+      label: `REC-${record.id.slice(0, 8).toUpperCase()}`,
+      statement: approvedRecordStatement(version, answersByVersion.get(version.id) ?? []),
+      sourceType: "approved_record" as const,
+    }))
+    .filter((source) => source.statement.trim());
   const media = requestedScope.includeMedia && datasetVersionId
     ? await prepareDatasetAiMedia(actorId, datasetVersionId)
     : null;
@@ -278,7 +354,7 @@ export async function addAskMessage(
     statement: `User-provided conversation attachment: ${attachment.name}`,
     sourceType: "conversation_upload" as const,
   }));
-  const sources = [...evidenceSources, ...mediaSources, ...conversationContextSources, ...uploadedSources];
+  const sources = [...evidenceSources, ...approvedRecordSources, ...mediaSources, ...conversationContextSources, ...uploadedSources];
   const uploadImageInputs: AiImageInput[] = uploads
     .filter(({ attachment }) => attachment.mimeType.startsWith("image/"))
     .map(({ attachment, body }) => ({ id: attachment.id, mimeType: attachment.mimeType, body }));
@@ -364,6 +440,7 @@ export async function getAskConversation(id: string, actorId: string) {
     ? await db.select().from(askMessageSources).where(inArray(askMessageSources.messageId, assistantMessageIds))
     : [];
   const sourceIds = sources.filter((source) => source.sourceType === "approved_finding").map((source) => source.sourceId);
+  const approvedRecordSourceIds = sources.filter((source) => source.sourceType === "approved_record").map((source) => source.sourceId);
   const attachmentSourceIds = sources.filter((source) => source.sourceType === "attachment").map((source) => source.sourceId);
   const contextSourceIds = sources.filter((source) => source.sourceType === "conversation_context").map((source) => source.sourceId);
   const uploadSourceIds = new Set(messages.flatMap((message) => {
@@ -377,6 +454,11 @@ export async function getAskConversation(id: string, actorId: string) {
     .innerJoin(recordVersions, eq(approvedFindings.recordVersionId, recordVersions.id))
     .innerJoin(records, eq(recordVersions.recordId, records.id))
     .where(inArray(approvedFindings.id, sourceIds)) : [];
+  const approvedRecordEvidence = approvedRecordSourceIds.length ? await db
+    .select({ version: recordVersions, record: records })
+    .from(recordVersions)
+    .innerJoin(records, eq(recordVersions.recordId, records.id))
+    .where(inArray(recordVersions.id, approvedRecordSourceIds)) : [];
   const mediaEvidence = attachmentSourceIds.length ? await db
     .select({ attachment: attachments, record: records })
     .from(attachments)
@@ -396,6 +478,22 @@ export async function getAskConversation(id: string, actorId: string) {
       dataClassification: "approved_evidence",
     }).allowed,
   ).map(({ id: evidenceId }) => evidenceId));
+  for (const { version, record } of approvedRecordEvidence) {
+    if (
+      record.headVersionId === version.id &&
+      record.reviewStatus === "approved" &&
+      ["clear", "redacted"].includes(record.privacyStatus) &&
+      record.researchUseStatus !== "restricted" &&
+      evaluateAuthorization(access, "records.view_approved", {
+        organizationId: record.organizationId,
+        programId: record.programId,
+        siteId: record.siteId,
+        serviceKey: record.sourceKind,
+        researchUse: record.researchUseStatus,
+        dataClassification: "approved_evidence",
+      }).allowed
+    ) allowedIds.add(version.id);
+  }
   if (contextSourceIds.includes(conversation.id)) allowedIds.add(conversation.id);
   for (const source of sources) {
     if (source.sourceType === "conversation_upload" && uploadSourceIds.has(source.sourceId)) allowedIds.add(source.sourceId);

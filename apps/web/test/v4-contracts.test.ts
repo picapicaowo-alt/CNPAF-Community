@@ -16,6 +16,7 @@ import {
   personGroupUpdateBodySchema,
   programUpdateBodySchema,
   programMembershipRequestBodySchema,
+  recordLifecycleBodySchema,
   reportSectionAiDraftBodySchema,
   reportFiltersSchema,
   resolveFormBranchAction,
@@ -144,6 +145,13 @@ test("Dataset media and AI media use require explicit contract fields", () => {
 test("Dataset archive requires an auditable reason", () => {
   assert.equal(datasetArchiveBodySchema.safeParse({}).success, false);
   assert.equal(datasetArchiveBodySchema.safeParse({ reason: "Superseded by a reviewed Dataset Version" }).success, true);
+});
+
+test("approved record revisions and deletion require explicit auditable actions", () => {
+  assert.equal(recordLifecycleBodySchema.safeParse({ action: "archive" }).success, false);
+  assert.equal(recordLifecycleBodySchema.safeParse({ action: "archive", reason: "Duplicate submission" }).success, true);
+  assert.equal(recordLifecycleBodySchema.safeParse({ action: "submit_revision", reason: "unexpected" }).success, false);
+  assert.equal(recordLifecycleBodySchema.safeParse({ action: "submit_revision" }).success, true);
 });
 
 test("an initial report accepts one pinned source kind, never two", () => {

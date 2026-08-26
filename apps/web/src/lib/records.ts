@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   activityDefinitions,
   annotations,
@@ -559,6 +559,7 @@ export async function listRecordsForUser(
     .select({ record: records, version: recordVersions })
     .from(records)
     .leftJoin(recordVersions, eq(records.headVersionId, recordVersions.id))
+    .where(ne(records.recordStatus, "archived"))
     .orderBy(desc(records.updatedAt));
   const access = await getAccessContext(user.id);
   const visible = rows.filter(({ record }) => {
