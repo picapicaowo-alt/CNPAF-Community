@@ -113,10 +113,16 @@ test("the More directory keeps equal scrollable cards in independent columns", (
 
 test("standalone mobile workspaces keep navigation and forms inside the viewport", () => {
   const chrome = readFileSync(path.join(appRoot, "../components/AppChrome.tsx"), "utf8");
+  const dashboard = readFileSync(path.join(appRoot, "dashboard/page.tsx"), "utf8");
   const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
 
   assert.match(chrome, /className="mobile-header-back"/);
   assert.match(chrome, /router\.back\(\)/);
+  assert.match(chrome, /workSurface === "field"[\s\S]*?"\/insights"/);
+  assert.match(chrome, /--mobile-nav-count/);
+  assert.match(dashboard, /className="admin-insight-entry"/);
   assert.match(styles, /\.mobile-header-back\s*\{[\s\S]*?width: 44px;[\s\S]*?height: 44px/);
   assert.match(styles, /\.forms-manage-page\s*\{[\s\S]*?max-width: 100%;[\s\S]*?overflow-x: clip/);
+  assert.match(styles, /grid-template-columns: repeat\(var\(--mobile-nav-count, 4\), minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.insight-real-dates input\[type="date"\][\s\S]*?min-width: 0;[\s\S]*?max-width: 100%/);
 });

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   apiFetch,
   ClientApiError,
@@ -313,16 +313,20 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     [permissions],
   );
   const canReview = permissions.has("review.view");
-  const mobileNav = visibleNav.filter((item) =>
-    [
-      "/dashboard",
-      "/tasks",
-      canReview ? "/review" : "/records",
-      "/more",
-    ].includes(item.href),
-  );
   const primaryRole = me?.roles[0];
   const workSurface = workSurfaceForRole(primaryRole?.key);
+  const mobileNavHrefs = workSurface === "field"
+    ? ["/dashboard", "/tasks", "/records", "/more"]
+    : [
+        "/dashboard",
+        "/tasks",
+        canReview ? "/review" : "/records",
+        "/insights",
+        "/more",
+      ];
+  const mobileNav = visibleNav.filter((item) =>
+    mobileNavHrefs.includes(item.href),
+  );
   const routeSection = pathname.split("/")[1] || "dashboard";
   const roleLabel = primaryRole
     ? locale === "zh"
@@ -534,6 +538,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       <nav
         className="bottom-nav"
         aria-label={locale === "zh" ? "手机导航" : "Mobile navigation"}
+        style={{ "--mobile-nav-count": mobileNav.length } as CSSProperties}
       >
         {mobileNav.map((item) => (
           <Link

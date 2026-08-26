@@ -1060,7 +1060,7 @@ select:focus {
 
 .attention-sequence,
 .insight-register-rank {
-  color: #667b84;
+  color: #50666f;
   font-family: var(--font-data);
   font-size: 11px;
   font-weight: 720;
@@ -3523,6 +3523,15 @@ h3 {
 }
 
 @media (max-width: 899px) {
+  html,
+  body,
+  .app-frame,
+  .app-content {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   input,
   textarea,
   select {
@@ -3534,7 +3543,20 @@ h3 {
   }
 
   .bottom-nav-link {
+    overflow: hidden;
     font-size: 12px;
+  }
+
+  .bottom-nav-link > span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-main :is(a, button, input, textarea, select, [tabindex]) {
+    scroll-margin-bottom: calc(104px + env(safe-area-inset-bottom));
+    touch-action: manipulation;
   }
 
   .insight-viz-card {
@@ -3605,6 +3627,158 @@ h3 {
 
   .ai-model-options {
     grid-template-columns: 1fr;
+  }
+}
+
+/* PWA/mobile containment: native date controls, dense workspaces, and fixed
+   navigation must stay inside the visual viewport on iOS standalone mode. */
+@media (max-width: 899px) {
+  .app-main,
+  .app-main > *,
+  .stack,
+  .card,
+  .list-panel,
+  .table-shell,
+  .insight-detail-page,
+  .insight-real-scope,
+  .insight-real-dates,
+  .more-directory,
+  .more-column,
+  .more-group,
+  .more-link-list {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-main,
+  .work-surface-evidence .app-main,
+  .work-surface-field .app-main,
+  .work-surface-admin .app-main {
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-app-header {
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-left: max(16px, env(safe-area-inset-left));
+  }
+
+  .bottom-nav {
+    grid-template-columns: repeat(var(--mobile-nav-count, 4), minmax(0, 1fr));
+    padding-right: max(6px, env(safe-area-inset-right));
+    padding-left: max(6px, env(safe-area-inset-left));
+  }
+
+  .list-panel > .empty-state {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .insight-real-dates input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .forms-manage-page .form-quick-add-items {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .forms-manage-page .form-quick-add-items > button {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .insight-real-dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bottom-nav-link {
+    font-size: 10.5px;
+  }
+}
+
+/* Admin insight entry sits before the queue on the home screen and mirrors the
+   dedicated mobile navigation destination without duplicating dashboard data. */
+.admin-insight-entry {
+  display: grid;
+  min-width: 0;
+  min-height: 88px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #a9cde1;
+  border-radius: var(--radius);
+  background: var(--surface-blue);
+  color: var(--ink);
+}
+
+.admin-insight-entry:hover,
+.admin-insight-entry:focus-visible {
+  border-color: var(--blue);
+  background: #e6f3f9;
+}
+
+.admin-insight-entry-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+}
+
+.admin-insight-entry-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.admin-insight-entry-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.admin-insight-entry-copy strong {
+  font-size: var(--type-ui);
+}
+
+.admin-insight-entry-copy > span {
+  color: var(--muted-strong);
+  font-size: var(--type-meta);
+  line-height: 1.5;
+}
+
+.admin-insight-entry-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--blue-dark);
+  font-size: var(--type-meta);
+  font-weight: 720;
+}
+
+.admin-insight-entry-action svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 480px) {
+  .admin-insight-entry {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .admin-insight-entry-action {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 
@@ -3682,6 +3856,8 @@ h3 {
 
 @media (max-width: 899px) {
   .card { padding: 18px; }
+  .page-header h1 { font-size: clamp(1.75rem, 8vw, 2.1rem); }
+  .page-header p { font-size: 14px; }
   .insight-ai-body { padding: 16px; }
   .ai-copilot-thinking { padding: 20px 16px; }
 }

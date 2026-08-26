@@ -470,6 +470,26 @@ export default function DashboardPage() {
         notifications={notifications}
         onOpen={openNotification}
       />
+      {adminView &&
+      (permissions.has("analytics.view") || permissions.has("insights.view")) ? (
+        <Link className="admin-insight-entry" href="/insights">
+          <span className="admin-insight-entry-icon" aria-hidden="true">
+            <AppIcon name="insights" />
+          </span>
+          <span className="admin-insight-entry-copy">
+            <strong>{locale === "zh" ? "洞察中心" : "Insights center"}</strong>
+            <span>
+              {locale === "zh"
+                ? "查看授权范围内的变化、关注点、证据缺口与覆盖情况"
+                : "Review authorized changes, concerns, evidence gaps, and coverage"}
+            </span>
+          </span>
+          <span className="admin-insight-entry-action">
+            {locale === "zh" ? "打开" : "Open"}
+            <AppIcon name="arrow" />
+          </span>
+        </Link>
+      ) : null}
       <section>
         <div className="section-title">
           <h2>

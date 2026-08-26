@@ -121,7 +121,12 @@ function ChartCard({
           <p>{subtitle}</p>
         </div>
       </header>
-      <div aria-label={ariaLabel} className="insight-viz-canvas" role="img">
+      <div
+        aria-label={ariaLabel}
+        className="insight-viz-canvas"
+        role="img"
+        tabIndex={0}
+      >
         {children}
       </div>
       {sourceNote ? <footer className="insight-viz-source">{sourceNote}</footer> : null}
