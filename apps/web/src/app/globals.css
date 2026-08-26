@@ -6137,6 +6137,33 @@ input[type="radio"] {
 .insight-series-controls i.dashed {
   border-top-style: dashed;
 }
+.insight-chart-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.insight-chart-actions button,
+.ai-copilot-suggestions button {
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 680;
+}
+.insight-chart-actions button:hover,
+.insight-chart-actions button:focus-visible,
+.insight-chart-actions button.active,
+.ai-copilot-suggestions button:hover,
+.ai-copilot-suggestions button:focus-visible {
+  border-color: #8dbfdc;
+  background: var(--surface-blue);
+  color: var(--blue-dark);
+}
 .insight-viz-canvas {
   min-width: 0;
   min-height: 300px;
@@ -6195,6 +6222,72 @@ input[type="radio"] {
   border-radius: 3px;
 }
 .insight-donut-legend strong { color: var(--ink); }
+.ai-copilot-panel {
+  gap: 16px;
+}
+.ai-copilot-thinking {
+  display: flex;
+  min-height: 104px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted-strong);
+  font-weight: 650;
+}
+.ai-copilot-thinking svg {
+  color: var(--blue);
+}
+.ai-copilot-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ai-copilot-panel .dataset-chat-message.assistant {
+  white-space: pre-wrap;
+}
+.ai-access-toggle {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ai-access-toggle > span {
+  display: flex;
+  width: 30px;
+  height: 18px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: #c9d4d9;
+  transition: background-color 140ms ease;
+}
+.ai-access-toggle > span i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+  transition: transform 140ms ease;
+}
+.ai-access-toggle.active {
+  border-color: #b5a1ce;
+  background: #f7f3fb;
+  color: #624781;
+}
+.ai-access-toggle.active > span { background: #8062a7; }
+.ai-access-toggle.active > span i { transform: translateX(12px); }
+.ai-access-toggle:focus-visible { outline: 3px solid rgb(8 120 189 / 25%); outline-offset: 2px; }
+.ai-access-toggle:disabled { cursor: not-allowed; opacity: 0.58; }
 .insight-heatmap-card { overflow: hidden; }
 .insight-heatmap {
   display: grid;

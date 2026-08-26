@@ -4,7 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, ClientApiError, errorMessage } from "@/lib/api-client";
+import {
+  apiFetch,
+  ClientApiError,
+  errorMessage,
+  prefetchApi,
+} from "@/lib/api-client";
 import { AppIcon, type AppIconName } from "./AppIcon";
 import { BrandLogo } from "./BrandLogo";
 import { useI18n } from "./LocaleProvider";
@@ -337,6 +342,48 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     );
   }
 
+  function warmNavigation(href: string) {
+    router.prefetch(href);
+    const endpoints: string[] = [];
+    if (href === "/dashboard") {
+      if (permissions.has("tasks.view")) endpoints.push("/api/v1/tasks/today");
+      if (permissions.has("review.view")) endpoints.push("/api/v1/review/inbox");
+      if (
+        ["records.view", "records.view_own", "records.view_approved"].some(
+          (permission) => permissions.has(permission),
+        )
+      )
+        endpoints.push("/api/v1/records");
+      if (permissions.has("notifications.view"))
+        endpoints.push("/api/v1/notifications?status=unread");
+      if (permissions.has("reports.view")) endpoints.push("/api/v1/reports");
+    } else if (href === "/tasks") {
+      const canManageTasks = ["tasks.create", "tasks.assign", "tasks.edit"].some(
+        (permission) => permissions.has(permission),
+      );
+      endpoints.push(canManageTasks ? "/api/v1/tasks" : "/api/v1/tasks/my");
+    } else if (href === "/review") {
+      endpoints.push("/api/v1/review/inbox");
+    } else if (href === "/records") {
+      endpoints.push("/api/v1/records", "/api/v1/records/options");
+      if (permissions.has("datasets.create"))
+        endpoints.push("/api/v1/datasets/options");
+      if (permissions.has("locations.view"))
+        endpoints.push("/api/v1/locations");
+    } else if (href === "/forms") {
+      endpoints.push("/api/v1/templates?view=cards");
+    } else if (href === "/insights") {
+      if (
+        ["analytics.view", "insights.view"].some((permission) =>
+          permissions.has(permission),
+        )
+      )
+        endpoints.push("/api/v1/analytics");
+      if (permissions.has("reports.view")) endpoints.push("/api/v1/reports");
+    }
+    endpoints.forEach(prefetchApi);
+  }
+
   async function logout() {
     await apiFetch<void>("/api/v1/auth/logout", { method: "POST" }).catch(
       () => undefined,
@@ -375,6 +422,10 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
               className={`side-nav-link${isActive(item) ? " active" : ""}`}
               href={item.href}
               key={item.href}
+              onFocus={() => warmNavigation(item.href)}
+              onPointerEnter={() => warmNavigation(item.href)}
+              onTouchStart={() => warmNavigation(item.href)}
+              prefetch
             >
               <AppIcon name={item.icon} />
               <span>{locale === "zh" ? item.labelZh : item.labelEn}</span>
@@ -462,6 +513,10 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             className={`bottom-nav-link${isActive(item) ? " active" : ""}`}
             href={item.href}
             key={item.href}
+            onFocus={() => warmNavigation(item.href)}
+            onPointerEnter={() => warmNavigation(item.href)}
+            onTouchStart={() => warmNavigation(item.href)}
+            prefetch
           >
             <AppIcon name={item.icon} />
             <span>{locale === "zh" ? item.labelZh : item.labelEn}</span>

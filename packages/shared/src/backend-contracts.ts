@@ -76,6 +76,11 @@ export const adminUserUpdateBodySchema = z.object({
   status: z.enum(["active", "inactive"]).optional(),
 }).strict();
 
+export const aiAccessUpdateBodySchema = z.object({
+  enabled: z.boolean(),
+  reason: z.string().min(1).max(2000),
+}).strict();
+
 export const registryCreateBodySchema = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_.-]*$/).max(120),
   nameEn: z.string().min(1).max(160),
@@ -357,6 +362,7 @@ const reportDateSchema = z.string().refine((value) => !Number.isNaN(Date.parse(v
 export const reportFiltersSchema = z.object({
   dateFrom: reportDateSchema.optional(),
   dateTo: reportDateSchema.optional(),
+  recordIds: z.array(uuidSchema).max(500).optional(),
   organizationIds: z.array(uuidSchema).max(500).optional(),
   programIds: z.array(uuidSchema).max(500).optional(),
   siteIds: z.array(uuidSchema).max(500).optional(),
@@ -423,6 +429,10 @@ export const askConversationBodySchema = z.object({
   scope: reportFiltersSchema.default({}),
   datasetVersionId: uuidSchema.optional(),
   includeMedia: z.boolean().default(false),
+  contextSources: z.array(z.object({
+    label: z.string().min(1).max(120),
+    statement: z.string().min(1).max(20_000),
+  }).strict()).max(1).default([]),
 }).strict().refine((value) => !value.includeMedia || Boolean(value.datasetVersionId), {
   message: "includeMedia requires a pinned datasetVersionId",
   path: ["includeMedia"],

@@ -9,7 +9,9 @@ test("PWA manifest exposes installable standalone assets", () => {
   const manifest = JSON.parse(
     readFileSync(path.join(publicDirectory, "manifest.webmanifest"), "utf8"),
   ) as {
+    id: string;
     display: string;
+    orientation: string;
     start_url: string;
     scope: string;
     theme_color: string;
@@ -17,6 +19,8 @@ test("PWA manifest exposes installable standalone assets", () => {
   };
 
   assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.id, "/");
+  assert.equal(manifest.orientation, "any");
   assert.equal(manifest.start_url, "/dashboard");
   assert.equal(manifest.scope, "/");
   assert.equal(manifest.theme_color, "#036EB7");
@@ -59,7 +63,11 @@ test("mobile install UI handles native and manual install paths", () => {
   );
   assert.match(component, /beforeinstallprompt/);
   assert.match(component, /appinstalled/);
-  assert.match(component, /Download app/);
+  assert.match(component, /Install on this device/);
   assert.match(component, /display-mode: standalone/);
   assert.match(component, /Add to Home Screen/);
+  assert.match(component, /Add to Dock/);
+  assert.match(component, /SamsungBrowser/);
+  assert.match(component, /Firefox desktop does not currently provide native PWA installation/);
+  assert.match(component, /OPEN_INSTALL_EVENT/);
 });

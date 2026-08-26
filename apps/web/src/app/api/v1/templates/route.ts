@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
 import { templateCreateBodySchema } from "@cnpaf/shared";
 import { requirePermission, jsonError } from "@/lib/http";
-import { createTemplate, listTemplates } from "@/lib/templates";
+import {
+  createTemplate,
+  listTemplateBundles,
+  listTemplates,
+} from "@/lib/templates";
 import { getAccessContext, evaluateAuthorization } from "@/lib/authorization";
 import { audit } from "@/lib/audit";
 
-export async function GET() {
+export async function GET(req: Request) {
   const { user, error } = await requirePermission("templates.view");
   if (error || !user) return error;
   const context = await getAccessContext(user.id);
+  const wantsCards = new URL(req.url).searchParams.get("view") === "cards";
+  if (wantsCards) {
+    const bundles = (await listTemplateBundles()).filter(({ template }) =>
+      evaluateAuthorization(context, "templates.view", {
+        templateId: template.id,
+        organizationId: template.organizationId,
+      }).allowed,
+    );
+    return NextResponse.json({ templates: bundles });
+  }
   const rows = (await listTemplates()).filter((template) =>
     evaluateAuthorization(context, "templates.view", { templateId: template.id, organizationId: template.organizationId }).allowed,
   );

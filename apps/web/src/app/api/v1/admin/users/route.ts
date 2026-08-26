@@ -7,6 +7,7 @@ import { evaluateAuthorization, getAccessContext } from "@/lib/authorization";
 import { manualAccountCreateBodySchema } from "@cnpaf/shared";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { createAccount } from "@/lib/modules/accounts";
+import { getAiAccessStates } from "@/lib/access-admin";
 
 export async function GET(req: Request) {
   const { user: actor, error } = await requireAnyPermission(["people.view", "users.view"]);
@@ -84,8 +85,10 @@ export async function GET(req: Request) {
     evaluateAuthorization(access, "people.view", { organizationId: user.organizationId }).allowed ||
     evaluateAuthorization(access, "users.view", { organizationId: user.organizationId }).allowed
   );
+  const aiAccessByUser = await getAiAccessStates(visible.map((user) => user.id));
   const enriched = visible.map((user) => ({
     ...user,
+    aiEnabled: aiAccessByUser.get(user.id) ?? false,
     roleAssignments: byUser.get(user.id) ?? [],
     affiliations: affiliationsByUser.get(user.id) ?? [],
     programMemberships: membershipsByUser.get(user.id) ?? [],

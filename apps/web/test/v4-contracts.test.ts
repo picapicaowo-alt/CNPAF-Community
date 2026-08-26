@@ -44,12 +44,14 @@ const ids = {
   role: "00000000-0000-0000-0000-000000000006",
   roleAssignment: "00000000-0000-0000-0000-000000000007",
   canonical: "00000000-0000-0000-0000-000000000008",
+  record: "00000000-0000-0000-0000-000000000009",
 };
 
 test("V4 evidence filters apply every declared scope dimension", () => {
   const filters = reportFiltersSchema.parse({
     dateFrom: "2026-08-01T00:00:00.000Z",
     dateTo: "2026-08-31T23:59:59.999Z",
+    recordIds: [ids.record],
     organizationIds: [ids.organization],
     programIds: [ids.program],
     locationIds: [ids.location],
@@ -64,6 +66,7 @@ test("V4 evidence filters apply every declared scope dimension", () => {
     themeOrConcernIds: [ids.canonical],
   });
   const record = {
+    id: ids.record,
     organizationId: ids.organization,
     programId: ids.program,
     siteId: ids.location,
@@ -87,6 +90,7 @@ test("V4 evidence filters apply every declared scope dimension", () => {
     createdAt: new Date("2026-08-23T14:00:00.000Z"),
   };
   assert.equal(matchesEvidenceFilters(filters, record, version, finding), true);
+  assert.equal(matchesEvidenceFilters({ ...filters, recordIds: [ids.form] }, record, version, finding), false);
   assert.equal(matchesEvidenceFilters({ ...filters, programIds: [ids.organization] }, record, version, finding), false);
   assert.equal(matchesEvidenceFilters({ ...filters, sourceOrigins: ["other_origin"] }, record, version, finding), false);
 });
@@ -99,6 +103,7 @@ test("security-sensitive filter and Ask scopes reject unknown fields", () => {
       scope: {},
       datasetVersionId: ids.form,
       includeMedia: true,
+      contextSources: [{ label: "CHART-METRICS", statement: "46 records; 35 approved." }],
     }).success,
     true,
   );

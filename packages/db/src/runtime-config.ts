@@ -13,8 +13,15 @@ export function databaseUrl(environment: NodeJS.ProcessEnv = process.env) {
 }
 
 export function seedRuntimeConfig(environment: NodeJS.ProcessEnv = process.env) {
+  const aiProvider = optional(environment, "AI_PROVIDER")?.toLowerCase();
+  if (aiProvider && aiProvider !== "openai" && aiProvider !== "local_heuristic") {
+    throw new Error("AI_PROVIDER must be openai or local_heuristic");
+  }
   return {
     demoUsersJson: optional(environment, "SEED_DEMO_USERS_JSON"),
     password: optional(environment, "SEED_PASSWORD"),
+    aiProvider,
+    aiModel: optional(environment, "AI_MODEL") ?? "gpt-5.4-mini",
+    openAiApiKeyConfigured: Boolean(optional(environment, "OPENAI_API_KEY")),
   };
 }

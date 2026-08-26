@@ -23,6 +23,7 @@ type User = {
   locale: string;
   updatedAt: string;
   mustChangePassword: boolean;
+  aiEnabled: boolean;
   passwordChangedAt: string | null;
   roleAssignments: Array<{
     roleKey: string;
@@ -57,6 +58,7 @@ export default function PeoplePage() {
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [resetReason, setResetReason] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [aiUpdating, setAiUpdating] = useState("");
   const [resetCredential, setResetCredential] = useState<{
     name: string;
     email: string;
@@ -138,6 +140,25 @@ export default function PeoplePage() {
       setError(errorMessage(caught));
     } finally {
       setResetting(false);
+    }
+  }
+  async function toggleAiAccess(user: User) {
+    const enabled = !user.aiEnabled;
+    setAiUpdating(user.id);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/admin/users/${user.id}/ai-access`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          enabled,
+          reason: locale === "zh" ? "管理员在人员与账号页面更新 ChatGPT 使用权限" : "Administrator updated ChatGPT access from People & accounts",
+        }),
+      });
+      setUsers((current) => current.map((item) => item.id === user.id ? { ...item, aiEnabled: enabled } : item));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setAiUpdating("");
     }
   }
   return (
@@ -248,6 +269,7 @@ export default function PeoplePage() {
                   <th>{locale === "zh" ? "分组" : "Groups"}</th>
                   <th>{locale === "zh" ? "项目范围" : "Program scope"}</th>
                   <th>{locale === "zh" ? "状态" : "Status"}</th>
+                  <th>{locale === "zh" ? "ChatGPT 权限" : "ChatGPT access"}</th>
                   <th>{locale === "zh" ? "密码安全" : "Password security"}</th>
                   <th>{locale === "zh" ? "更新" : "Updated"}</th>
                 </tr>
@@ -303,6 +325,27 @@ export default function PeoplePage() {
                       >
                         {user.status}
                       </StatusPill>
+                    </td>
+                    <td>
+                      {permissions.includes("permissions.assign") ? (
+                        <button
+                          aria-checked={user.aiEnabled}
+                          className={`ai-access-toggle${user.aiEnabled ? " active" : ""}`}
+                          disabled={aiUpdating === user.id || user.status !== "active"}
+                          onClick={() => void toggleAiAccess(user)}
+                          role="switch"
+                          type="button"
+                        >
+                          <span aria-hidden="true"><i /></span>
+                          {aiUpdating === user.id
+                            ? (locale === "zh" ? "更新中…" : "Updating…")
+                            : user.aiEnabled
+                              ? (locale === "zh" ? "已启用" : "Enabled")
+                              : (locale === "zh" ? "未分配" : "Not assigned")}
+                        </button>
+                      ) : (
+                        <StatusPill tone={user.aiEnabled ? "violet" : "neutral"}>{user.aiEnabled ? (locale === "zh" ? "已启用" : "Enabled") : (locale === "zh" ? "未分配" : "Not assigned")}</StatusPill>
+                      )}
                     </td>
                     <td>
                       <div className="stack-sm password-admin-cell">

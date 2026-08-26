@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
@@ -34,6 +35,7 @@ type Report = { id: string; title: string; status: string; updatedAt: string };
 
 export default function InsightsPage() {
   const { locale } = useI18n();
+  const router = useRouter();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -101,7 +103,7 @@ export default function InsightsPage() {
         `/api/v1/ask-collect/conversations/${conversation.conversation.id}/messages`,
         { method: "POST", body: JSON.stringify({ content: question.trim() }) },
       );
-      window.location.assign(`/insights/ask/${conversation.conversation.id}`);
+      router.push(`/insights/ask/${conversation.conversation.id}`);
     } catch (caught) {
       setError(errorMessage(caught));
       setAsking(false);
@@ -129,7 +131,7 @@ export default function InsightsPage() {
       {canAsk ? (
         <div className="card row-between mobile-stack">
           <label style={{ flex: 1 }}>
-            {locale === "zh" ? "搜索或询问 Collect" : "Search or ask Collect"}
+            {locale === "zh" ? "搜索或询问 ChatGPT" : "Search or ask ChatGPT"}
             <input
               onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={(event) => {

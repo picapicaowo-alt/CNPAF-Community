@@ -105,11 +105,73 @@ export type AiImageInput = {
   body: Buffer;
 };
 
+type OpenAiResponsesBody = {
+  output_text?: string;
+  output?: Array<{
+    content?: Array<{ type?: string; text?: string }>;
+  }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+  error?: { message?: string };
+};
+
+export function buildOpenAiResponsesRequest(
+  system: string,
+  user: string,
+  model: string,
+  images: AiImageInput[] = [],
+  outputSchema?: unknown,
+) {
+  const jsonUserInput = `Return a JSON object matching the required schema.\n${user}`;
+  const content = [
+    { type: "input_text", text: jsonUserInput },
+    ...images.map((image) => ({
+      type: "input_image",
+      image_url: `data:${image.mimeType};base64,${image.body.toString("base64")}`,
+    })),
+  ];
+  const canUseStrictSchema = Boolean(
+    outputSchema
+    && typeof outputSchema === "object"
+    && !Array.isArray(outputSchema)
+    && !("contract" in outputSchema),
+  );
+  return {
+    model,
+    instructions: system,
+    input: [{ role: "user", content }],
+    text: {
+      format: canUseStrictSchema
+        ? {
+            type: "json_schema",
+            name: "cnpaf_workflow_output",
+            strict: true,
+            schema: outputSchema,
+          }
+        : { type: "json_object" },
+    },
+    store: false,
+  };
+}
+
+export function parseOpenAiResponsesBody(body: OpenAiResponsesBody) {
+  const raw = body.output_text
+    ?? body.output?.flatMap((item) => item.content ?? []).find((item) => item.type === "output_text")?.text
+    ?? "{}";
+  return {
+    raw,
+    parsed: JSON.parse(raw) as unknown,
+    tokens: body.usage
+      ? { in: body.usage.input_tokens ?? 0, out: body.usage.output_tokens ?? 0 }
+      : undefined,
+  };
+}
+
 async function callOpenAi(
   system: string,
   user: string,
   model: string,
   images: AiImageInput[] = [],
+  outputSchema?: unknown,
 ): Promise<{ raw: string; parsed: unknown; tokens?: { in: number; out: number } }> {
   const { apiKey, endpoint } = getOpenAiRuntimeConfig();
   const res = await fetch(endpoint, {
@@ -118,45 +180,13 @@ async function callOpenAi(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      response_format: { type: "json_object" },
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        {
-          role: "user",
-          content: images.length
-            ? [
-                { type: "text", text: user },
-                ...images.map((image) => ({
-                  type: "image_url",
-                  image_url: {
-                    url: `data:${image.mimeType};base64,${image.body.toString("base64")}`,
-                  },
-                })),
-              ]
-            : user,
-        },
-      ],
-    }),
+    body: JSON.stringify(buildOpenAiResponsesRequest(system, user, model, images, outputSchema)),
   });
+  const body = (await res.json()) as OpenAiResponsesBody;
   if (!res.ok) {
-    throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
+    throw new Error(`OpenAI ${res.status}: ${(body.error?.message ?? "request failed").slice(0, 300)}`);
   }
-  const body = (await res.json()) as {
-    choices: { message: { content: string } }[];
-    usage?: { prompt_tokens: number; completion_tokens: number };
-  };
-  const raw = body.choices[0]?.message?.content ?? "{}";
-  const parsed: unknown = JSON.parse(raw);
-  return {
-    raw,
-    parsed,
-    tokens: body.usage
-      ? { in: body.usage.prompt_tokens, out: body.usage.completion_tokens }
-      : undefined,
-  };
+  return parseOpenAiResponsesBody(body);
 }
 
 async function resolveWorkflowConfiguration(workflowVersionId?: string | null, workflowKey = "record_classification") {
@@ -283,6 +313,7 @@ export async function executeConfiguredWorkflow(input: {
           JSON.stringify(input.inputSnapshot),
           configuration.modelName,
           input.imageInputs,
+          configuration.outputSchema?.schema,
         );
         parsed = validateConfiguredJson(result.parsed, configuration.outputSchema?.schema);
         raw = result.raw;
@@ -495,7 +526,7 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
     if (activeRun.provider === "openai") {
       const workflow = activeRun.workflowVersionId ? await resolveWorkflowConfiguration(activeRun.workflowVersionId) : null;
       try {
-        const result = await callOpenAi(prompt.systemPrompt, userPrompt, activeRun.model);
+        const result = await callOpenAi(prompt.systemPrompt, userPrompt, activeRun.model, [], workflow?.outputSchema?.schema);
         parsed = validateConfiguredJson(result.parsed, workflow?.outputSchema?.schema ?? { contract: "@cnpaf/shared#aiOutputSchema" });
         raw = result.raw;
         tokens = result.tokens;

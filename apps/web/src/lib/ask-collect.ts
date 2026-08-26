@@ -10,12 +10,13 @@ import {
   recordVersions,
 } from "@cnpaf/db/schema";
 import type { z } from "zod";
-import { askAiOutputSchema, type askConversationBodySchema } from "@cnpaf/shared";
+import { type askConversationBodySchema } from "@cnpaf/shared";
 import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
 import { executeConfiguredWorkflow } from "./ai";
 import { scanPrivacy } from "./pii";
 import { matchesEvidenceFilters } from "./evidence-filters";
+import { normalizeAskAiOutput } from "./ask-citations";
 import {
   markDatasetImagesSentToAi,
   prepareDatasetAiMedia,
@@ -25,6 +26,7 @@ type ConversationInput = z.infer<typeof askConversationBodySchema>;
 type AskScope = ConversationInput["scope"] & {
   datasetVersionId?: string;
   includeMedia?: boolean;
+  contextSources?: ConversationInput["contextSources"];
 };
 
 function searchableStatement(value: unknown) {
@@ -40,13 +42,11 @@ function relevanceScore(question: string, statement: string) {
 }
 
 export async function createAskConversation(actorId: string, input: ConversationInput) {
-  const scope: AskScope = input.datasetVersionId
-    ? {
-        ...input.scope,
-        datasetVersionId: input.datasetVersionId,
-        includeMedia: input.includeMedia,
-      }
-    : input.scope;
+  const scope: AskScope = {
+    ...input.scope,
+    ...(input.datasetVersionId ? { datasetVersionId: input.datasetVersionId, includeMedia: input.includeMedia } : {}),
+    ...(input.contextSources.length ? { contextSources: input.contextSources } : {}),
+  };
   const [conversation] = await db.insert(askConversations).values({ userId: actorId, title: input.title, scope }).returning();
   return conversation;
 }
@@ -70,7 +70,7 @@ export async function addAskMessage(conversationId: string, actorId: string, con
     .where(eq(approvedFindings.status, "approved"));
   const access = await getAccessContext(actorId);
   const requestedScope = (conversation.scope ?? {}) as AskScope;
-  const { datasetVersionId, ...evidenceScope } = requestedScope;
+  const { datasetVersionId, includeMedia: _includeMedia, contextSources, ...evidenceScope } = requestedScope;
   const frozenRecordVersions = datasetVersionId
     ? await db
         .select({ recordVersionId: datasetRecords.recordVersionId })
@@ -110,15 +110,18 @@ export async function addAskMessage(conversationId: string, actorId: string, con
     : null;
   const imageInputs = media?.imageInputs ?? [];
   const mediaSources = media?.mediaSources ?? [];
-  const sources = [...evidenceSources, ...mediaSources];
+  const conversationContextSources = (contextSources ?? []).map((source) => ({
+    id: conversation.id,
+    label: source.label,
+    statement: source.statement,
+    sourceType: "conversation_context" as const,
+  }));
+  const sources = [...evidenceSources, ...mediaSources, ...conversationContextSources];
   const localOutput = {
-    answer: evidenceSources.length
-      ? `Found ${evidenceSources.length} authorized approved evidence item(s) relevant to the current conversation scope. ` + evidenceSources.map((source) => `[${source.label}] ${source.statement}`).join(" ")
-      : mediaSources.length
-        ? `Found ${mediaSources.length} authorized image attachment(s), but the configured local AI fallback cannot interpret image content. Use an approved multimodal provider or review the images directly.`
-        : "No authorized approved evidence was found in the current conversation scope.",
-    citations: (evidenceSources.length ? evidenceSources : mediaSources)
-      .map((source) => ({ sourceId: source.id, claim: source.statement })),
+    answer: sources.length
+      ? `Found ${sources.length} authorized source(s) relevant to the current conversation scope. ` + sources.map((source) => `[${source.label}] ${source.statement}`).join(" ")
+      : "No authorized approved evidence was found in the current conversation scope.",
+    citations: sources.map((source) => ({ sourceId: source.id, claim: source.statement })),
   };
   const generation = await executeConfiguredWorkflow({
     workflowKey: "ask_collect",
@@ -140,7 +143,7 @@ export async function addAskMessage(conversationId: string, actorId: string, con
     localOutput,
     imageInputs,
   });
-  const generated = askAiOutputSchema.parse(generation.output);
+  const generated = normalizeAskAiOutput(generation.output, sources);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   if (generated.citations.some((citation) => !sourceById.has(citation.sourceId))) throw new Error("Ask Collect AI output cited evidence outside the authorized retrieval set");
   if (sources.length && !generated.citations.length) throw new Error("Ask Collect substantive answers must cite authorized evidence");
@@ -182,6 +185,7 @@ export async function getAskConversation(id: string, actorId: string) {
     : [];
   const sourceIds = sources.filter((source) => source.sourceType === "approved_finding").map((source) => source.sourceId);
   const attachmentSourceIds = sources.filter((source) => source.sourceType === "attachment").map((source) => source.sourceId);
+  const contextSourceIds = sources.filter((source) => source.sourceType === "conversation_context").map((source) => source.sourceId);
   const evidence = sourceIds.length ? await db
     .select({ id: approvedFindings.id, record: records })
     .from(approvedFindings)
@@ -207,6 +211,7 @@ export async function getAskConversation(id: string, actorId: string) {
       dataClassification: "approved_evidence",
     }).allowed,
   ).map(({ id: evidenceId }) => evidenceId));
+  if (contextSourceIds.includes(conversation.id)) allowedIds.add(conversation.id);
   const savedScope = (conversation.scope ?? {}) as AskScope;
   const datasetRecordVersions = savedScope.datasetVersionId
     ? await db.select({ recordVersionId: datasetRecords.recordVersionId })

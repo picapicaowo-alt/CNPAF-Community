@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
+import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState, StatusPill } from "@/components/ui";
 import {
@@ -403,7 +404,7 @@ export default function DatasetWorkspacePage() {
                 </div>
               ) : conversation.messages.map((message) => (
                 <article className={`dataset-chat-message ${message.role}`} key={message.id}>
-                  <div>{message.content}</div>
+                  <MarkdownMessage>{message.content}</MarkdownMessage>
                   {sourcesByMessage.get(message.id)?.length ? (
                     <details className="dataset-chat-sources"><summary>{locale === "zh" ? `${sourcesByMessage.get(message.id)!.length} 个证据来源` : `${sourcesByMessage.get(message.id)!.length} evidence sources`}</summary>{sourcesByMessage.get(message.id)!.map((source) => <div className="evidence" key={source.id}><strong>{source.citationLabel ?? (locale === "zh" ? "来源" : "Source")}</strong><p>{source.excerpt}</p></div>)}</details>
                   ) : null}

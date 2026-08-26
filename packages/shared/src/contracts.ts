@@ -206,6 +206,93 @@ export const aiOutputSchema = z.object({
     .default([]),
 });
 
+export const AI_OUTPUT_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary", "themes", "concerns", "quantitativeSuggestions", "safetySuspect"],
+  properties: {
+    summary: {
+      type: "object",
+      additionalProperties: false,
+      required: ["zh", "en"],
+      properties: { zh: { type: "string" }, en: { type: "string" } },
+    },
+    themes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["rawLabel", "suggestedCanonicalKey", "confidence", "evidence"],
+        properties: {
+          rawLabel: { type: "string" },
+          suggestedCanonicalKey: { type: "string" },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          evidence: { $ref: "#/$defs/evidenceList" },
+        },
+      },
+    },
+    concerns: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["statement", "suggestedCanonicalKey", "origin", "confidence", "evidence"],
+        properties: {
+          statement: { type: "string" },
+          suggestedCanonicalKey: { type: "string" },
+          origin: { type: "string", minLength: 1 },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          evidence: { $ref: "#/$defs/evidenceList" },
+        },
+      },
+    },
+    quantitativeSuggestions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["fieldKey", "value", "confidence", "evidence"],
+        properties: {
+          fieldKey: { type: "string" },
+          value: { type: "number" },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          evidence: { type: "array", items: { $ref: "#/$defs/evidence" } },
+        },
+      },
+    },
+    safetySuspect: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["statement", "needsUrgentHumanReview", "evidence"],
+        properties: {
+          statement: { type: "string" },
+          needsUrgentHumanReview: { type: "boolean", const: true },
+          evidence: { $ref: "#/$defs/evidenceList" },
+        },
+      },
+    },
+  },
+  $defs: {
+    evidence: {
+      type: "object",
+      additionalProperties: false,
+      required: ["text", "start", "end"],
+      properties: {
+        text: { type: "string" },
+        start: { type: "integer", minimum: 0 },
+        end: { type: "integer", minimum: 0 },
+      },
+    },
+    evidenceList: {
+      type: "array",
+      minItems: 1,
+      items: { $ref: "#/$defs/evidence" },
+    },
+  },
+} as const;
+
 export type DraftBody = z.infer<typeof draftBodySchema>;
 export type SubmitBody = z.infer<typeof submitBodySchema>;
 export type AiOutput = z.infer<typeof aiOutputSchema>;
