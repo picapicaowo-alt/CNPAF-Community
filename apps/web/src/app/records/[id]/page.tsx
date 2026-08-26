@@ -13,6 +13,10 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { FieldAnswersPanel } from "@/features/records/FieldAnswersPanel";
+import {
+  hasStructuredEvidence,
+  StructuredEvidencePanel,
+} from "@/features/records/StructuredEvidencePanel";
 import { RecordRevisionForm } from "@/features/records/components/RecordRevisionForm";
 import { recordDisplayName, recordReference } from "@/features/records/display";
 import type { RecordFieldAnswer } from "@/features/records/types";
@@ -67,12 +71,6 @@ export default function RecordDetail() {
       <>
         <PageHeader
           title={t.terms.record}
-          actions={
-            <Link className="button button-secondary" href="/records">
-              <AppIcon name="back" />
-              {locale === "zh" ? "返回" : "Back"}
-            </Link>
-          }
         />
         {error ? (
           <ErrorState message={error} retry={load} />
@@ -253,10 +251,6 @@ export default function RecordDetail() {
         description={`${locale === "zh" ? "更新于" : "Updated"} ${new Date(record.updatedAt).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}`}
         actions={
           <>
-            <Link className="button button-secondary" href="/records">
-              <AppIcon name="back" />
-              {locale === "zh" ? "返回" : "Back"}
-            </Link>
             <button
               className="button"
               disabled={busyAction === "download"}
@@ -313,12 +307,16 @@ export default function RecordDetail() {
         <StatusPill
           tone={record.reviewStatus === "approved" ? "green" : "amber"}
         >
-          {record.reviewStatus}
+          {workflowLabel(record.reviewStatus, locale)}
         </StatusPill>
         <StatusPill tone={record.privacyStatus === "flagged" ? "red" : "green"}>
-          {record.privacyStatus}
+          {record.privacyStatus === "clear"
+            ? locale === "zh"
+              ? "隐私检查通过"
+              : "Privacy cleared"
+            : workflowLabel(record.privacyStatus, locale)}
         </StatusPill>
-        <StatusPill>{record.researchUseStatus}</StatusPill>
+        <StatusPill>{workflowLabel(record.researchUseStatus, locale)}</StatusPill>
       </div>
       <div className="detail-grid">
         <div className="stack">
@@ -343,14 +341,10 @@ export default function RecordDetail() {
               <p className="pre-wrap source-note-copy">{head.qualitative}</p>
             </section>
           ) : null}
-          {head?.structured && Object.keys(head.structured).length ? (
-            <details className="advanced-panel record-raw-data">
-              <summary>
-                {locale === "zh" ? "查看原始结构化数据" : "View raw structured data"}
-              </summary>
-              <pre className="code-preview">{JSON.stringify(head.structured, null, 2)}</pre>
-            </details>
-          ) : null}
+          <StructuredEvidencePanel
+            locale={locale}
+            value={hasStructuredEvidence(head?.structured) ? head?.structured : head?.quantitative}
+          />
           {notes.length ? (
             <section className="card">
               <h2>{t.annotation}</h2>

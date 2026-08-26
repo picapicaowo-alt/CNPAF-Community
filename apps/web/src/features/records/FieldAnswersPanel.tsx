@@ -7,6 +7,7 @@ type Props = {
   title?: string;
   selectedFieldIds?: string[];
   onFieldSelectionChange?: (fieldId: string, selected: boolean) => void;
+  selectionDescription?: string;
 };
 
 export function FieldAnswersPanel({
@@ -15,6 +16,7 @@ export function FieldAnswersPanel({
   title,
   selectedFieldIds = [],
   onFieldSelectionChange,
+  selectionDescription,
 }: Props) {
   const sortedAnswers = answers.toSorted(
     (left, right) =>
@@ -44,6 +46,12 @@ export function FieldAnswersPanel({
           <h2>{title ?? (locale === "zh" ? "表单回答" : "Form answers")}</h2>
         </div>
       </div>
+      {onFieldSelectionChange && selectionDescription ? (
+        <p className="feedback feedback-info field-selection-help">
+          <AppIcon name="info" />
+          <span>{selectionDescription}</span>
+        </p>
+      ) : null}
       {[...sections.entries()].map(([sectionKey, sectionAnswers]) => {
         const section = sectionAnswers[0];
         return (
@@ -75,7 +83,7 @@ export function FieldAnswersPanel({
                       answer.labelEn
                     )}
                     <span className="caption" style={{ display: "block" }}>
-                      {answer.fieldKey} · {answer.fieldTypeKey}
+                      {fieldTypeLabel(answer.fieldTypeKey, locale)}
                     </span>
                   </dt>
                   <dd>{answerDisplay(answer, locale)}</dd>
@@ -89,17 +97,34 @@ export function FieldAnswersPanel({
   );
 }
 
+const FIELD_TYPE_LABELS: Record<string, { zh: string; en: string }> = {
+  boolean: { zh: "是／否", en: "Yes / no" },
+  date: { zh: "日期", en: "Date" },
+  long_text: { zh: "长文本", en: "Long text" },
+  multi_select: { zh: "多选", en: "Multiple choice" },
+  number: { zh: "数字", en: "Number" },
+  rating_scale: { zh: "评分量表", en: "Rating scale" },
+  select: { zh: "单选", en: "Single choice" },
+  single_select: { zh: "单选", en: "Single choice" },
+  short_text: { zh: "短文本", en: "Short text" },
+};
+
+function fieldTypeLabel(fieldTypeKey: string, locale: "zh" | "en") {
+  return FIELD_TYPE_LABELS[fieldTypeKey]?.[locale]
+    ?? (locale === "zh" ? "结构化回答" : "Structured answer");
+}
+
 function answerDisplay(answer: RecordFieldAnswer, locale: "zh" | "en") {
   const parts: string[] = [];
   if (answer.missingReasonKey) {
     parts.push(
-      `${locale === "zh" ? "未记录" : "Missing"}: ${answer.missingReasonKey}`,
+      `${locale === "zh" ? "未记录" : "Missing"}: ${localizedAnswerValue(answer.fieldKey, answer.missingReasonKey, locale)}`,
     );
   }
   if (answer.value !== null && answer.value !== undefined) {
     parts.push(
       Array.isArray(answer.value)
-        ? answer.value.join(", ")
+        ? answer.value.map((value) => localizedAnswerValue(answer.fieldKey, value, locale)).join(", ")
         : typeof answer.value === "boolean"
           ? answer.value
             ? locale === "zh"
@@ -108,11 +133,44 @@ function answerDisplay(answer: RecordFieldAnswer, locale: "zh" | "en") {
             : locale === "zh"
               ? "否"
               : "No"
-          : String(answer.value),
+          : localizedAnswerValue(answer.fieldKey, answer.value, locale),
     );
   }
   if (answer.customText) {
     parts.push(`${locale === "zh" ? "其他" : "Other"}: ${answer.customText}`);
   }
   return parts.join(" · ") || "—";
+}
+
+const ANSWER_VALUE_LABELS: Record<string, Record<string, { zh: string; en: string }>> = {
+  "activity-type": {
+    creative: { zh: "创作活动", en: "Creative activity" },
+    exercise: { zh: "运动或锻炼", en: "Movement or exercise" },
+    music: { zh: "音乐活动", en: "Music activity" },
+    discussion: { zh: "讨论或讲故事", en: "Discussion or storytelling" },
+    quiet: { zh: "安静的个人活动", en: "Quiet individual activity" },
+  },
+  "language-access": {
+    mandarin: { zh: "普通话", en: "Mandarin" },
+    cantonese: { zh: "粤语", en: "Cantonese" },
+    english: { zh: "英语", en: "English" },
+    spanish: { zh: "西班牙语", en: "Spanish" },
+    vietnamese: { zh: "越南语", en: "Vietnamese" },
+  },
+  "alternative-explanations": {
+    activity_design: { zh: "活动设计", en: "Activity design" },
+    fatigue: { zh: "疲劳或时段", en: "Fatigue or time of day" },
+    hearing_access: { zh: "听力或感官可及性", en: "Hearing or sensory access" },
+    social_connection: { zh: "社会连接需求", en: "Social connection need" },
+    grief: { zh: "失落或哀伤", en: "Loss or grief" },
+    cognitive_change: { zh: "可能的认知变化", en: "Possible cognitive change" },
+  },
+  "attention-change-minute": {
+    not_observed: { zh: "本次未观察到", en: "Not observed in this session" },
+  },
+};
+
+function localizedAnswerValue(fieldKey: string, value: unknown, locale: "zh" | "en") {
+  const key = String(value);
+  return ANSWER_VALUE_LABELS[fieldKey]?.[key]?.[locale] ?? key;
 }

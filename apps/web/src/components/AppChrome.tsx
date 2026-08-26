@@ -94,10 +94,16 @@ const navItems: NavItem[] = [
 
 const parentRoutes: Array<{
   match: (pathname: string) => boolean;
-  href: string;
+  href: string | ((pathname: string) => string);
   labelEn: string;
   labelZh: string;
 }> = [
+  {
+    match: (path) => /^\/tasks\/[^/]+\/collect$/.test(path),
+    href: (path) => path.replace(/\/collect$/, ""),
+    labelEn: "Task",
+    labelZh: "任务详情",
+  },
   { match: (path) => path.startsWith("/insights/"), href: "/insights", labelEn: "Insights", labelZh: "洞察" },
   { match: (path) => path.startsWith("/reports/"), href: "/insights", labelEn: "Insights", labelZh: "洞察" },
   { match: (path) => path.startsWith("/data/"), href: "/data", labelEn: "Datasets", labelZh: "数据集" },
@@ -338,8 +344,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const parentRoute = pathname === "/dashboard"
     ? null
     : parentRoutes.find((route) => route.match(pathname)) ?? null;
+  const parentHref = parentRoute
+    ? typeof parentRoute.href === "function"
+      ? parentRoute.href(pathname)
+      : parentRoute.href
+    : null;
   const mobileRootRoute = mobileNav.some((item) => item.href === pathname);
-  const mobileBackFallback = parentRoute?.href ?? (
+  const mobileBackFallback = parentHref ?? (
     ["forms", "insights", "reports", "settings", "people", "programs", "locations", "data"]
       .includes(routeSection)
       ? "/more"
@@ -524,7 +535,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         </header>
         <main className="app-main">
           {parentRoute ? (
-            <Link className="context-back-control" href={parentRoute.href}>
+            <Link className="context-back-control" href={parentHref!}>
               <AppIcon name="back" />
               <span>
                 {locale === "zh" ? "返回" : "Back to"} {locale === "zh" ? parentRoute.labelZh : parentRoute.labelEn}

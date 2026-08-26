@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
+import { RichTextComposerInput } from "@/components/RichTextComposerInput";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
@@ -85,10 +86,6 @@ export default function AskConversationPage() {
               : "Answers retrieve only approved evidence you can access and show their sources."}
           </p>
         </div>
-        <Link className="button button-secondary" href="/insights">
-          <AppIcon name="back" />
-          {locale === "zh" ? "返回洞察" : "Back to insights"}
-        </Link>
       </header>
       {error ? <ErrorState message={error} retry={load} /> : null}
       {!data && !error ? (
@@ -119,15 +116,11 @@ export default function AskConversationPage() {
         </div>
       )}
       <div className="chat-compose">
-        <textarea
-          aria-label={locale === "zh" ? "问题" : "Question"}
-          onChange={(event) => setQuestion(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void send();
-            }
-          }}
+        <RichTextComposerInput
+          ariaLabel={locale === "zh" ? "问题" : "Question"}
+          disabled={sending}
+          onSubmit={() => void send()}
+          onValueChange={setQuestion}
           placeholder={
             locale === "zh"
               ? "继续询问已批准证据…"

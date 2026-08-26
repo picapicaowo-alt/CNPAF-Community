@@ -300,7 +300,7 @@ is an explicit human section update and is audited.
 
 `reportRunBodySchema.filters` and `exportJobBodySchema.filters` accept `dateFrom`, `dateTo`, `organizationIds`, `siteIds`, `serviceTypeKeys`, `populationKeys`, `sourceOrigins`, `templateVersionIds`, `findingTypes`, and `themeOrConcernIds`. Dates filter by `occurredAt`, then `submittedAt`, then evidence creation time. Reports store the exact filters, evidence policy, evidence IDs, distinct record/site/visit units by origin, and workflow/prompt/provider/model/output-schema provenance. `approvedOnly` is always `true`.
 
-Ask Collect performs permission, requested-scope, privacy, and research-use filtering before relevance ranking. Every returned statement has a structured approved source citation. A Dataset conversation may opt into at most six bounded, supported images only after a human privacy-review attestation; audio, video, and documents are not sent to the current model. Saved answers are redacted if any cited finding or attachment later becomes inaccessible.
+Ask Collect performs permission, requested-scope, privacy, and research-use filtering before relevance ranking. Every returned statement has a structured approved source citation. A Dataset conversation may explicitly opt into bounded supported images and privacy-screenable documents (PDF, DOCX, XLSX, CSV, Markdown, and plain text); audio and video are never sent by this workflow. Saved answers are redacted if any cited finding or attachment later becomes inaccessible.
 
 `GET/POST/PATCH /jobs` is an internal worker administration endpoint protected by `settings.manage`; AI reviewers use the scoped `/ai/runs` endpoints instead.
 

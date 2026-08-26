@@ -681,6 +681,28 @@ export async function getDatasetMediaForAi(actorId: string, datasetVersionId: st
   return source;
 }
 
+/**
+ * Build the canonical text sources used by every Dataset -> AI workflow.
+ *
+ * This intentionally goes through the same immutable version, authorization,
+ * privacy and field-policy boundaries as Dataset downloads. A Dataset can be
+ * useful evidence even when no separate AI finding was accepted for a record,
+ * so each frozen record version remains independently citable.
+ */
+export async function getDatasetEvidenceForAi(actorId: string, datasetVersionId: string) {
+  const source = await getDatasetVersionForReport(actorId, datasetVersionId);
+  const rows = await loadDatasetRows(
+    source.version.id,
+    source.version.fieldPolicy as FieldPolicy,
+  );
+  return rows.map((row, index) => ({
+    id: row.recordVersionId,
+    label: `DATASET-v${source.version.versionNumber}-REC-${String(index + 1).padStart(3, "0")}`,
+    statement: JSON.stringify(row),
+    sourceType: "approved_record" as const,
+  }));
+}
+
 export async function getDatasetAttachmentFile(
   actorId: string,
   datasetId: string,

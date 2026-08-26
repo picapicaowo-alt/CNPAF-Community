@@ -50,16 +50,25 @@ const seedConfig = seedRuntimeConfig();
 
 async function upsertLookup() {
   const existing = await db.select().from(lookups);
-  const seen = new Set(existing.map((e) => `${e.category}:${e.key}`));
+  const byKey = new Map(existing.map((entry) => [`${entry.category}:${entry.key}`, entry]));
   for (const row of LOOKUPS) {
-    if (seen.has(`${row.category}:${row.key}`)) continue;
-    await db.insert(lookups).values({
-      category: row.category,
-      key: row.key,
-      nameZh: row.nameZh,
-      nameEn: row.nameEn,
-      sortOrder: row.sortOrder,
-    });
+    const current = byKey.get(`${row.category}:${row.key}`);
+    if (current) {
+      await db.update(lookups).set({
+        nameZh: row.nameZh,
+        nameEn: row.nameEn,
+        sortOrder: row.sortOrder,
+        updatedAt: new Date(),
+      }).where(eq(lookups.id, current.id));
+    } else {
+      await db.insert(lookups).values({
+        category: row.category,
+        key: row.key,
+        nameZh: row.nameZh,
+        nameEn: row.nameEn,
+        sortOrder: row.sortOrder,
+      });
+    }
   }
 
   // Compatibility lookups are initialization data only. Runtime business
@@ -71,20 +80,30 @@ async function upsertLookup() {
     db.select().from(configRegistryItems),
   ]);
   const registryByKey = new Map(registries.map((registry) => [registry.key, registry]));
-  const configured = new Set(configuredItems.map((item) => `${item.registryId}:${item.key}`));
+  const configured = new Map(configuredItems.map((item) => [`${item.registryId}:${item.key}`, item]));
   for (const row of LOOKUPS) {
     const registry = registryByKey.get(row.category);
-    if (!registry || configured.has(`${registry.id}:${row.key}`)) continue;
-    await db.insert(configRegistryItems).values({
-      registryId: registry.id,
-      key: row.key,
-      version: 1,
-      labelEn: row.nameEn,
-      labelZh: row.nameZh,
-      status: "active",
-      sortOrder: row.sortOrder,
-      publishedAt: new Date(),
-    });
+    if (!registry) continue;
+    const current = configured.get(`${registry.id}:${row.key}`);
+    if (current && current.organizationId === null) {
+      await db.update(configRegistryItems).set({
+        labelEn: row.nameEn,
+        labelZh: row.nameZh,
+        sortOrder: row.sortOrder,
+        updatedAt: new Date(),
+      }).where(eq(configRegistryItems.id, current.id));
+    } else if (!current) {
+      await db.insert(configRegistryItems).values({
+        registryId: registry.id,
+        key: row.key,
+        version: 1,
+        labelEn: row.nameEn,
+        labelZh: row.nameZh,
+        status: "active",
+        sortOrder: row.sortOrder,
+        publishedAt: new Date(),
+      });
+    }
   }
 }
 
@@ -93,21 +112,29 @@ async function seed() {
 
   for (const def of ACTIVITY_DEFINITIONS) {
     const found = await db.select().from(activityDefinitions);
-    if (found.some((f) => f.key === def.key && f.version === def.version)) continue;
-    await db.insert(activityDefinitions).values({
-      key: def.key,
-      version: def.version,
-      status: def.status,
-      nameZh: def.nameZh,
-      nameEn: def.nameEn,
-      fields: def.fields,
-    });
+    const current = found.find((entry) => entry.key === def.key && entry.version === def.version);
+    if (current) {
+      await db.update(activityDefinitions).set({ status: def.status, nameZh: def.nameZh, nameEn: def.nameEn, fields: def.fields, updatedAt: new Date() }).where(eq(activityDefinitions.id, current.id));
+    } else {
+      await db.insert(activityDefinitions).values({
+        key: def.key,
+        version: def.version,
+        status: def.status,
+        nameZh: def.nameZh,
+        nameEn: def.nameEn,
+        fields: def.fields,
+      });
+    }
   }
 
   for (const theme of CANONICAL_THEMES) {
     const found = await db.select().from(canonicalThemes);
-    if (found.some((f) => f.key === theme.key && f.version === theme.version)) continue;
-    await db.insert(canonicalThemes).values(theme);
+    const current = found.find((entry) => entry.key === theme.key && entry.version === theme.version);
+    if (current) {
+      await db.update(canonicalThemes).set({ ...theme, updatedAt: new Date() }).where(eq(canonicalThemes.id, current.id));
+    } else {
+      await db.insert(canonicalThemes).values(theme);
+    }
   }
 
   const prompts = await db.select().from(promptVersions);

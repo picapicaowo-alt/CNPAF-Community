@@ -734,10 +734,6 @@ export default function FormEditorPage() {
         }
         actions={
           <>
-            <Link className="button button-secondary" href="/forms">
-              <AppIcon name="back" />
-              {locale === "zh" ? "返回" : "Back"}
-            </Link>
             <button
               className="button button-secondary"
               onClick={() => {

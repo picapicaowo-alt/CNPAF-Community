@@ -85,8 +85,9 @@ does not bypass a later permission change.
 - `media_attachments` freezes the image/audio/video/document manifest attached
   to each exact Record Version and includes it in the Dataset content hash.
 - Dataset detail supports authenticated image preview, audio/video playback,
-  and file download. Ask Collect and initial report drafting can use supported
-  images only after an explicit human privacy-review attestation.
+  and file download. Ask Collect and initial report drafting can explicitly use
+  supported images and privacy-screenable documents; audio/video are never
+  sent by this workflow.
 - CSV and JSON downloads use deterministic serialization and retain the Dataset
   version number and record count.
 

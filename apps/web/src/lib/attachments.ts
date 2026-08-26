@@ -1,6 +1,7 @@
 import {
   attachmentKindForMime,
   attachmentOriginalName,
+  aiFileMimeTypes,
   normalizeAttachmentKind,
   type AttachmentSummary,
 } from "@cnpaf/shared";
@@ -14,6 +15,7 @@ const documentMimeTypes = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/csv",
   "text/plain",
+  "text/markdown",
 ]);
 
 const mimeByExtension: Record<string, string> = {
@@ -48,6 +50,11 @@ export function attachmentUploadError(file: File, mimeType: string) {
     return `${kind} attachment exceeds the upload limit`;
   }
   return null;
+}
+
+export function canSendAttachmentToAi(mimeType: string) {
+  const normalized = mimeType.toLowerCase();
+  return normalized.startsWith("image/") || aiFileMimeTypes.has(normalized);
 }
 
 export function toAttachmentSummary(

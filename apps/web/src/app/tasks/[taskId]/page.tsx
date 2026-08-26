@@ -111,10 +111,6 @@ export default function TaskDetailPage() {
 
   return (
     <div className="stack">
-      <Link className="inline-link" href="/tasks">
-        <AppIcon name="back" />
-        {locale === "zh" ? "返回任务" : "Back to tasks"}
-      </Link>
       <PageHeader
         title={task.location?.name ?? task.title}
         description={task.title}

@@ -514,15 +514,17 @@ export default function GuidedCollectionPage() {
     <div className="step-layout">
       <header className="stack-sm">
         <div className="row-between">
-          <Link className="inline-link" href={`/tasks/${params.taskId}`}>
-            <AppIcon name="back" />
-            {preview ? (locale === "zh" ? "退出预览" : "Exit preview") : title}
-          </Link>
+          <strong>{title}</strong>
           <div className="row">
             {preview ? (
-              <StatusPill tone="amber">
-                {locale === "zh" ? "预览" : "Preview"}
-              </StatusPill>
+              <>
+                <StatusPill tone="amber">
+                  {locale === "zh" ? "预览" : "Preview"}
+                </StatusPill>
+                <Link className="button button-ghost button-small" href={`/tasks/${params.taskId}`}>
+                  {locale === "zh" ? "退出预览" : "Exit preview"}
+                </Link>
+              </>
             ) : null}
             <StatusPill tone="green">
               {locale === "zh" ? "采集员" : "Collector"}

@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
+import { RichTextComposerInput } from "@/components/RichTextComposerInput";
 import {
   OPENAI_MODEL_CATALOG,
   type OpenAiModelId,
@@ -114,18 +115,14 @@ export function AiPromptComposer({
         </div>
       ) : null}
 
-      <textarea
-        aria-label={locale === "zh" ? "与 ChatGPT 共创" : "Co-create with ChatGPT"}
+      <RichTextComposerInput
+        ariaLabel={locale === "zh" ? "与 ChatGPT 共创" : "Co-create with ChatGPT"}
         disabled={disabled || sending}
-        onChange={(event) => onValueChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            if (canSubmit) onSubmit();
-          }
+        onSubmit={() => {
+          if (canSubmit) onSubmit();
         }}
+        onValueChange={onValueChange}
         placeholder={placeholder ?? (locale === "zh" ? "询问、比较、分析或与 AI 共同撰写…" : "Ask, compare, analyze, or co-write with AI…")}
-        rows={3}
         value={value}
       />
 

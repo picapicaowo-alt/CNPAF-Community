@@ -261,10 +261,6 @@ export default function ReportEditorPage() {
         }
         actions={
           <>
-            <Link className="button button-secondary" href="/reports">
-              <AppIcon name="back" />
-              {locale === "zh" ? "返回报告" : "Reports"}
-            </Link>
             {editable && permissions.includes("reports.publish") ? (
               <button
                 className="button"

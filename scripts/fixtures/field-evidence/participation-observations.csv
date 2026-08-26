@@ -1,0 +1,5 @@
+session_date,site,activity_type,duration_minutes,attention_change_minute,early_departures,format_changed,engagement_improved
+2026-08-04,Harbor Community Day Center,worksheet,45,21,3,true,true
+2026-08-07,Harbor Community Day Center,live music,40,,0,false,
+2026-08-11,Harbor Community Day Center,worksheet,45,19,2,true,true
+2026-08-14,Harbor Community Day Center,storytelling,35,,0,false,

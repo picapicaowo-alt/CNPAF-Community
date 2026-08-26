@@ -30,6 +30,23 @@ type Analytics = {
   }>;
   themesByOrigin: Array<{ origin: string; themeId: string | null; n: number }>;
   completionBySourceKind: Array<{ sourceKind: string; rate: number }>;
+  dataHealth: {
+    approvedRecordCount: number;
+    activeSiteCount: number;
+    activeSourceCount: number;
+  };
+  fieldInsight: {
+    recentSignal: { statement: string; titleZh: string; titleEn: string; evidenceCount: number; signalCount: number } | null;
+    leadingConcern: {
+      statement: string;
+      titleZh: string;
+      titleEn: string;
+      evidenceCount: number;
+      recordCount: number;
+      siteCount: number;
+    } | null;
+    concernCount: number;
+  };
 };
 type Report = { id: string; title: string; status: string; updatedAt: string };
 
@@ -72,12 +89,6 @@ export default function InsightsPage() {
   }, [load]);
   const canAsk = permissions.some((permission) =>
     ["chat.ask_collect", "ask_collect.use"].includes(permission),
-  );
-  const totalConcerns = useMemo(
-    () =>
-      analytics?.concernsByOrigin.reduce((sum, item) => sum + item.count, 0) ??
-      0,
-    [analytics],
   );
   const lowestCompletion = useMemo(
     () =>
@@ -123,15 +134,15 @@ export default function InsightsPage() {
         title={locale === "zh" ? "洞察" : "Insights"}
         description={
           locale === "zh"
-            ? "先看变化和需要关注的事项，再看图表。"
-            : "Start with what changed and what needs attention. Charts come second."
+            ? "从一线记录中发现变化，识别值得关注的心理信号，并决定下一步需要了解什么。"
+            : "Find change in field records, surface psychological concerns, and decide what to learn next."
         }
       />
       {error ? <ErrorState message={error} retry={load} /> : null}
       {canAsk ? (
-        <div className="card row-between mobile-stack">
+        <div className="card insight-conversation-entry row-between mobile-stack">
           <label style={{ flex: 1 }}>
-            {locale === "zh" ? "搜索或询问 ChatGPT" : "Search or ask ChatGPT"}
+            {locale === "zh" ? "与洞察对话" : "Talk with your insights"}
             <input
               onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={(event) => {
@@ -139,8 +150,8 @@ export default function InsightsPage() {
               }}
               placeholder={
                 locale === "zh"
-                  ? "关于已批准数据提出问题…"
-                  : "Ask a question about approved data…"
+                  ? "问问这些一线记录正在告诉我们什么…"
+                  : "Ask what these field records may be telling us…"
               }
               value={question}
             />
@@ -163,54 +174,75 @@ export default function InsightsPage() {
         </div>
       ) : null}
       {analytics ? (
-        <div className="insight-register" aria-label={locale === "zh" ? "洞察索引" : "Insight index"}>
+        <>
+        <div className="insight-register insight-reasoning-chain" aria-label={locale === "zh" ? "洞察推理链" : "Insight reasoning chain"}>
           {[
             {
               href: "/insights/changes",
               priority: false,
-              title: locale === "zh" ? "发生了什么变化？" : "What changed?",
+              step: locale === "zh" ? "信号" : "Signal",
+              title: locale === "zh" ? "最近出现了什么变化？" : "What changed recently?",
               detail:
-                locale === "zh"
-                  ? `当前授权范围内共有 ${analytics.authorizedRecordCount} 条记录。`
-                  : `${analytics.authorizedRecordCount} records are currently in your authorized scope.`,
-              value: analytics.authorizedRecordCount,
-              unit: locale === "zh" ? "条记录" : "records",
+                analytics.fieldInsight.recentSignal
+                  ? locale === "zh"
+                    ? `近期已批准记录中重复出现“${analytics.fieldInsight.recentSignal.titleZh}”相关的一线变化。打开后可查看原始记录与证据来源。`
+                    : `Recent approved records repeatedly surface field changes related to “${analytics.fieldInsight.recentSignal.titleEn}.” Open the detail to inspect source records and evidence.`
+                  : locale === "zh"
+                    ? "还没有足够的已批准一线信号可供归纳。"
+                    : "There are not enough approved field signals to synthesize yet.",
+              value: analytics.fieldInsight.recentSignal ? Math.min(3, analytics.fieldInsight.recentSignal.signalCount) : 0,
+              unit: locale === "zh" ? "个近期信号" : "recent signals",
             },
             {
               href: "/insights/attention",
-              priority: totalConcerns > 0,
-              title: locale === "zh" ? "什么需要关注？" : "What needs attention?",
+              priority: Boolean(analytics.fieldInsight.leadingConcern),
+              step: locale === "zh" ? "关注" : "Concern",
+              title: locale === "zh" ? "哪些心理关注正在浮现？" : "Which psychological concerns are emerging?",
               detail:
-                locale === "zh"
-                  ? "定位已批准证据中的风险与关注点。"
-                  : "Locate risks and concerns in approved evidence.",
-              value: totalConcerns,
-              unit: locale === "zh" ? "个关注点" : "concerns",
+                analytics.fieldInsight.leadingConcern
+                  ? locale === "zh"
+                    ? `${analytics.fieldInsight.leadingConcern.titleZh}：来自 ${analytics.fieldInsight.leadingConcern.recordCount} 条记录、${analytics.fieldInsight.leadingConcern.siteCount} 个地点的重复证据；这是一项待核实关注，不是诊断。`
+                    : `${analytics.fieldInsight.leadingConcern.titleEn}: repeated evidence across ${analytics.fieldInsight.leadingConcern.recordCount} records and ${analytics.fieldInsight.leadingConcern.siteCount} locations; this is a concern to verify, not a diagnosis.`
+                  : locale === "zh"
+                    ? "暂未发现经过人工批准的心理 concern；这里不会把单条记录当作诊断。"
+                    : "No human-approved psychological concern has emerged; a single record is never treated as a diagnosis.",
+              value: analytics.fieldInsight.concernCount,
+              unit: locale === "zh" ? "个潜在心理关注" : "potential concerns",
             },
             {
               href: "/insights/gaps",
               priority: false,
-              title: locale === "zh" ? "我们还不知道什么？" : "What do we still not know?",
-              detail: lowestCompletion
+              step: locale === "zh" ? "待验证" : "Uncertainty",
+              title: locale === "zh" ? "我们还不能确定什么？" : "What can we not determine yet?",
+              detail: analytics.fieldInsight.leadingConcern
                 ? locale === "zh"
-                  ? `${sourceKindLabel(lowestCompletion.sourceKind, locale)}，完成率最低`
-                  : `${sourceKindLabel(lowestCompletion.sourceKind, locale)} has the lowest completion rate`
+                  ? `现有 ${analytics.fieldInsight.leadingConcern.recordCount} 条相关记录仍不足以区分短期情境、活动设计与持续的心理或行为变化。`
+                  : `${analytics.fieldInsight.leadingConcern.recordCount} related records cannot yet separate short-term context, service design, and sustained psychological or behavioral change.`
                 : locale === "zh"
-                  ? "目前没有足够的完成率数据。"
-                  : "There is not enough completion data yet.",
-              value: lowestCompletion ? Math.round(lowestCompletion.rate * 100) : "-",
-              unit: lowestCompletion ? "%" : "",
+                  ? "证据尚不足；先补充重复性、发生情境与基线信息，避免过度推断。"
+                  : "Evidence is still thin. Capture recurrence, context, and baseline before interpreting further.",
+              value: analytics.fieldInsight.leadingConcern
+                ? locale === "zh"
+                  ? "待验证"
+                  : "Unverified"
+                : "—",
+              unit: locale === "zh" ? "不作诊断" : "not a diagnosis",
             },
             {
               href: "/insights/coverage",
               priority: false,
-              title: locale === "zh" ? "下一步在哪里采集？" : "Where should we collect more?",
+              step: locale === "zh" ? "下一步" : "Action",
+              title: locale === "zh" ? "下一步应该验证什么？" : "What should we verify next?",
               detail:
-                locale === "zh"
-                  ? "使用任务与地点覆盖情况补齐证据缺口。"
-                  : "Use task and location coverage to close evidence gaps.",
+                analytics.fieldInsight.leadingConcern
+                  ? locale === "zh"
+                    ? `下一轮围绕“${analytics.fieldInsight.leadingConcern.titleZh}”记录发生情境、持续时间、重复性，以及调整后是否改善。`
+                    : `For “${analytics.fieldInsight.leadingConcern.titleEn},” capture context, duration, recurrence, and whether a change improves it.`
+                  : locale === "zh"
+                    ? "下一轮优先记录行为发生的情境、持续时间、是否重复，以及改变活动或支持方式后是否改善。"
+                    : "Next, capture context, duration, recurrence, and whether changing the activity or support improves the signal.",
               value: "→",
-              unit: locale === "zh" ? "采集建议" : "guidance",
+              unit: locale === "zh" ? "建议采集项" : "collection prompts",
             },
           ].map((item) => (
             <Link
@@ -218,6 +250,7 @@ export default function InsightsPage() {
               href={item.href}
               key={item.href}
             >
+              <span className="insight-chain-step">{item.step}</span>
               <span className="insight-register-copy">
                 <strong>{item.title}</strong>
                 <span>{item.detail}</span>
@@ -230,6 +263,20 @@ export default function InsightsPage() {
             </Link>
           ))}
         </div>
+        <section className="card data-health-panel" aria-labelledby="data-health-title">
+          <div>
+            <span className="eyebrow">{locale === "zh" ? "数据健康" : "Data health"}</span>
+            <h2 id="data-health-title">{locale === "zh" ? "数据覆盖与采集质量" : "Data coverage and collection health"}</h2>
+            <p>{locale === "zh" ? "这些指标帮助判断洞察是否可靠，但不代替一线内容本身。" : "These indicators help judge whether an insight is reliable; they do not replace field content."}</p>
+          </div>
+          <dl>
+            <div><dt>{locale === "zh" ? "授权记录" : "Authorized records"}</dt><dd>{analytics.authorizedRecordCount}</dd></div>
+            <div><dt>{locale === "zh" ? "已批准" : "Approved"}</dt><dd>{analytics.dataHealth.approvedRecordCount}</dd></div>
+            <div><dt>{locale === "zh" ? "活跃地点" : "Active locations"}</dt><dd>{analytics.dataHealth.activeSiteCount}</dd></div>
+            <div><dt>{locale === "zh" ? "最低完成率" : "Lowest completion"}</dt><dd>{lowestCompletion ? `${Math.round(lowestCompletion.rate * 100)}%` : "—"}</dd><small>{lowestCompletion ? sourceKindLabel(lowestCompletion.sourceKind, locale) : ""}</small></div>
+          </dl>
+        </section>
+        </>
       ) : null}
       <section>
         <div className="section-title">

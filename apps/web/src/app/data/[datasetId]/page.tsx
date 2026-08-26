@@ -19,6 +19,7 @@ import type { DatasetDetail } from "@/features/datasets/types";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import type { OpenAiModelId } from "@/lib/openai-model-catalog";
 import { AttachmentGallery } from "@/features/attachments/components/AttachmentGallery";
+import { sourceKindLabel } from "@/lib/display-labels";
 
 type WorkspaceTab = "analysis" | "records" | "report";
 type AskMessage = {
@@ -353,9 +354,6 @@ export default function DatasetWorkspacePage() {
   return (
     <div className="stack dataset-workspace-page">
       <header className="dataset-workspace-header">
-        <Link className="dataset-back-link" href="/data">
-          <AppIcon name="back" />{locale === "zh" ? "数据集" : "Datasets"}
-        </Link>
         <div className="dataset-title-row">
           <div>
             <div className="row dataset-title-meta">
@@ -390,7 +388,7 @@ export default function DatasetWorkspacePage() {
           <span><strong>{selectedVersion?.recordCount ?? 0}</strong>{locale === "zh" ? "条记录" : "records"}</span>
           <span><strong>{new Set(detail.records.map((record) => record.site?.id).filter(Boolean)).size}</strong>{locale === "zh" ? "个地点" : "locations"}</span>
           <span><strong>{new Set(detail.records.map((record) => record.collector.id)).size}</strong>{locale === "zh" ? "位采集人" : "collectors"}</span>
-          <span><strong>{detail.mediaSummary.total}</strong>{locale === "zh" ? "个媒体附件" : "media files"}</span>
+          <span><strong>{detail.mediaSummary.total}</strong>{locale === "zh" ? "个附件" : "attachments"}</span>
           <span><strong>{new Date(dataset.updatedAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</strong>{locale === "zh" ? "最近更新" : "last updated"}</span>
         </div>
       </header>
@@ -414,7 +412,7 @@ export default function DatasetWorkspacePage() {
           <section className="card dataset-ai-panel">
             <div className="dataset-ai-heading">
               <span className="dataset-ai-avatar"><AppIcon name="sparkles" /></span>
-              <div><h2>{locale === "zh" ? "与数据集 AI 分析员对话" : "Chat with the dataset analyst"}</h2><p>{locale === "zh" ? `回答仅基于 ${selectedVersion?.recordCount ?? 0} 条已冻结记录中的已批准证据${includeMedia ? "和已确认图片" : ""}。` : `Answers are limited to approved evidence${includeMedia ? " and confirmed images" : ""} in these ${selectedVersion?.recordCount ?? 0} frozen records.`}</p></div>
+              <div><h2>{locale === "zh" ? "与数据集 AI 分析员对话" : "Chat with the dataset analyst"}</h2><p>{locale === "zh" ? `回答仅基于 ${selectedVersion?.recordCount ?? 0} 条已冻结记录中的已批准证据${includeMedia ? "和已确认附件" : ""}。` : `Answers are limited to approved evidence${includeMedia ? " and confirmed attachments" : ""} in these ${selectedVersion?.recordCount ?? 0} frozen records.`}</p></div>
             </div>
             <div className="dataset-chat-messages" aria-live="polite">
               {!conversation?.messages.length ? (
@@ -456,10 +454,10 @@ export default function DatasetWorkspacePage() {
                     type="checkbox"
                   />
                   <span>
-                    <strong>{locale === "zh" ? "允许 AI 使用已审查图片" : "Allow AI to use reviewed images"}</strong>
+                    <strong>{locale === "zh" ? "将已审查附件纳入本次 AI 分析" : "Include reviewed attachments in this AI analysis"}</strong>
                     <span>{locale === "zh"
-                      ? "我确认媒体已完成人工隐私检查。最多 6 张受支持图片可发送至配置的 AI 服务；音频、视频和文件只作为可追溯附件保留。"
-                      : "I confirm the media passed human privacy review. Up to 6 supported images may be sent to the configured AI service; audio, video, and documents remain traceable attachments only."}</span>
+                      ? "勾选后，已通过隐私检查的图片、PDF、DOCX、XLSX、CSV 和文本文件可发送给配置的 AI 服务；音频和视频仍只供查看或下载。"
+                      : "When selected, privacy-reviewed images, PDFs, DOCX, XLSX, CSV, and text files may be sent to the configured AI service. Audio and video remain view/download only."}</span>
                   </span>
                 </label>
               ) : null}
@@ -475,7 +473,7 @@ export default function DatasetWorkspacePage() {
                 onValueChange={setQuestion}
                 placeholder={canAsk ? (locale === "zh" ? "询问这个数据集，或上传文件一起分析…" : "Ask about this dataset or attach files to analyze…") : !active ? (locale === "zh" ? "数据集已归档，AI 分析不可用" : "This dataset is archived; AI analysis is unavailable") : dataset.dataClassification !== "approved_evidence" ? (locale === "zh" ? "受限数据不可用于此 AI 工作流" : "Restricted data cannot be used in this AI workflow") : (locale === "zh" ? "当前账号没有 AI 问答权限" : "AI Q&A is not available for this account")}
                 privacyAttested={privacyAttested}
-                scopeNote={locale === "zh" ? "已锁定当前 Dataset Version" : "Locked to this Dataset Version"}
+                scopeNote={locale === "zh" ? "已锁定当前数据集版本" : "Locked to this Dataset Version"}
                 sending={busy === "ask"}
                 value={question}
               />
@@ -483,7 +481,7 @@ export default function DatasetWorkspacePage() {
           </section>
           <aside className="card dataset-context-panel">
             <div><span className="eyebrow">{locale === "zh" ? "分析范围" : "Analysis scope"}</span><h2>{locale === "zh" ? "数据集上下文" : "Dataset context"}</h2></div>
-            <dl><div><dt>{locale === "zh" ? "版本" : "Version"}</dt><dd>v{selectedVersion?.versionNumber ?? "—"}</dd></div><div><dt>{locale === "zh" ? "记录" : "Records"}</dt><dd>{selectedVersion?.recordCount ?? 0}</dd></div><div><dt>{locale === "zh" ? "媒体" : "Media"}</dt><dd>{detail.mediaSummary.total} ({detail.mediaSummary.images}/{detail.mediaSummary.audio}/{detail.mediaSummary.video})</dd></div><div><dt>{locale === "zh" ? "分类" : "Classification"}</dt><dd>{dataset.dataClassification === "approved_evidence" ? (locale === "zh" ? "已批准证据" : "Approved evidence") : (locale === "zh" ? "受限数据" : "Restricted data")}</dd></div><div><dt>SHA-256</dt><dd className="mono-small">{shortHash(selectedVersion?.contentHash)}</dd></div></dl>
+            <dl><div><dt>{locale === "zh" ? "版本" : "Version"}</dt><dd>v{selectedVersion?.versionNumber ?? "—"}</dd></div><div><dt>{locale === "zh" ? "记录" : "Records"}</dt><dd>{selectedVersion?.recordCount ?? 0}</dd></div><div><dt>{locale === "zh" ? "附件" : "Attachments"}</dt><dd>{detail.mediaSummary.total} ({locale === "zh" ? `图片 ${detail.mediaSummary.images} · 文档 ${detail.mediaSummary.documents}` : `Images ${detail.mediaSummary.images} · Documents ${detail.mediaSummary.documents}`})</dd></div><div><dt>{locale === "zh" ? "分类" : "Classification"}</dt><dd>{dataset.dataClassification === "approved_evidence" ? (locale === "zh" ? "已批准证据" : "Approved evidence") : (locale === "zh" ? "受限数据" : "Restricted data")}</dd></div><div><dt>SHA-256</dt><dd className="mono-small">{shortHash(selectedVersion?.contentHash)}</dd></div></dl>
             <div className="dataset-context-note"><AppIcon name="check" /><span><strong>{locale === "zh" ? "可追溯回答" : "Traceable answers"}</strong>{locale === "zh" ? "AI 回答会附上本数据集中的证据来源。" : "AI answers include evidence sources from this dataset."}</span></div>
             {canReport ? <button className="button button-secondary button-wide" disabled={busy === "report"} onClick={generateInitialReport} type="button"><AppIcon name="reports" />{locale === "zh" ? "用这批数据生成报告" : "Generate a report"}</button> : null}
           </aside>
@@ -493,7 +491,7 @@ export default function DatasetWorkspacePage() {
       {activeTab === "records" ? (
         <section className="card stack dataset-records-panel">
           <div className="row-between"><div><h2>{locale === "zh" ? "数据集中的记录" : "Records in this dataset"}</h2><p className="muted">{locale === "zh" ? "每一行都锁定创建数据集时的精确记录版本。" : "Each row is pinned to the exact record version captured at creation."}</p></div><button className="button button-secondary button-small" onClick={() => runDownload("csv")} type="button"><AppIcon name="download" />CSV</button></div>
-          <div className="table-shell"><div className="table-scroll"><table className="data-table"><thead><tr><th>#</th><th>{locale === "zh" ? "记录" : "Record"}</th><th>{locale === "zh" ? "地点" : "Location"}</th><th>{locale === "zh" ? "项目" : "Program"}</th><th>{locale === "zh" ? "采集人" : "Collector"}</th><th>{locale === "zh" ? "媒体" : "Media"}</th><th>{locale === "zh" ? "发生时间" : "Occurred"}</th></tr></thead><tbody>{detail.records.map((record) => <tr key={record.recordVersionId}><td>{record.ordinal + 1}</td><td><Link className="table-link" href={`/records/${record.id}`}>{record.id.slice(0, 8).toUpperCase()}</Link><div className="caption">{record.sourceKind}</div></td><td><strong>{record.site?.name ?? "—"}</strong></td><td>{locale === "zh" ? record.program?.nameZh : record.program?.nameEn}</td><td>{record.collector.name ?? record.collector.id.slice(0, 8)}</td><td>{record.attachments.length ? <AttachmentGallery attachments={record.attachments} compact locale={locale} /> : "—"}</td><td>{record.occurredAt ? new Date(record.occurredAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US") : "—"}</td></tr>)}</tbody></table></div></div>
+          <div className="table-shell"><div className="table-scroll"><table className="data-table"><thead><tr><th>#</th><th>{locale === "zh" ? "记录" : "Record"}</th><th>{locale === "zh" ? "地点" : "Location"}</th><th>{locale === "zh" ? "项目" : "Program"}</th><th>{locale === "zh" ? "采集人" : "Collector"}</th><th>{locale === "zh" ? "附件" : "Attachments"}</th><th>{locale === "zh" ? "发生时间" : "Occurred"}</th></tr></thead><tbody>{detail.records.map((record) => <tr key={record.recordVersionId}><td>{record.ordinal + 1}</td><td><Link className="table-link" href={`/records/${record.id}`}>{record.id.slice(0, 8).toUpperCase()}</Link><div className="caption">{sourceKindLabel(record.sourceKind, locale)}</div></td><td><strong>{record.site?.name ?? "—"}</strong></td><td>{locale === "zh" ? record.program?.nameZh : record.program?.nameEn}</td><td>{record.collector.name ?? record.collector.id.slice(0, 8)}</td><td>{record.attachments.length ? <AttachmentGallery attachments={record.attachments} compact locale={locale} /> : "—"}</td><td>{record.occurredAt ? new Date(record.occurredAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US") : "—"}</td></tr>)}</tbody></table></div></div>
         </section>
       ) : null}
 
@@ -505,7 +503,7 @@ export default function DatasetWorkspacePage() {
           {!createdReportId && hasMedia ? (
             <label className="dataset-media-consent">
               <input checked={includeMedia} disabled={!canReport || busy === "report"} onChange={(event) => setIncludeMedia(event.target.checked)} type="checkbox" />
-              <span><strong>{locale === "zh" ? "允许报告初稿使用已审查图片" : "Allow reviewed images in the report draft"}</strong><span>{locale === "zh" ? "我确认媒体已完成人工隐私检查；音频、视频和文件不会发送给当前报告模型。" : "I confirm the media passed human privacy review; audio, video, and documents are not sent to the current report model."}</span></span>
+              <span><strong>{locale === "zh" ? "将已审查附件纳入报告初稿" : "Include reviewed attachments in the report draft"}</strong><span>{locale === "zh" ? "勾选后，支持的图片和文档会发送给报告模型；音频与视频仍不会发送。" : "When selected, supported images and documents are sent to the report model; audio and video are still excluded."}</span></span>
             </label>
           ) : null}
           {createdReportId ? <Link className="button" href={`/reports/${createdReportId}/edit`}><AppIcon name="arrow" />{locale === "zh" ? "打开报告并审阅 AI 初稿" : "Open report and review AI drafts"}</Link> : canReport ? <button className="button" disabled={busy === "report"} onClick={generateInitialReport} type="button"><AppIcon name="sparkles" />{busy === "report" ? (locale === "zh" ? "正在生成初稿…" : "Generating drafts…") : (locale === "zh" ? "生成初步报告" : "Generate initial report")}</button> : null}

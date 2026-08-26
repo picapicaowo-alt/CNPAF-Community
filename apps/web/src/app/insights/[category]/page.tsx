@@ -47,31 +47,31 @@ const categoryCopy: Record<
   }
 > = {
   changes: {
-    titleZh: "发生了什么变化？",
-    titleEn: "What changed?",
-    descriptionZh: "比较当前授权范围内的采集、提交和批准数量。",
-    descriptionEn: "Compare collection, submission, and approval volume in your authorized scope.",
+    titleZh: "最近出现了什么变化？",
+    titleEn: "What changed recently?",
+    descriptionZh: "从访谈、观察与一线记录中寻找重复出现或明显变化的表达和行为，暂不解释原因。",
+    descriptionEn: "Find repeated or changing expressions and behaviors in interviews, observations, and field records without explaining the cause yet.",
     tone: "blue",
   },
   attention: {
-    titleZh: "什么需要关注？",
-    titleEn: "What needs attention?",
-    descriptionZh: "从真实记录中定位关注点、退回补充与待审内容。",
-    descriptionEn: "Locate concerns, requested updates, and pending review in real records.",
+    titleZh: "哪些心理关注正在浮现？",
+    titleEn: "Which psychological concerns are emerging?",
+    descriptionZh: "把多个一线信号谨慎聚合为心理与行为 concern；Concern 不是诊断。",
+    descriptionEn: "Carefully group field signals into psychological and behavioral concerns. A concern is not a diagnosis.",
     tone: "amber",
   },
   gaps: {
-    titleZh: "我们还不知道什么？",
-    titleEn: "What do we still not know?",
-    descriptionZh: "根据未提交、需补充和来源覆盖识别证据边界。",
-    descriptionEn: "Use unsubmitted work, requested updates, and source coverage to identify evidence limits.",
+    titleZh: "我们还不能确定什么？",
+    titleEn: "What can we not determine yet?",
+    descriptionZh: "列出替代解释、证据不足与需要避免的过度推断，把 observation 与 hypothesis 分开。",
+    descriptionEn: "Separate observations from hypotheses by naming alternative explanations, missing evidence, and inferences to avoid.",
     tone: "violet",
   },
   coverage: {
-    titleZh: "下一步在哪里采集？",
-    titleEn: "Where should we collect next?",
-    descriptionZh: "对比真实来源与地点覆盖，优先补充证据较少的范围。",
-    descriptionEn: "Compare real source and location coverage to prioritize thinner evidence areas.",
+    titleZh: "下一步应该验证什么？",
+    titleEn: "What should we verify next?",
+    descriptionZh: "把 concern 与 uncertainty 转成下一轮访谈、观察和采集问题，形成学习闭环。",
+    descriptionEn: "Turn concerns and uncertainty into the next interview, observation, and collection questions.",
     tone: "green",
   },
 };
@@ -271,14 +271,14 @@ export default function InsightCategoryPage() {
   const aiInitialPrompt = useMemo(() => {
     const sourceDigest = bySource.map((row) => `${sourceKindLabel(row.sourceKind, locale)}: total=${row.total}, submitted=${row.submitted}, approved=${row.approved}, concerns=${row.concerns}`).join("; ");
     const categoryInstruction: Record<Category, string> = {
-      changes: locale === "zh" ? "重点解读时间趋势和来源增减。" : "Focus on time trends and source-level changes.",
-      attention: locale === "zh" ? "重点定位关注点集中来源和待处理状态。" : "Focus on concern concentration and action-needed states.",
-      gaps: locale === "zh" ? "重点指出未批准、需补充和草稿造成的证据缺口。" : "Focus on evidence gaps caused by unapproved, needs-update, and draft work.",
-      coverage: locale === "zh" ? "重点提出下一步地点和来源采集优先级。" : "Focus on the next location and source collection priorities.",
+      changes: locale === "zh" ? "只提炼重复或变化的一线 observation，不解释原因。" : "Extract only repeated or changing field observations; do not explain causes yet.",
+      attention: locale === "zh" ? "优先识别孤独、社会连接、失落、参与感、注意力或认知变化等心理与行为 concern；禁止诊断。" : "Prioritize psychological and behavioral concerns such as loneliness, social connection, grief, engagement, attention, or cognitive change; never diagnose.",
+      gaps: locale === "zh" ? "为每个 concern 列出至少两个替代解释，以及区分这些解释所缺少的证据。" : "For each concern, give at least two alternative explanations and the missing evidence needed to distinguish them.",
+      coverage: locale === "zh" ? "把 concern 与不确定性转成可由一线人员记录的具体问题，而不是只建议增加采集频次。" : "Turn concerns and uncertainty into concrete field questions, not merely a recommendation to collect more often.",
     };
     return locale === "zh"
-      ? `请作为图表分析助手，根据以下当前图表指标生成一份简短的初步解读，并与我有权限访问的已批准证据交叉核实。${categoryInstruction[category]}分三部分回答：关键发现、证据边界、建议下一步。不要把相关性说成因果；引用支持结论的证据。图表范围 ${dateFrom} 至 ${dateTo}；记录 ${filteredRecords.length}，提交 ${totalSubmitted}，批准 ${totalApproved}，关注点 ${totalConcerns}。按来源：${sourceDigest || "无"}`
-      : `Act as a chart analyst. Write a concise initial interpretation of these current chart metrics and cross-check it against approved evidence I am authorized to access. ${categoryInstruction[category]} Use three parts: key finding, evidence limit, and next step. Do not imply causation from correlation; cite supporting evidence. Chart scope ${dateFrom} to ${dateTo}; records ${filteredRecords.length}, submitted ${totalSubmitted}, approved ${totalApproved}, concerns ${totalConcerns}. By source: ${sourceDigest || "none"}`;
+      ? `请作为一线 field intelligence 分析助手，先阅读我有权限访问的已批准记录正文，再把图表指标仅作为证据覆盖背景。${categoryInstruction[category]}按 Signal、Concern、Uncertainty、Action 的推理链回答；明确区分事实与解释，不把相关性说成因果，不作心理或医学诊断，并引用支持结论的记录。范围 ${dateFrom} 至 ${dateTo}；记录 ${filteredRecords.length}，提交 ${totalSubmitted}，批准 ${totalApproved}，已批准 concern ${totalConcerns}。按来源：${sourceDigest || "无"}`
+      : `Act as a field-intelligence analyst. Read the authorized approved record content first and use chart metrics only as evidence-coverage context. ${categoryInstruction[category]} Answer as Signal, Concern, Uncertainty, and Action. Separate fact from interpretation, do not imply causation or diagnose, and cite supporting records. Scope ${dateFrom} to ${dateTo}; records ${filteredRecords.length}, submitted ${totalSubmitted}, approved ${totalApproved}, approved concerns ${totalConcerns}. By source: ${sourceDigest || "none"}`;
   }, [bySource, category, dateFrom, dateTo, filteredRecords.length, locale, totalApproved, totalConcerns, totalSubmitted]);
 
   if (loading)
@@ -373,9 +373,9 @@ export default function InsightCategoryPage() {
               locale={locale}
               scope={aiScope}
               starterPrompts={[
-                locale === "zh" ? "图表里最值得关注的异常是什么？" : "What is the most important anomaly in the chart?",
-                locale === "zh" ? "哪些结论仍缺少足够证据？" : "Which conclusions still lack enough evidence?",
-                locale === "zh" ? "把下一步行动整理成三个优先级。" : "Turn the next actions into three priorities.",
+                locale === "zh" ? "最近有哪些重复出现或明显变化的一线信号？" : "Which field signals are recurring or changing?",
+                locale === "zh" ? "这些信号可能对应哪些心理 concern，还有哪些替代解释？" : "Which psychological concerns may fit these signals, and what are the alternatives?",
+                locale === "zh" ? "下一轮应该具体观察或询问什么来验证？" : "What should we observe or ask next to verify them?",
               ]}
               title={locale === "zh" ? "ChatGPT 初步解读与共创" : "ChatGPT initial read and co-creation"}
             />

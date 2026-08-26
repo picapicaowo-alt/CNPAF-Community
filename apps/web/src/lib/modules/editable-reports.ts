@@ -33,7 +33,10 @@ import { audit } from "../audit";
 import { ApiError } from "../api-error";
 import { authorize, evaluateAuthorization, getAccessContext } from "../authorization";
 import { executeConfiguredWorkflow } from "../ai";
-import { getDatasetVersionForReport } from "./datasets";
+import {
+  getDatasetEvidenceForAi,
+  getDatasetVersionForReport,
+} from "./datasets";
 import { toAttachmentSummary, toFrozenAttachmentManifest } from "../attachments";
 import {
   markDatasetImagesSentToAi,
@@ -394,6 +397,9 @@ export async function draftReportSectionWithAi(actorId: string, sectionId: strin
   const { report, version, section } = await requireSection(actorId, sectionId, "reports.edit");
   if (version.status !== "draft") throw new ApiError("CONFLICT", "Published report sections are immutable", 409);
   const sources = await getReportSectionSources(actorId, sectionId);
+  const datasetRecordSources = version.sourceDatasetVersionId
+    ? await getDatasetEvidenceForAi(actorId, version.sourceDatasetVersionId)
+    : [];
   const media = input.includeMedia && version.sourceDatasetVersionId
     ? await prepareDatasetAiMedia(actorId, version.sourceDatasetVersionId)
     : null;
@@ -408,24 +414,25 @@ export async function draftReportSectionWithAi(actorId: string, sectionId: strin
       sectionId: section.id,
       instruction: input.instruction,
       currentHumanText: section.content,
-      approvedSources: sources,
+      approvedSources: [...sources, ...datasetRecordSources],
       mediaContext: {
         requested: input.includeMedia,
         includedByDatasetPolicy: media?.mediaIncluded ?? false,
-        imageSourceIds: media?.mediaSources.map((source) => source.id) ?? [],
-        nonImageAttachmentCount: (media?.totalAttachmentCount ?? 0) - (media?.mediaSources.length ?? 0),
+        attachmentSourceIds: media?.mediaSources.map((source) => source.id) ?? [],
+        omittedAttachmentCount: (media?.totalAttachmentCount ?? 0) - (media?.mediaSources.length ?? 0),
       },
     },
     localOutput: { suggestion: section.content || input.instruction },
     imageInputs: media?.imageInputs,
+    fileInputs: media?.fileInputs,
   });
   const suggestion = (generation.output as { suggestion?: unknown } | null)?.suggestion;
   if (typeof suggestion !== "string" || !suggestion.trim()) throw new ApiError("CONFLICT", "AI workflow did not return a section suggestion", 409);
-  if (generation.run.provider === "openai" && media?.selectedImages.length && version.sourceDatasetVersionId) {
+  if (generation.run.provider === "openai" && media?.selectedAttachments.length && version.sourceDatasetVersionId) {
     await markDatasetImagesSentToAi({
       actorId,
       aiRunId: generation.run.id,
-      attachmentIds: media.selectedImages.map((attachment) => attachment.id),
+      attachmentIds: media.selectedAttachments.map((attachment) => attachment.id),
       datasetVersionId: version.sourceDatasetVersionId,
       context: { reportId: report.id, reportSectionId: section.id },
     });

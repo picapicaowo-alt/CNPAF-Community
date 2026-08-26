@@ -80,5 +80,9 @@ export function reviewItemSummary(
   }
   if (item.itemType === "privacy_flag")
     return locale === "zh" ? "需要隐私审核" : "Privacy review required";
+  if (item.itemType === "safety_flag")
+    return locale === "zh"
+      ? "潜在安全问题需要人工复核"
+      : "Potential safety concern requires human review";
   return item.summary;
 }

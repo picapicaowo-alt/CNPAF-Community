@@ -530,71 +530,71 @@ export function FieldSettingsPanel({
           </div>
         )}
         {choiceField ? (
-          <section className="builder-settings-group stack-sm">
-            <div className="builder-settings-group-heading">
-              <div>
-                <h3>{locale === "zh" ? "答案选项" : "Answer options"}</h3>
-                <p className="caption">
-                  {locale === "zh"
-                    ? "这些选项会按当前顺序显示在单选、多选或下拉菜单中。"
-                    : "These choices appear in the current order."}
-                </p>
-              </div>
-              <span className="status-pill status-neutral">
+          <details className="settings-accordion builder-options-disclosure">
+            <summary>
+              <span>{locale === "zh" ? "答案选项" : "Answer options"}</span>
+              <span className="caption">
                 {locale === "zh" ? `${options.length} 项` : `${options.length} option(s)`}
               </span>
-            </div>
-            {options.length ? (
-              <div className="stack-sm builder-options-list">
-                {options.map((option, optionIndex) => (
-                  <OptionEditorRow
-                    busy={busy}
-                    index={optionIndex}
-                    key={option.id}
-                    locale={locale}
-                    onArchive={() => onArchiveOption(option.id)}
-                    onMove={(direction) => onMoveOption(option.id, direction)}
-                    onSave={(body) => onSaveOption(option.id, body)}
-                    option={option}
-                    total={options.length}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="builder-options-empty">
+            </summary>
+            <div className="settings-accordion-body stack-sm">
+              <p className="caption builder-settings-disclosure-copy">
                 {locale === "zh"
-                  ? "尚未添加选项。至少添加 1 项后才能发布表单。"
-                  : "No options yet. Add at least one before publishing."}
+                  ? "这些选项会按当前顺序显示在单选、多选或下拉菜单中。点击标题可随时收起。"
+                  : "These choices appear in the current order. Select the heading again to collapse this section."}
+              </p>
+              {options.length ? (
+                <div className="stack-sm builder-options-list">
+                  {options.map((option, optionIndex) => (
+                    <OptionEditorRow
+                      busy={busy}
+                      index={optionIndex}
+                      key={option.id}
+                      locale={locale}
+                      onArchive={() => onArchiveOption(option.id)}
+                      onMove={(direction) => onMoveOption(option.id, direction)}
+                      onSave={(body) => onSaveOption(option.id, body)}
+                      option={option}
+                      total={options.length}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="builder-options-empty">
+                  {locale === "zh"
+                    ? "尚未添加选项。至少添加 1 项后才能发布表单。"
+                    : "No options yet. Add at least one before publishing."}
+                </div>
+              )}
+              <div className="builder-option-create stack-sm">
+                <h4>{locale === "zh" ? "添加新选项" : "Add an option"}</h4>
+                <div className="form-grid">
+                  <label>
+                    {locale === "zh" ? "中文选项" : "Chinese translation"}
+                    <input
+                      onChange={(event) => setNewOptionZh(event.target.value)}
+                      value={newOptionZh}
+                    />
+                  </label>
+                  <label>
+                    {locale === "zh" ? "英文选项" : "English option"}
+                    <input
+                      onChange={(event) => setNewOptionEn(event.target.value)}
+                      value={newOptionEn}
+                    />
+                  </label>
+                </div>
+                <button
+                  className="button button-secondary button-small button-wide"
+                  disabled={busy || !newOptionZh.trim() || !newOptionEn.trim()}
+                  onClick={() => void addOption()}
+                  type="button"
+                >
+                  {locale === "zh" ? "添加选项" : "Add option"}
+                </button>
               </div>
-            )}
-            <div className="builder-option-create stack-sm">
-              <h4>{locale === "zh" ? "添加新选项" : "Add an option"}</h4>
-              <div className="form-grid">
-                <label>
-                  {locale === "zh" ? "中文选项" : "Chinese option"}
-                  <input
-                    onChange={(event) => setNewOptionZh(event.target.value)}
-                    value={newOptionZh}
-                  />
-                </label>
-                <label>
-                  {locale === "zh" ? "英文选项" : "English option"}
-                  <input
-                    onChange={(event) => setNewOptionEn(event.target.value)}
-                    value={newOptionEn}
-                  />
-                </label>
-              </div>
-              <button
-                className="button button-secondary button-small button-wide"
-                disabled={busy || !newOptionZh.trim() || !newOptionEn.trim()}
-                onClick={() => void addOption()}
-                type="button"
-              >
-                {locale === "zh" ? "添加选项" : "Add option"}
-              </button>
             </div>
-          </section>
+          </details>
         ) : null}
         <details className="settings-accordion">
           <summary>

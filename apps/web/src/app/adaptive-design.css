@@ -292,7 +292,8 @@ body {
   padding: 16px 18px 18px;
 }
 
-.ai-prompt-composer > textarea {
+.ai-prompt-composer > textarea,
+.ai-prompt-composer > .ai-rich-input {
   min-height: 96px;
   padding: 16px 18px 12px;
   font-size: 15px;
@@ -2992,11 +2993,12 @@ time {
   min-height: 168px;
   grid-column: span 1;
   grid-template-areas:
-    "value arrow"
+    "step arrow"
+    "value value"
     "copy copy";
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto 1fr;
-  gap: 18px;
+  grid-template-rows: auto auto 1fr;
+  gap: 11px;
   padding: 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -3013,6 +3015,18 @@ time {
 .insight-register-row.is-priority {
   border-left: 3px solid var(--brand-orange);
 }
+
+.insight-chain-step {
+  grid-area: step;
+  color: var(--blue-dark);
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.insight-register-row:nth-child(2) .insight-chain-step { color: var(--brand-orange); }
 
 .insight-register-row:hover,
 .insight-register-row:focus-visible {
@@ -3045,7 +3059,7 @@ time {
 
 .insight-register-value strong {
   color: var(--navy-deep);
-  font-size: 1.85rem;
+  font-size: 1.45rem;
 }
 
 .insight-register-row > svg {
@@ -3060,6 +3074,44 @@ time {
 
 .insight-register-row:hover > svg {
   transform: translateX(3px);
+}
+
+.data-health-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(0, 1.3fr);
+  gap: 28px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.data-health-panel h2,
+.data-health-panel p { margin-bottom: 4px; }
+.data-health-panel p { color: var(--muted); font-size: 13px; }
+.data-health-panel dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+.data-health-panel dl > div {
+  display: grid;
+  min-height: 76px;
+  align-content: center;
+  padding: 0 16px;
+  border-left: 1px solid var(--line);
+}
+.data-health-panel dt,
+.data-health-panel small { color: var(--muted); font-size: 11px; }
+.data-health-panel dd {
+  margin: 2px 0 0;
+  color: var(--navy-deep);
+  font-family: var(--font-data);
+  font-size: 1.45rem;
+  font-weight: 780;
+}
+
+@media (max-width: 900px) {
+  .data-health-panel { grid-template-columns: 1fr; }
+  .data-health-panel dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* Readable type scale: preserve dashboard density without sub-12px body copy. */
@@ -3850,7 +3902,8 @@ h3 {
 .insight-ai-prompts button { min-height: 82px; padding: 14px; font-size: 14px; line-height: 1.5; }
 .ai-copilot-thinking { min-height: 230px; align-items: flex-start; justify-content: flex-start; gap: 18px; padding: 28px; }
 .insight-ai-compose { padding: 16px 18px 18px; }
-.ai-prompt-composer > textarea { min-height: 96px; padding: 16px 18px 12px; font-size: 15px; line-height: 1.6; }
+.ai-prompt-composer > textarea,
+.ai-prompt-composer > .ai-rich-input { min-height: 96px; padding: 16px 18px 12px; font-size: 15px; line-height: 1.6; }
 .dataset-chat-message { font-size: 15px; line-height: 1.7; }
 .records-data-table .table-link { font-size: 14px; line-height: 1.45; }
 

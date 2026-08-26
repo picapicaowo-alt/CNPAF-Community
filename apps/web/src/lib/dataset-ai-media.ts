@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { attachments } from "@cnpaf/db/schema";
-import { aiImageMimeTypes } from "@cnpaf/shared";
+import { aiFileMimeTypes, aiImageMimeTypes } from "@cnpaf/shared";
 import { db } from "./db";
 import { audit } from "./audit";
 import { getObject } from "./storage";
@@ -10,38 +10,61 @@ import { getDatasetMediaForAi } from "./modules/datasets";
 const MAX_AI_IMAGES = 6;
 const MAX_AI_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_AI_IMAGE_TOTAL_BYTES = 30 * 1024 * 1024;
+const MAX_AI_FILES = 6;
+const MAX_AI_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_AI_FILE_TOTAL_BYTES = 40 * 1024 * 1024;
 
 export async function prepareDatasetAiMedia(actorId: string, datasetVersionId: string) {
   const media = await getDatasetMediaForAi(actorId, datasetVersionId);
   let selectedBytes = 0;
+  let selectedFileBytes = 0;
   const selectedImages: Array<typeof attachments.$inferSelect> = [];
+  const selectedFiles: Array<typeof attachments.$inferSelect> = [];
   for (const attachment of [...media.mediaAttachments].sort((left, right) => left.id.localeCompare(right.id))) {
-    if (selectedImages.length >= MAX_AI_IMAGES) break;
-    if (!aiImageMimeTypes.has(attachment.mimeType.toLowerCase())) continue;
-    if (attachment.byteSize > MAX_AI_IMAGE_BYTES) continue;
-    if (selectedBytes + attachment.byteSize > MAX_AI_IMAGE_TOTAL_BYTES) continue;
-    selectedImages.push(attachment);
-    selectedBytes += attachment.byteSize;
+    const mimeType = attachment.mimeType.toLowerCase();
+    if (aiImageMimeTypes.has(mimeType)) {
+      if (selectedImages.length >= MAX_AI_IMAGES) continue;
+      if (attachment.byteSize > MAX_AI_IMAGE_BYTES) continue;
+      if (selectedBytes + attachment.byteSize > MAX_AI_IMAGE_TOTAL_BYTES) continue;
+      selectedImages.push(attachment);
+      selectedBytes += attachment.byteSize;
+      continue;
+    }
+    if (!aiFileMimeTypes.has(mimeType)) continue;
+    if (selectedFiles.length >= MAX_AI_FILES) continue;
+    if (attachment.byteSize > MAX_AI_FILE_BYTES) continue;
+    if (selectedFileBytes + attachment.byteSize > MAX_AI_FILE_TOTAL_BYTES) continue;
+    selectedFiles.push(attachment);
+    selectedFileBytes += attachment.byteSize;
   }
   const imageInputs = await Promise.all(selectedImages.map(async (attachment) => ({
     id: attachment.id,
     mimeType: attachment.mimeType,
     body: (await getObject(attachment.storageKey)).body,
   })));
-  const mediaSources = selectedImages.map((attachment) => {
+  const fileInputs = await Promise.all(selectedFiles.map(async (attachment) => ({
+    id: attachment.id,
+    filename: toAttachmentSummary(attachment).originalName,
+    mimeType: attachment.mimeType,
+    body: (await getObject(attachment.storageKey)).body,
+  })));
+  const mediaSources = [...selectedImages, ...selectedFiles].map((attachment) => {
     const summary = toAttachmentSummary(attachment);
     return {
       id: attachment.id,
-      label: `IMG-${attachment.id.slice(0, 8)}`,
-      statement: `User-attested privacy-reviewed image attachment: ${summary.originalName}`,
+      label: `${attachment.kind === "image" ? "IMG" : "FILE"}-${attachment.id.slice(0, 8)}`,
+      statement: `User-attested privacy-reviewed ${attachment.kind} attachment: ${summary.originalName}`,
       sourceType: "attachment" as const,
     };
   });
   return {
     imageInputs,
+    fileInputs,
     mediaIncluded: media.mediaIncluded,
     mediaSources,
     selectedImages,
+    selectedFiles,
+    selectedAttachments: [...selectedImages, ...selectedFiles],
     totalAttachmentCount: media.mediaAttachments.length,
   };
 }
@@ -68,3 +91,5 @@ export async function markDatasetImagesSentToAi(input: {
     },
   });
 }
+
+export const markDatasetAttachmentsSentToAi = markDatasetImagesSentToAi;

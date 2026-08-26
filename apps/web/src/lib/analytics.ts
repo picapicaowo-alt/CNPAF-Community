@@ -1,7 +1,9 @@
-import { inArray } from "drizzle-orm";
-import { concerns, records, recordVersions } from "@cnpaf/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { canonicalThemes, concerns, records, recordVersions } from "@cnpaf/db/schema";
 import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
+
+const PSYCHOLOGICAL_CONCERN_TERMS = /lonely|loneliness|isolation|social connection|grief|loss|mood|anxiety|depress|attention|cognitive|engagement|孤独|社交|社会连接|哀伤|失落|情绪|焦虑|抑郁|注意力|认知|参与感/i;
 
 export async function analyticsSummary(userId: string) {
   const allRecords = await db.select().from(records);
@@ -15,13 +17,23 @@ export async function analyticsSummary(userId: string) {
   }).allowed);
   const approved = authorized.filter((record) => record.reviewStatus === "approved");
   const approvedIds = approved.map((record) => record.id);
-  const concernRows = approvedIds.length ? await db.select().from(concerns).where(inArray(concerns.recordId, approvedIds)) : [];
+  const concernRows = approvedIds.length
+    ? await db.select().from(concerns).where(and(
+        inArray(concerns.recordId, approvedIds),
+        eq(concerns.reviewStatus, "approved"),
+      ))
+    : [];
   const versionIds = [...new Set([
     ...concernRows.map((concern) => concern.recordVersionId),
     ...(approved.map((record) => record.headVersionId).filter(Boolean) as string[]),
   ])];
   const versions = versionIds.length ? await db.select().from(recordVersions).where(inArray(recordVersions.id, versionIds)) : [];
   const versionById = new Map(versions.map((version) => [version.id, version]));
+  const themeIds = [...new Set(concernRows.flatMap((concern) => concern.canonicalThemeId ? [concern.canonicalThemeId] : []))];
+  const themeRows = themeIds.length
+    ? await db.select().from(canonicalThemes).where(inArray(canonicalThemes.id, themeIds))
+    : [];
+  const themeById = new Map(themeRows.map((theme) => [theme.id, theme]));
   const themeCounts = new Map<string, { origin: string; themeId: string | null; n: number }>();
   for (const concern of concernRows) {
     const key = `${concern.origin}:${concern.canonicalThemeId ?? "none"}`;
@@ -49,6 +61,34 @@ export async function analyticsSummary(userId: string) {
     if (reference) referencesByOrigin.set(concern.origin, new Set([...(referencesByOrigin.get(concern.origin) ?? []), String(reference)]));
   }
   const completionBySourceKind = [...bySource.values()].map((summary) => ({ ...summary, rate: summary.started ? summary.submitted / summary.started : 0 }));
+  const groupedConcerns = new Map<string, typeof concernRows>();
+  for (const concern of concernRows) {
+    const key = concern.canonicalThemeId ?? concern.statement.trim().toLocaleLowerCase();
+    groupedConcerns.set(key, [...(groupedConcerns.get(key) ?? []), concern]);
+  }
+  const leadingConcernGroup = [...groupedConcerns.values()].sort((left, right) => {
+    const groupText = (group: typeof concernRows) => group.map((concern) => {
+      const theme = concern.canonicalThemeId ? themeById.get(concern.canonicalThemeId) : null;
+      return `${theme?.nameZh ?? ""} ${theme?.nameEn ?? ""} ${theme?.definition ?? ""} ${concern.statement}`;
+    }).join(" ");
+    const priorityDifference = Number(PSYCHOLOGICAL_CONCERN_TERMS.test(groupText(right)))
+      - Number(PSYCHOLOGICAL_CONCERN_TERMS.test(groupText(left)));
+    return priorityDifference || right.length - left.length;
+  })[0] ?? [];
+  const leadingConcern = leadingConcernGroup[0] ?? null;
+  const leadingTheme = leadingConcern?.canonicalThemeId
+    ? themeById.get(leadingConcern.canonicalThemeId) ?? null
+    : null;
+  const latestSignal = [...concernRows].sort(
+    (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+  )[0] ?? null;
+  const latestSignalTheme = latestSignal?.canonicalThemeId
+    ? themeById.get(latestSignal.canonicalThemeId) ?? null
+    : null;
+  const leadingRecordIds = new Set(leadingConcernGroup.map((concern) => concern.recordId));
+  const leadingSiteCount = new Set(
+    approved.flatMap((record) => leadingRecordIds.has(record.id) && record.siteId ? [record.siteId] : []),
+  ).size;
   return {
     recordsBySourceKind: [...bySource.values()],
     concernsByOrigin: [...concernsByOrigin].map(([origin, count]) => ({ origin, count, uniqueReferences: referencesByOrigin.get(origin)?.size ?? 0 })),
@@ -57,5 +97,28 @@ export async function analyticsSummary(userId: string) {
     completionBySourceKind,
     scopeApplied: true,
     authorizedRecordCount: authorized.length,
+    dataHealth: {
+      approvedRecordCount: approved.length,
+      activeSiteCount: new Set(authorized.flatMap((record) => record.siteId ? [record.siteId] : [])).size,
+      activeSourceCount: bySource.size,
+    },
+    fieldInsight: {
+      recentSignal: latestSignal ? {
+        statement: latestSignal.statement,
+        titleZh: latestSignalTheme?.nameZh ?? "待分类一线信号",
+        titleEn: latestSignalTheme?.nameEn ?? "Unclassified field signal",
+        evidenceCount: concernRows.length,
+        signalCount: new Set(concernRows.map((concern) => concern.statement.trim().toLocaleLowerCase())).size,
+      } : null,
+      leadingConcern: leadingConcern ? {
+        statement: leadingConcern.statement,
+        titleZh: leadingTheme?.nameZh ?? "待分类心理关注",
+        titleEn: leadingTheme?.nameEn ?? "Unclassified psychological concern",
+        evidenceCount: leadingConcernGroup.length,
+        recordCount: leadingRecordIds.size,
+        siteCount: leadingSiteCount,
+      } : null,
+      concernCount: groupedConcerns.size,
+    },
   };
 }

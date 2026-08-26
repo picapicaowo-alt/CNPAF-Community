@@ -1,5 +1,5 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
 import {
   approvedFindings,
   attachments,
@@ -24,6 +24,7 @@ import {
   markDatasetImagesSentToAi,
   prepareDatasetAiMedia,
 } from "./dataset-ai-media";
+import { getDatasetEvidenceForAi } from "./modules/datasets";
 import { putObject } from "./storage";
 import { isOpenAiModelId, type OpenAiModelId } from "./openai-model-catalog";
 
@@ -208,6 +209,14 @@ function relevanceScore(question: string, statement: string) {
   return terms.reduce((score, term) => score + (normalizedStatement.includes(term) ? 1 : 0), 0);
 }
 
+function contextSourceId(conversationId: string, index: number) {
+  const hex = createHash("sha256")
+    .update(`${conversationId}:context:${index}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
+}
+
 export async function createAskConversation(actorId: string, input: ConversationInput) {
   const scope: AskScope = {
     ...input.scope,
@@ -290,6 +299,9 @@ export async function addAskMessage(
     statement: searchableStatement(approved.approvedValue) || "Approved evidence",
     sourceType: "approved_finding" as const,
   }));
+  const datasetRecordSources = datasetVersionId
+    ? await getDatasetEvidenceForAi(actorId, datasetVersionId)
+    : [];
   // A record-level conversation is explicitly scoped to approved records. The
   // reviewed snapshot itself is therefore a valid source even when reviewers
   // approved the submission without separately accepting AI findings.
@@ -300,7 +312,15 @@ export async function addAskMessage(
         .from(records)
         .innerJoin(recordVersions, eq(records.headVersionId, recordVersions.id))
         .where(and(inArray(records.id, requestedRecordIds), eq(records.reviewStatus, "approved")))
-    : [];
+    : !datasetVersionId && !evidenceSources.length
+      ? await db
+          .select({ record: records, version: recordVersions })
+          .from(records)
+          .innerJoin(recordVersions, eq(records.headVersionId, recordVersions.id))
+          .where(eq(records.reviewStatus, "approved"))
+          .orderBy(desc(records.updatedAt))
+          .limit(25)
+      : [];
   const approvedRecordVersionIds = approvedRecordRows.map(({ version }) => version.id);
   const approvedRecordAnswers = approvedRecordVersionIds.length
     ? await db
@@ -341,9 +361,10 @@ export async function addAskMessage(
     ? await prepareDatasetAiMedia(actorId, datasetVersionId)
     : null;
   const imageInputs = media?.imageInputs ?? [];
+  const datasetFileInputs = media?.fileInputs ?? [];
   const mediaSources = media?.mediaSources ?? [];
-  const conversationContextSources = (contextSources ?? []).map((source) => ({
-    id: conversation.id,
+  const conversationContextSources = (contextSources ?? []).map((source, index) => ({
+    id: contextSourceId(conversation.id, index),
     label: source.label,
     statement: source.statement,
     sourceType: "conversation_context" as const,
@@ -354,7 +375,14 @@ export async function addAskMessage(
     statement: `User-provided conversation attachment: ${attachment.name}`,
     sourceType: "conversation_upload" as const,
   }));
-  const sources = [...evidenceSources, ...approvedRecordSources, ...mediaSources, ...conversationContextSources, ...uploadedSources];
+  const sources = [
+    ...evidenceSources,
+    ...datasetRecordSources,
+    ...approvedRecordSources,
+    ...mediaSources,
+    ...conversationContextSources,
+    ...uploadedSources,
+  ];
   const uploadImageInputs: AiImageInput[] = uploads
     .filter(({ attachment }) => attachment.mimeType.startsWith("image/"))
     .map(({ attachment, body }) => ({ id: attachment.id, mimeType: attachment.mimeType, body }));
@@ -387,14 +415,14 @@ export async function addAskMessage(
       mediaContext: {
         requested: Boolean(requestedScope.includeMedia),
         includedByDatasetPolicy: media?.mediaIncluded ?? false,
-        imageSourceIds: mediaSources.map((source) => source.id),
-        nonImageAttachmentCount: (media?.totalAttachmentCount ?? 0) - mediaSources.length,
+        attachmentSourceIds: mediaSources.map((source) => source.id),
+        omittedAttachmentCount: (media?.totalAttachmentCount ?? 0) - mediaSources.length,
       },
       approvedSources: sources.map((source) => ({ id: source.id, label: source.label, statement: source.statement })),
     },
     localOutput,
     imageInputs: [...imageInputs, ...uploadImageInputs],
-    fileInputs: uploadFileInputs,
+    fileInputs: [...datasetFileInputs, ...uploadFileInputs],
     modelOverride: modelName,
     requiredProviderKey: "openai",
     allowLocalFallback: false,
@@ -404,11 +432,11 @@ export async function addAskMessage(
   if (generated.citations.some((citation) => !sourceById.has(citation.sourceId))) throw new Error("Ask Collect AI output cited evidence outside the authorized retrieval set");
   if (sources.length && !generated.citations.length) throw new Error("Ask Collect substantive answers must cite authorized evidence");
   const citedSources = [...new Set(generated.citations.map((citation) => citation.sourceId))].map((sourceId) => sourceById.get(sourceId)!);
-  if (generation.run.provider === "openai" && media?.selectedImages.length) {
+  if (generation.run.provider === "openai" && media?.selectedAttachments.length) {
     await markDatasetImagesSentToAi({
       actorId,
       aiRunId: generation.run.id,
-      attachmentIds: media.selectedImages.map((attachment) => attachment.id),
+      attachmentIds: media.selectedAttachments.map((attachment) => attachment.id),
       datasetVersionId: datasetVersionId!,
       context: { conversationId },
     });
@@ -466,6 +494,13 @@ export async function getAskConversation(id: string, actorId: string) {
     .innerJoin(records, eq(recordVersions.recordId, records.id))
     .where(inArray(attachments.id, attachmentSourceIds)) : [];
   const access = await getAccessContext(actorId);
+  const savedScope = (conversation.scope ?? {}) as AskScope;
+  const datasetRecordVersions = savedScope.datasetVersionId
+    ? await db.select({ recordVersionId: datasetRecords.recordVersionId })
+        .from(datasetRecords)
+        .where(eq(datasetRecords.datasetVersionId, savedScope.datasetVersionId))
+    : [];
+  const datasetRecordVersionIds = new Set(datasetRecordVersions.map((row) => row.recordVersionId));
   const allowedIds = new Set(evidence.filter(({ record }) =>
     ["clear", "redacted"].includes(record.privacyStatus) &&
     record.researchUseStatus !== "restricted" &&
@@ -480,7 +515,7 @@ export async function getAskConversation(id: string, actorId: string) {
   ).map(({ id: evidenceId }) => evidenceId));
   for (const { version, record } of approvedRecordEvidence) {
     if (
-      record.headVersionId === version.id &&
+      (record.headVersionId === version.id || datasetRecordVersionIds.has(version.id)) &&
       record.reviewStatus === "approved" &&
       ["clear", "redacted"].includes(record.privacyStatus) &&
       record.researchUseStatus !== "restricted" &&
@@ -494,17 +529,15 @@ export async function getAskConversation(id: string, actorId: string) {
       }).allowed
     ) allowedIds.add(version.id);
   }
-  if (contextSourceIds.includes(conversation.id)) allowedIds.add(conversation.id);
+  const allowedContextSourceIds = new Set(
+    (savedScope.contextSources ?? []).map((_, index) => contextSourceId(conversation.id, index)),
+  );
+  for (const sourceId of contextSourceIds) {
+    if (allowedContextSourceIds.has(sourceId)) allowedIds.add(sourceId);
+  }
   for (const source of sources) {
     if (source.sourceType === "conversation_upload" && uploadSourceIds.has(source.sourceId)) allowedIds.add(source.sourceId);
   }
-  const savedScope = (conversation.scope ?? {}) as AskScope;
-  const datasetRecordVersions = savedScope.datasetVersionId
-    ? await db.select({ recordVersionId: datasetRecords.recordVersionId })
-        .from(datasetRecords)
-        .where(eq(datasetRecords.datasetVersionId, savedScope.datasetVersionId))
-    : [];
-  const datasetRecordVersionIds = new Set(datasetRecordVersions.map((row) => row.recordVersionId));
   for (const { attachment, record } of mediaEvidence) {
     if (
       savedScope.datasetVersionId &&

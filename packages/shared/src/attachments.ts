@@ -29,6 +29,15 @@ export const aiImageMimeTypes = new Set([
   "image/webp",
 ]);
 
+export const aiFileMimeTypes = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/csv",
+  "text/markdown",
+  "text/plain",
+]);
+
 export function attachmentKindForMime(mimeType: string): AttachmentKind {
   const normalized = mimeType.toLowerCase();
   if (normalized.startsWith("image/")) return "image";

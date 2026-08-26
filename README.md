@@ -98,7 +98,7 @@ Attachments default to local disk (`STORAGE_BACKEND=local`, `UPLOAD_DIR`). On AW
 
 - Field visits require de-identification attestation; professor interviews store names; literature stores title/URL
 - PII scan happens **before** any external model call
-- Images, audio, video, and bounded document attachments are optional. JPEG EXIF is stripped. Dataset AI sends supported images only after an explicit human privacy-review attestation; audio, video, and documents remain in-product sources unless a separately approved transcription workflow is configured.
+- Images, audio, video, and bounded document attachments are optional. JPEG EXIF is stripped. Dataset AI sends supported images and privacy-screenable documents (PDF, DOCX, XLSX, CSV, Markdown, and plain text) only after explicit human opt-in; audio and video remain in-product sources unless a separately approved transcription workflow is configured.
 - Drafts autosave to IndexedDB and sync with idempotency keys
 - Service worker does not force-reload while a capture form is open
 - Dashboard splits Field / Expert / Literature; metric is **Submission completion**, not visit attendance

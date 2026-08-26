@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import {
   ErrorState,
@@ -12,6 +10,10 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { FieldAnswersPanel } from "@/features/records/FieldAnswersPanel";
+import {
+  hasStructuredEvidence,
+  StructuredEvidencePanel,
+} from "@/features/records/StructuredEvidencePanel";
 import type { RecordFieldAnswer } from "@/features/records/types";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import {
@@ -169,10 +171,6 @@ export default function ReviewDetailPage() {
 
   return (
     <div className="stack">
-      <Link className="inline-link" href="/review">
-        <AppIcon name="back" />
-        {locale === "zh" ? "返回审核" : "Back to review"}
-      </Link>
       <PageHeader
         title={reviewItemSummary(item, locale)}
         description={
@@ -195,7 +193,11 @@ export default function ReviewDetailPage() {
                 {sourceKindLabel(String(record.sourceKind ?? "record"), locale)}
               </StatusPill>
               <StatusPill>
-                {workflowLabel(String(record.privacyStatus ?? item.status), locale)}
+                {record.privacyStatus === "clear"
+                  ? locale === "zh"
+                    ? "隐私检查通过"
+                    : "Privacy cleared"
+                  : workflowLabel(String(record.privacyStatus ?? item.status), locale)}
               </StatusPill>
             </div>
             <h2>{locale === "zh" ? "提交内容" : "Submitted content"}</h2>
@@ -220,27 +222,21 @@ export default function ReviewDetailPage() {
                 : undefined
             }
             selectedFieldIds={correctionFieldIds}
+            selectionDescription={
+              locale === "zh"
+                ? "复选框只在退回补充时使用：勾选需要采集人员修改或补证的具体题目。它不会更改原始回答。"
+                : "Use the checkboxes only when returning a submission: select the exact answers that need correction or more evidence. This does not edit the original response."
+            }
             title={locale === "zh" ? "提交的表单回答" : "Submitted form answers"}
           />
-          {[version.quantitative, finding.evidence].some(Boolean) ? (
-            <div className="card">
-              <h2>{locale === "zh" ? "结构化证据" : "Structured evidence"}</h2>
-              <pre
-                style={{
-                  margin: 0,
-                  overflow: "auto",
-                  whiteSpace: "pre-wrap",
-                  fontSize: 12,
-                }}
-              >
-                {JSON.stringify(
-                  version.quantitative ?? finding.evidence,
-                  null,
-                  2,
-                )}
-              </pre>
-            </div>
-          ) : null}
+          <StructuredEvidencePanel
+            locale={locale}
+            value={
+              hasStructuredEvidence(version.quantitative)
+                ? version.quantitative
+                : finding.evidence
+            }
+          />
           {item.itemType === "privacy_flag" ||
           item.itemType === "ai_finding" ? (
             <label>
@@ -267,11 +263,18 @@ export default function ReviewDetailPage() {
               onChange={(event) => setNotes(event.target.value)}
               placeholder={
                 locale === "zh"
-                  ? "说明判断依据（可选）"
-                  : "Explain your decision (optional)"
+                  ? "批准时可选；退回补充时必须说明需要补什么"
+                  : "Optional for approval; required when returning for completion"
               }
             />
           </label>
+          {item.itemType === "record" ? (
+            <p className="caption review-decision-help">
+              {locale === "zh"
+                ? "“退回补充”会在填写备注并勾选至少一个需修改题目后启用。"
+                : "Return for completion becomes available after you add a note and select at least one answer to correct."}
+            </p>
+          ) : null}
           {actions.map((action, index) => (
             <button
               className={`button button-wide${index ? " button-secondary" : ""}`}
