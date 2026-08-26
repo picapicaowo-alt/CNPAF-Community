@@ -380,6 +380,12 @@ export async function addUserRoleAssignment(input: {
   if (!role || role.status !== "active" || (role.organizationId && role.organizationId !== target.organizationId)) throw new ApiError("BAD_REQUEST", "Role not found, archived, or belongs to another organization", 400);
   if (input.organizationId && input.organizationId !== target.organizationId) throw new ApiError("BAD_REQUEST", "Role assignment cannot cross organizations", 400);
   await assertActorCan(input.actorId, "roles.assign", { organizationId: input.organizationId ?? role.organizationId ?? target.organizationId });
+  const existingAssignment = (await db.select().from(userRoleAssignments).where(and(
+    eq(userRoleAssignments.userId, input.targetUserId),
+    eq(userRoleAssignments.roleId, role.id),
+    eq(userRoleAssignments.status, "active"),
+  )).limit(1))[0];
+  if (existingAssignment) return existingAssignment;
   return db.transaction(async (tx) => {
     const [assignment] = await tx.insert(userRoleAssignments).values({
       userId: input.targetUserId,

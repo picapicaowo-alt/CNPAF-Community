@@ -126,3 +126,13 @@ test("standalone mobile workspaces keep navigation and forms inside the viewport
   assert.match(styles, /grid-template-columns: repeat\(var\(--mobile-nav-count, 4\), minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.insight-real-dates input\[type="date"\][\s\S]*?min-width: 0;[\s\S]*?max-width: 100%/);
 });
+
+test("administrators can explicitly grant the admin role from People", () => {
+  const people = readFileSync(path.join(appRoot, "people/page.tsx"), "utf8");
+  const roleRoute = readFileSync(path.join(appRoot, "api/v1/users/[id]/role-assignments/route.ts"), "utf8");
+
+  assert.match(people, /permissions\.includes\("roles\.assign"\)/);
+  assert.match(people, /roleKey: "admin"/);
+  assert.match(people, /确认设为管理员/);
+  assert.match(roleRoute, /requirePermission\("roles\.assign"\)/);
+});

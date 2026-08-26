@@ -19,6 +19,7 @@ type User = {
   id: string;
   name: string;
   email: string;
+  organizationId: string | null;
   status: string;
   locale: string;
   updatedAt: string;
@@ -59,6 +60,8 @@ export default function PeoplePage() {
   const [resetReason, setResetReason] = useState("");
   const [resetting, setResetting] = useState(false);
   const [aiUpdating, setAiUpdating] = useState("");
+  const [adminTarget, setAdminTarget] = useState<User | null>(null);
+  const [assigningAdmin, setAssigningAdmin] = useState(false);
   const [resetCredential, setResetCredential] = useState<{
     name: string;
     email: string;
@@ -161,6 +164,26 @@ export default function PeoplePage() {
       setAiUpdating("");
     }
   }
+  async function assignAdminRole() {
+    if (!adminTarget) return;
+    setAssigningAdmin(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/users/${adminTarget.id}/role-assignments`, {
+        method: "POST",
+        body: JSON.stringify({
+          roleKey: "admin",
+          organizationId: adminTarget.organizationId,
+        }),
+      });
+      setAdminTarget(null);
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setAssigningAdmin(false);
+    }
+  }
   return (
     <div className="stack">
       <PageHeader
@@ -248,8 +271,8 @@ export default function PeoplePage() {
             value={status}
           >
             <option value="all">{locale === "zh" ? "全部" : "All"}</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="active">{locale === "zh" ? "启用" : "Active"}</option>
+            <option value="inactive">{locale === "zh" ? "停用" : "Inactive"}</option>
           </select>
         </label>
       </div>
@@ -282,19 +305,34 @@ export default function PeoplePage() {
                       <div className="caption">{user.email}</div>
                     </td>
                     <td>
-                      <div className="row">
-                        {user.roleAssignments.length
-                          ? user.roleAssignments.map((role) => (
-                              <StatusPill
-                                key={`${role.roleKey}-${role.status}`}
-                                tone="blue"
-                              >
-                                {locale === "zh"
-                                  ? role.roleNameZh
-                                  : role.roleNameEn}
-                              </StatusPill>
-                            ))
-                          : "—"}
+                      <div className="stack-sm">
+                        <div className="row">
+                          {user.roleAssignments.length
+                            ? user.roleAssignments.map((role) => (
+                                <StatusPill
+                                  key={`${role.roleKey}-${role.status}`}
+                                  tone="blue"
+                                >
+                                  {locale === "zh"
+                                    ? role.roleNameZh
+                                    : role.roleNameEn}
+                                </StatusPill>
+                              ))
+                            : "—"}
+                        </div>
+                        {permissions.includes("roles.assign") &&
+                        user.status === "active" &&
+                        !user.roleAssignments.some(
+                          (role) => role.roleKey === "admin" && role.status === "active",
+                        ) ? (
+                          <button
+                            className="button button-secondary button-small"
+                            onClick={() => setAdminTarget(user)}
+                            type="button"
+                          >
+                            {locale === "zh" ? "设为管理员" : "Make admin"}
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                     <td>{primaryDepartment(user.affiliations) || "—"}</td>
@@ -323,7 +361,9 @@ export default function PeoplePage() {
                       <StatusPill
                         tone={user.status === "active" ? "green" : "neutral"}
                       >
-                        {user.status}
+                        {user.status === "active"
+                          ? locale === "zh" ? "启用" : "Active"
+                          : locale === "zh" ? "停用" : "Inactive"}
                       </StatusPill>
                     </td>
                     <td>
@@ -499,6 +539,79 @@ export default function PeoplePage() {
                   : locale === "zh"
                     ? "生成临时密码"
                     : "Generate temporary password"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+      {adminTarget ? (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target && !assigningAdmin)
+              setAdminTarget(null);
+          }}
+          role="presentation"
+        >
+          <form
+            aria-labelledby="assign-admin-dialog-title"
+            aria-modal="true"
+            className="modal-card stack"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void assignAdminRole();
+            }}
+            role="dialog"
+          >
+            <div className="modal-heading row-between">
+              <div>
+                <div className="eyebrow">
+                  {locale === "zh" ? "角色授权" : "Role assignment"}
+                </div>
+                <h2 id="assign-admin-dialog-title">
+                  {locale === "zh" ? "设为管理员" : "Make admin"}
+                </h2>
+                <p className="muted">
+                  {adminTarget.name} · {adminTarget.email}
+                </p>
+              </div>
+              <button
+                aria-label={locale === "zh" ? "关闭" : "Close"}
+                className="icon-button"
+                disabled={assigningAdmin}
+                onClick={() => setAdminTarget(null)}
+                type="button"
+              >
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div className="feedback feedback-warning">
+              <span>
+                <strong>
+                  {locale === "zh"
+                    ? "管理员拥有完整的平台管理权限。"
+                    : "Admins have full platform management access."}
+                </strong>
+                <span>
+                  {locale === "zh"
+                    ? "确认后，该账号的现有会话会失效，并在下次登录时获得管理员权限。操作会写入审计日志。"
+                    : "After confirmation, existing sessions are revoked and admin access applies at the next sign-in. The action is audit logged."}
+                </span>
+              </span>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="button button-secondary"
+                disabled={assigningAdmin}
+                onClick={() => setAdminTarget(null)}
+                type="button"
+              >
+                {locale === "zh" ? "取消" : "Cancel"}
+              </button>
+              <button className="button" disabled={assigningAdmin} type="submit">
+                {assigningAdmin
+                  ? locale === "zh" ? "授权中…" : "Assigning…"
+                  : locale === "zh" ? "确认设为管理员" : "Confirm admin access"}
               </button>
             </div>
           </form>

@@ -89,7 +89,7 @@ export async function GET(req: Request) {
   const enriched = visible.map((user) => ({
     ...user,
     aiEnabled: aiAccessByUser.get(user.id) ?? false,
-    roleAssignments: byUser.get(user.id) ?? [],
+    roleAssignments: (byUser.get(user.id) ?? []).filter((assignment) => assignment.status === "active"),
     affiliations: affiliationsByUser.get(user.id) ?? [],
     programMemberships: membershipsByUser.get(user.id) ?? [],
     accessScopes: scopesByUser.get(user.id) ?? [],
