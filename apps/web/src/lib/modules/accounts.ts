@@ -5,11 +5,13 @@ import {
   auditEvents,
   permissions,
   permissionScopeAssignments,
+  personGroupMemberships,
   programMemberships,
   programs,
   roles,
   sessions,
   userAffiliations,
+  userPermissionOverrides,
   userRoleAssignments,
   users,
 } from "@cnpaf/db/schema";
@@ -267,6 +269,109 @@ export async function setAccountActive(actorId: string, targetUserId: string, ac
       afterState: { status },
       metadata: { requestId },
     }, (values) => tx.insert(auditEvents).values(values));
+    return after;
+  });
+}
+
+/**
+ * Permanently removes an accidentally-created identity without deleting the
+ * audit or business rows that may already reference its UUID. The login
+ * identity and access grants are destroyed; historical records retain only the
+ * stable, non-identifying user id required for referential integrity.
+ */
+export async function removeAccountIdentity(
+  actorId: string,
+  targetUserId: string,
+  reason: string,
+  requestId?: string,
+) {
+  if (actorId === targetUserId) {
+    throw new ApiError(
+      "BAD_REQUEST",
+      "You cannot remove your own account",
+      400,
+    );
+  }
+  const before = await requireUserInScope(
+    actorId,
+    targetUserId,
+    "users.deactivate",
+  );
+  await requireUserInScope(actorId, targetUserId, "people.edit_profile");
+  if (before.status !== "inactive") {
+    throw new ApiError(
+      "CONFLICT",
+      "Archive the account before permanently removing it",
+      409,
+    );
+  }
+  const removedEmail = `removed+${targetUserId}@invalid.cnpaf.local`;
+  return db.transaction(async (tx) => {
+    await tx.delete(sessions).where(eq(sessions.userId, targetUserId));
+    await tx
+      .delete(permissionScopeAssignments)
+      .where(eq(permissionScopeAssignments.userId, targetUserId));
+    await tx
+      .delete(userPermissionOverrides)
+      .where(eq(userPermissionOverrides.userId, targetUserId));
+    await tx
+      .update(userRoleAssignments)
+      .set({ status: "inactive", endsAt: new Date(), updatedAt: new Date() })
+      .where(eq(userRoleAssignments.userId, targetUserId));
+    await tx
+      .update(programMemberships)
+      .set({ status: "inactive", endsAt: new Date(), updatedAt: new Date() })
+      .where(eq(programMemberships.userId, targetUserId));
+    await tx
+      .update(userAffiliations)
+      .set({
+        status: "inactive",
+        endsAt: new Date(),
+        isPrimary: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(userAffiliations.userId, targetUserId));
+    await tx
+      .update(personGroupMemberships)
+      .set({ status: "inactive", updatedAt: new Date() })
+      .where(eq(personGroupMemberships.userId, targetUserId));
+    const [after] = await tx
+      .update(users)
+      .set({
+        email: removedEmail,
+        name: "Removed account",
+        avatarStorageKey: null,
+        avatarMimeType: null,
+        mustChangePassword: true,
+        passwordChangedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, targetUserId))
+      .returning({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        status: users.status,
+        updatedAt: users.updatedAt,
+      });
+    await audit(
+      {
+        actorId,
+        action: "account.identity_removed",
+        entityType: "user",
+        entityId: targetUserId,
+        targetUserId,
+        reason,
+        beforeState: {
+          email: before.email,
+          name: before.name,
+          status: before.status,
+        },
+        afterState: { identityRemoved: true, status: after.status },
+        metadata: { requestId },
+      },
+      (values) => tx.insert(auditEvents).values(values),
+    );
     return after;
   });
 }

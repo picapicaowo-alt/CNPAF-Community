@@ -27,11 +27,13 @@ const EMPTY_DRAFT: PeopleGroupDraft = {
 
 export function PeopleGroupsPanel({
   canManage,
+  embedded = false,
   locale,
   onChanged,
   people,
 }: {
   canManage: boolean;
+  embedded?: boolean;
   locale: "zh" | "en";
   onChanged: () => Promise<void>;
   people: GroupablePerson[];
@@ -140,7 +142,7 @@ export function PeopleGroupsPanel({
   }
 
   return (
-    <section className="card stack">
+    <section className={embedded ? "stack people-groups-panel" : "card stack"}>
       <div className="row-between mobile-stack">
         <div>
           <h2>{locale === "zh" ? "人员分组" : "People groups"}</h2>

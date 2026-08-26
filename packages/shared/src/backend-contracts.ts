@@ -76,6 +76,13 @@ export const adminUserUpdateBodySchema = z.object({
   status: z.enum(["active", "inactive"]).optional(),
 }).strict();
 
+export const removeAccountBodySchema = z
+  .object({
+    confirmation: z.literal("REMOVE"),
+    reason: z.string().min(1).max(2000),
+  })
+  .strict();
+
 export const aiAccessUpdateBodySchema = z.object({
   enabled: z.boolean(),
   reason: z.string().min(1).max(2000),

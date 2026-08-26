@@ -16,6 +16,7 @@ import {
   personGroupUpdateBodySchema,
   programUpdateBodySchema,
   programMembershipRequestBodySchema,
+  removeAccountBodySchema,
   recordLifecycleBodySchema,
   reportSectionAiDraftBodySchema,
   reportFiltersSchema,
@@ -545,6 +546,28 @@ test("manual account provisioning cannot reference an unrelated role assignment"
     }],
   });
   assert.equal(parsed.success, false);
+});
+
+test("permanent identity removal requires an explicit confirmation and reason", () => {
+  assert.equal(
+    removeAccountBodySchema.safeParse({
+      confirmation: "REMOVE",
+      reason: "Created with the wrong email",
+    }).success,
+    true,
+  );
+  assert.equal(
+    removeAccountBodySchema.safeParse({
+      confirmation: "DELETE",
+      reason: "Created with the wrong email",
+    }).success,
+    false,
+  );
+  assert.equal(
+    removeAccountBodySchema.safeParse({ confirmation: "REMOVE", reason: "" })
+      .success,
+    false,
+  );
 });
 
 test("location coordinates are paired and bounded", () => {

@@ -70,6 +70,7 @@ paths:
   /admin/users/{userId}:
     get: { tags: [Access], operationId: adminGetUser, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     patch: { tags: [Access], operationId: adminUpdateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    delete: { tags: [Access], operationId: removeUserIdentity, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /admin/users/{userId}/access:
     get: { tags: [Access], operationId: getUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     put: { tags: [Access], operationId: replaceUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }

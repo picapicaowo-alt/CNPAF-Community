@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auditEvents, sessions, users } from "@cnpaf/db/schema";
-import { adminUserUpdateBodySchema } from "@cnpaf/shared";
+import { adminUserUpdateBodySchema, removeAccountBodySchema } from "@cnpaf/shared";
 import { db } from "@/lib/db";
 import { requireAnyPermission, requireUser, jsonError } from "@/lib/http";
 import { getUserAccess } from "@/lib/access-admin";
 import { audit } from "@/lib/audit";
 import { authorize, authorizeAny } from "@/lib/authorization";
+import { removeAccountIdentity } from "@/lib/modules/accounts";
+import { apiErrorResponse, requestId } from "@/lib/api-error";
 
 type Context = { params: Promise<{ userId: string }> };
 
@@ -59,4 +61,20 @@ export async function PATCH(req: Request, { params }: Context) {
     return updated;
   });
   return NextResponse.json({ user: after });
+}
+
+export async function DELETE(req: Request, { params }: Context) {
+  const traceId = requestId(req);
+  try {
+    const { user, error } = await requireUser();
+    if (error || !user) return error;
+    if (user.mustChangePassword) return jsonError("Password change required", 403);
+    const body = removeAccountBodySchema.parse(await req.json());
+    const { userId } = await params;
+    return NextResponse.json({
+      user: await removeAccountIdentity(user.id, userId, body.reason, traceId),
+    });
+  } catch (error) {
+    return apiErrorResponse(error, traceId);
+  }
 }

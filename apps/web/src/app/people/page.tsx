@@ -11,6 +11,7 @@ import {
   PageHeader,
   StatusPill,
 } from "@/components/ui";
+import { RolePermissionsPanel } from "@/features/access-management/RolePermissionsPanel";
 import { PeopleGroupsPanel } from "@/features/people-groups/components/PeopleGroupsPanel";
 import { primaryDepartment } from "@/features/people-groups/model";
 import { apiFetch, errorMessage } from "@/lib/api-client";
@@ -60,8 +61,6 @@ export default function PeoplePage() {
   const [resetReason, setResetReason] = useState("");
   const [resetting, setResetting] = useState(false);
   const [aiUpdating, setAiUpdating] = useState("");
-  const [adminTarget, setAdminTarget] = useState<User | null>(null);
-  const [assigningAdmin, setAssigningAdmin] = useState(false);
   const [resetCredential, setResetCredential] = useState<{
     name: string;
     email: string;
@@ -154,34 +153,21 @@ export default function PeoplePage() {
         method: "PATCH",
         body: JSON.stringify({
           enabled,
-          reason: locale === "zh" ? "管理员在人员与账号页面更新 ChatGPT 使用权限" : "Administrator updated ChatGPT access from People & accounts",
+          reason:
+            locale === "zh"
+              ? "管理员在人员与账号页面更新 ChatGPT 使用权限"
+              : "Administrator updated ChatGPT access from People & accounts",
         }),
       });
-      setUsers((current) => current.map((item) => item.id === user.id ? { ...item, aiEnabled: enabled } : item));
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === user.id ? { ...item, aiEnabled: enabled } : item,
+        ),
+      );
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
       setAiUpdating("");
-    }
-  }
-  async function assignAdminRole() {
-    if (!adminTarget) return;
-    setAssigningAdmin(true);
-    setError("");
-    try {
-      await apiFetch(`/api/v1/users/${adminTarget.id}/role-assignments`, {
-        method: "POST",
-        body: JSON.stringify({
-          roleKey: "admin",
-          organizationId: adminTarget.organizationId,
-        }),
-      });
-      setAdminTarget(null);
-      await load();
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setAssigningAdmin(false);
     }
   }
   return (
@@ -203,7 +189,10 @@ export default function PeoplePage() {
         }
       />
       {resetCredential ? (
-        <div className="feedback feedback-success reset-credential" role="status">
+        <div
+          className="feedback feedback-success reset-credential"
+          role="status"
+        >
           <span>
             <strong>
               {locale === "zh"
@@ -241,12 +230,61 @@ export default function PeoplePage() {
         </div>
       ) : null}
       {permissions.length && !error ? (
+        <div className="people-admin-tools">
+          <details className="people-admin-toggle">
+            <summary>
+              <span>
+                <strong>
+                  {locale === "zh" ? "人员分组" : "People groups"}
+                </strong>
+                <small>
+                  {locale === "zh"
+                    ? "创建跨学院小组、调整成员或归档已结束的分组"
+                    : "Create cross-school groups, update membership, or archive completed groups"}
+                </small>
+              </span>
+              <span className="people-admin-toggle-action">
+                {locale === "zh" ? "展开" : "Expand"}
+                <AppIcon name="arrow" />
+              </span>
+            </summary>
+            <div className="people-admin-toggle-body">
         <PeopleGroupsPanel
           canManage={permissions.includes("people.manage_groups")}
+                embedded
           locale={locale}
           onChanged={load}
           people={users}
         />
+            </div>
+          </details>
+          {permissions.includes("roles.view") ? (
+            <details className="people-admin-toggle">
+              <summary>
+                <span>
+                  <strong>
+                    {locale === "zh" ? "角色与权限" : "Roles & permissions"}
+                  </strong>
+                  <small>
+                    {locale === "zh"
+                      ? "配置运营审核员、志愿者等角色默认可使用的功能"
+                      : "Configure the default capabilities for reviewers, volunteers, and other roles"}
+                  </small>
+                </span>
+                <span className="people-admin-toggle-action">
+                  {locale === "zh" ? "展开" : "Expand"}
+                  <AppIcon name="arrow" />
+                </span>
+              </summary>
+              <div className="people-admin-toggle-body">
+                <RolePermissionsPanel
+                  canManage={permissions.includes("roles.manage")}
+                  locale={locale}
+                />
+              </div>
+            </details>
+          ) : null}
+        </div>
       ) : null}
       <div className="card card-compact form-grid">
         <label>
@@ -271,8 +309,12 @@ export default function PeoplePage() {
             value={status}
           >
             <option value="all">{locale === "zh" ? "全部" : "All"}</option>
-            <option value="active">{locale === "zh" ? "启用" : "Active"}</option>
-            <option value="inactive">{locale === "zh" ? "停用" : "Inactive"}</option>
+            <option value="active">
+              {locale === "zh" ? "启用" : "Active"}
+            </option>
+            <option value="inactive">
+              {locale === "zh" ? "已归档" : "Archived"}
+            </option>
           </select>
         </label>
       </div>
@@ -287,14 +329,17 @@ export default function PeoplePage() {
               <thead>
                 <tr>
                   <th>{locale === "zh" ? "人员" : "Person"}</th>
-                  <th>{locale === "zh" ? "角色" : "Roles"}</th>
-                  <th>{locale === "zh" ? "学院 / 系" : "School / department"}</th>
-                  <th>{locale === "zh" ? "分组" : "Groups"}</th>
-                  <th>{locale === "zh" ? "项目范围" : "Program scope"}</th>
-                  <th>{locale === "zh" ? "状态" : "Status"}</th>
-                  <th>{locale === "zh" ? "ChatGPT 权限" : "ChatGPT access"}</th>
+                  <th>
+                    {locale === "zh" ? "角色与归属" : "Role & affiliation"}
+                  </th>
+                  <th>
+                    {locale === "zh" ? "项目与分组" : "Programs & groups"}
+                  </th>
+                  <th>{locale === "zh" ? "账号与 AI" : "Account & AI"}</th>
                   <th>{locale === "zh" ? "密码安全" : "Password security"}</th>
-                  <th>{locale === "zh" ? "更新" : "Updated"}</th>
+                  <th className="people-manage-heading">
+                    {locale === "zh" ? "管理" : "Manage"}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -306,7 +351,7 @@ export default function PeoplePage() {
                     </td>
                     <td>
                       <div className="stack-sm">
-                        <div className="row">
+                        <div className="row people-role-pills">
                           {user.roleAssignments.length
                             ? user.roleAssignments.map((role) => (
                                 <StatusPill
@@ -320,34 +365,15 @@ export default function PeoplePage() {
                               ))
                             : "—"}
                         </div>
-                        {permissions.includes("roles.assign") &&
-                        user.status === "active" &&
-                        !user.roleAssignments.some(
-                          (role) => role.roleKey === "admin" && role.status === "active",
-                        ) ? (
-                          <button
-                            className="button button-secondary button-small"
-                            onClick={() => setAdminTarget(user)}
-                            type="button"
-                          >
-                            {locale === "zh" ? "设为管理员" : "Make admin"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td>{primaryDepartment(user.affiliations) || "—"}</td>
-                    <td>
-                      <div className="row">
-                        {user.groups.length
-                          ? user.groups.map((group) => (
-                              <StatusPill key={group.id} tone="blue">
-                                {locale === "zh" ? group.nameZh : group.nameEn}
-                              </StatusPill>
-                            ))
-                          : "—"}
+                        <span className="caption">
+                          {primaryDepartment(user.affiliations) ||
+                            (locale === "zh" ? "未设置学院" : "No school set")}
+                        </span>
                       </div>
                     </td>
                     <td>
+                      <div className="stack-sm people-scope-cell">
+                        <span>
                       {user.programMemberships
                         .map((program) =>
                           locale === "zh"
@@ -355,37 +381,64 @@ export default function PeoplePage() {
                             : program.programNameEn,
                         )
                         .join(", ") ||
-                        (locale === "zh" ? "组织范围" : "Organization scope")}
+                            (locale === "zh"
+                              ? "组织范围"
+                              : "Organization scope")}
+                        </span>
+                        <span className="caption">
+                          {user.groups.length
+                            ? user.groups
+                                .map((group) =>
+                                  locale === "zh" ? group.nameZh : group.nameEn,
+                                )
+                                .join("、")
+                            : locale === "zh"
+                              ? "未加入分组"
+                              : "No group"}
+                        </span>
+                      </div>
                     </td>
                     <td>
+                      <div className="stack-sm people-account-cell">
                       <StatusPill
                         tone={user.status === "active" ? "green" : "neutral"}
                       >
                         {user.status === "active"
-                          ? locale === "zh" ? "启用" : "Active"
-                          : locale === "zh" ? "停用" : "Inactive"}
+                            ? locale === "zh"
+                              ? "启用"
+                              : "Active"
+                            : locale === "zh"
+                              ? "已归档"
+                              : "Archived"}
                       </StatusPill>
-                    </td>
-                    <td>
                       {permissions.includes("permissions.assign") ? (
                         <button
                           aria-checked={user.aiEnabled}
                           className={`ai-access-toggle${user.aiEnabled ? " active" : ""}`}
-                          disabled={aiUpdating === user.id || user.status !== "active"}
+                            disabled={
+                              aiUpdating === user.id || user.status !== "active"
+                            }
                           onClick={() => void toggleAiAccess(user)}
                           role="switch"
                           type="button"
                         >
-                          <span aria-hidden="true"><i /></span>
+                            <span aria-hidden="true">
+                              <i />
+                            </span>
                           {aiUpdating === user.id
-                            ? (locale === "zh" ? "更新中…" : "Updating…")
+                              ? locale === "zh"
+                                ? "更新中…"
+                                : "Updating…"
                             : user.aiEnabled
-                              ? (locale === "zh" ? "已启用" : "Enabled")
-                              : (locale === "zh" ? "未分配" : "Not assigned")}
+                                ? locale === "zh"
+                                  ? "AI 已启用"
+                                  : "AI enabled"
+                                : locale === "zh"
+                                  ? "AI 未分配"
+                                  : "AI not assigned"}
                         </button>
-                      ) : (
-                        <StatusPill tone={user.aiEnabled ? "violet" : "neutral"}>{user.aiEnabled ? (locale === "zh" ? "已启用" : "Enabled") : (locale === "zh" ? "未分配" : "Not assigned")}</StatusPill>
-                      )}
+                        ) : null}
+                      </div>
                     </td>
                     <td>
                       <div className="stack-sm password-admin-cell">
@@ -402,12 +455,14 @@ export default function PeoplePage() {
                         </StatusPill>
                         <span className="caption">
                           {user.passwordChangedAt
-                            ? `${locale === "zh" ? "修改于 " : "Changed "}${new Date(
+                            ? new Date(
                                 user.passwordChangedAt,
-                              ).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}`
+                              ).toLocaleDateString(
+                                locale === "zh" ? "zh-CN" : "en-US",
+                              )
                             : locale === "zh"
-                              ? "尚无个人修改记录"
-                              : "No personal change recorded"}
+                              ? "尚未修改"
+                              : "Not changed"}
                         </span>
                         {permissions.includes("people.reset_password") ? (
                           <button
@@ -423,10 +478,14 @@ export default function PeoplePage() {
                         ) : null}
                       </div>
                     </td>
-                    <td>
-                      {new Date(user.updatedAt).toLocaleDateString(
-                        locale === "zh" ? "zh-CN" : "en-US",
-                      )}
+                    <td className="people-manage-cell">
+                      <Link
+                        className="button button-secondary button-small"
+                        href={`/people/${user.id}`}
+                      >
+                        {locale === "zh" ? "管理" : "Manage"}
+                        <AppIcon name="arrow" />
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -539,79 +598,6 @@ export default function PeoplePage() {
                   : locale === "zh"
                     ? "生成临时密码"
                     : "Generate temporary password"}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-      {adminTarget ? (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target && !assigningAdmin)
-              setAdminTarget(null);
-          }}
-          role="presentation"
-        >
-          <form
-            aria-labelledby="assign-admin-dialog-title"
-            aria-modal="true"
-            className="modal-card stack"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void assignAdminRole();
-            }}
-            role="dialog"
-          >
-            <div className="modal-heading row-between">
-              <div>
-                <div className="eyebrow">
-                  {locale === "zh" ? "角色授权" : "Role assignment"}
-                </div>
-                <h2 id="assign-admin-dialog-title">
-                  {locale === "zh" ? "设为管理员" : "Make admin"}
-                </h2>
-                <p className="muted">
-                  {adminTarget.name} · {adminTarget.email}
-                </p>
-              </div>
-              <button
-                aria-label={locale === "zh" ? "关闭" : "Close"}
-                className="icon-button"
-                disabled={assigningAdmin}
-                onClick={() => setAdminTarget(null)}
-                type="button"
-              >
-                <AppIcon name="close" />
-              </button>
-            </div>
-            <div className="feedback feedback-warning">
-              <span>
-                <strong>
-                  {locale === "zh"
-                    ? "管理员拥有完整的平台管理权限。"
-                    : "Admins have full platform management access."}
-                </strong>
-                <span>
-                  {locale === "zh"
-                    ? "确认后，该账号的现有会话会失效，并在下次登录时获得管理员权限。操作会写入审计日志。"
-                    : "After confirmation, existing sessions are revoked and admin access applies at the next sign-in. The action is audit logged."}
-                </span>
-              </span>
-            </div>
-            <div className="modal-actions">
-              <button
-                className="button button-secondary"
-                disabled={assigningAdmin}
-                onClick={() => setAdminTarget(null)}
-                type="button"
-              >
-                {locale === "zh" ? "取消" : "Cancel"}
-              </button>
-              <button className="button" disabled={assigningAdmin} type="submit">
-                {assigningAdmin
-                  ? locale === "zh" ? "授权中…" : "Assigning…"
-                  : locale === "zh" ? "确认设为管理员" : "Confirm admin access"}
               </button>
             </div>
           </form>
