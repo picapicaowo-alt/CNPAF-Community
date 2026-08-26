@@ -73,6 +73,8 @@ paths:
   /admin/users/{userId}/access:
     get: { tags: [Access], operationId: getUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     put: { tags: [Access], operationId: replaceUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /admin/users/{userId}/ai-access:
+    patch: { tags: [Access], operationId: updateUserAiAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /admin/users/{userId}/roles:
     get: { tags: [Access], operationId: getUserRoles, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     put: { tags: [Access], operationId: replaceUserRoles, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }

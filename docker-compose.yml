@@ -34,6 +34,8 @@ services:
       SEED_DEMO_USERS_JSON: ${SEED_DEMO_USERS_JSON:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_MODEL: ${AI_MODEL:-gpt-5.4-mini}
       STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
       UPLOAD_DIR: /app/uploads
       S3_BUCKET: ${S3_BUCKET:-}

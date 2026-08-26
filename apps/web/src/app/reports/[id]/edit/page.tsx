@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
+import { AiCopilotPanel } from "@/components/AiCopilotPanel";
 import { useI18n } from "@/components/LocaleProvider";
 import {
   ErrorState,
@@ -88,6 +89,7 @@ export default function ReportEditorPage() {
     data?.headVersion?.status === "draft" &&
       permissions.includes("reports.edit"),
   );
+  const canAsk = permissions.some((permission) => ["chat.ask_collect", "ask_collect.use"].includes(permission));
   async function save() {
     if (!selected || !draftTitle.trim() || !editable) return;
     setBusy(true);
@@ -465,7 +467,7 @@ export default function ReportEditorPage() {
                       ) : null}
                     </div>
                   </div>
-                ) : editable && data.sourceDataset ? (
+                ) : editable && data.sourceDataset && canAsk ? (
                   <button
                     className="button button-secondary button-wide"
                     disabled={busy}
@@ -488,6 +490,22 @@ export default function ReportEditorPage() {
             )}
           </main>
         </div>
+      ) : null}
+      {data?.sourceDataset && canAsk ? (
+        <AiCopilotPanel
+          conversationTitle={`${data.report.title}${selected ? ` · ${selected.title}` : ""}`}
+          datasetVersionId={data.sourceDataset.version.id}
+          description={locale === "zh" ? "ChatGPT 只读取报告绑定的冻结 Dataset。你可以讨论结构、核实表述，并把回答直接用于当前章节。" : "ChatGPT reads only the report's frozen Dataset. Discuss structure, verify wording, and use an answer in the current section."}
+          key={`${data.sourceDataset.version.id}:${selected?.id ?? "report"}`}
+          locale={locale}
+          onUseAnswer={editable && selected ? (answer) => setDraftContent((current) => current.trim() ? `${current.trim()}\n\n${answer}` : answer) : undefined}
+          starterPrompts={[
+            locale === "zh" ? `为“${selected?.title ?? data.report.title}”提出一个有证据支持的章节结构。` : `Propose an evidence-backed structure for “${selected?.title ?? data.report.title}”.`,
+            locale === "zh" ? "检查当前论述中可能过度推断的地方。" : "Check the current argument for possible overclaiming.",
+            locale === "zh" ? "从 Dataset 中找出最能支持本节的证据。" : "Find the strongest Dataset evidence for this section.",
+          ]}
+          title={locale === "zh" ? "与 ChatGPT 共创报告" : "Co-create the report with ChatGPT"}
+        />
       ) : null}
     </div>
   );

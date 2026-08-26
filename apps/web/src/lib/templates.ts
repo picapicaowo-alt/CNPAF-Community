@@ -144,6 +144,87 @@ export async function listTemplates() {
     .orderBy(desc(templates.updatedAt));
 }
 
+export async function listTemplateBundles() {
+  const templateRows = await listTemplates();
+  const templateIds = templateRows.map((template) => template.id);
+  if (!templateIds.length) return [];
+
+  const versionRows = await db
+    .select()
+    .from(templateVersions)
+    .where(inArray(templateVersions.templateId, templateIds))
+    .orderBy(desc(templateVersions.version));
+  const versionIds = versionRows.map((version) => version.id);
+  if (!versionIds.length)
+    return templateRows.map((template) => ({ template, versions: [] }));
+
+  const [usageRows, sectionRows, fieldRows] = await Promise.all([
+    db
+      .select({ templateVersionId: tasks.templateVersionId, value: count() })
+      .from(tasks)
+      .where(inArray(tasks.templateVersionId, versionIds))
+      .groupBy(tasks.templateVersionId),
+    db
+      .select({
+        templateVersionId: templateSections.templateVersionId,
+        value: count(),
+      })
+      .from(templateSections)
+      .where(inArray(templateSections.templateVersionId, versionIds))
+      .groupBy(templateSections.templateVersionId),
+    db
+      .select({
+        templateVersionId: templateSections.templateVersionId,
+        value: count(),
+      })
+      .from(templateFields)
+      .innerJoin(
+        templateSections,
+        eq(templateFields.templateSectionId, templateSections.id),
+      )
+      .where(inArray(templateSections.templateVersionId, versionIds))
+      .groupBy(templateSections.templateVersionId),
+  ]);
+
+  const toCountMap = (
+    rows: Array<{ templateVersionId: string | null; value: number }>,
+  ) =>
+    new Map(
+      rows.flatMap((row) =>
+        row.templateVersionId
+          ? [[row.templateVersionId, Number(row.value)] as const]
+          : [],
+      ),
+    );
+  const usageByVersion = toCountMap(usageRows);
+  const sectionsByVersion = toCountMap(sectionRows);
+  const fieldsByVersion = toCountMap(fieldRows);
+  const versionsByTemplate = new Map<
+    string,
+    Array<(typeof versionRows)[number] & {
+      usageCount: number;
+      sectionCount: number;
+      fieldCount: number;
+    }>
+  >();
+
+  for (const version of versionRows) {
+    const versions = versionsByTemplate.get(version.templateId) ?? [];
+    versions.push({
+      ...version,
+      usageCount: usageByVersion.get(version.id) ?? 0,
+      sectionCount: sectionsByVersion.get(version.id) ?? 0,
+      fieldCount: fieldsByVersion.get(version.id) ?? 0,
+    });
+    versionsByTemplate.set(version.templateId, versions);
+  }
+
+  return templateRows.map((template) => ({
+    template,
+    versions: versionsByTemplate.get(template.id) ?? [],
+  }));
+}
+
 export async function getTemplateBundle(templateId: string) {
   const template = (await db.select().from(templates).where(eq(templates.id, templateId)).limit(1))[0];
   if (!template) return null;

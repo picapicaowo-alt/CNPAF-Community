@@ -28,6 +28,7 @@ import {
   PencilSimple,
   Plus,
   SignOut,
+  ShareNetwork,
   SlidersHorizontal,
   Sparkle,
   Trash,
@@ -72,7 +73,8 @@ export type AppIconName =
   | "unpublish"
   | "trash"
   | "clock"
-  | "info";
+  | "info"
+  | "share";
 
 const icons: Record<AppIconName, Icon> = {
   home: House,
@@ -110,6 +112,7 @@ const icons: Record<AppIconName, Icon> = {
   trash: Trash,
   clock: Clock,
   info: Info,
+  share: ShareNetwork,
 };
 
 export function AppIcon({

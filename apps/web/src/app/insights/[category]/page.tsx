@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AiCopilotPanel } from "@/components/AiCopilotPanel";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import {
@@ -15,6 +17,11 @@ import {
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { sourceKindLabel } from "@/lib/display-labels";
 
+const InsightCharts = dynamic(() => import("@/features/insights/InsightCharts"), {
+  ssr: false,
+  loading: () => <div className="card insight-viz-loading" aria-hidden="true" />,
+});
+
 type Category = "changes" | "attention" | "gaps" | "coverage";
 type InsightRecord = {
   id: string;
@@ -26,18 +33,7 @@ type InsightRecord = {
   occurredAt?: string | null;
   updatedAt: string;
 };
-type AskMessage = { id: string; role: "user" | "assistant"; content: string };
-type AskSource = {
-  id: string;
-  messageId: string;
-  citationLabel?: string | null;
-  excerpt?: string | null;
-};
-type AskBundle = {
-  conversation: { id: string; title?: string | null };
-  messages: AskMessage[];
-  sources: AskSource[];
-};
+type InsightLocation = { id: string; name: string };
 
 const categoryCopy: Record<
   Category,
@@ -113,13 +109,10 @@ export default function InsightCategoryPage() {
     return isoDay(start);
   });
   const [records, setRecords] = useState<InsightRecord[]>([]);
+  const [locations, setLocations] = useState<InsightLocation[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedSource, setSelectedSource] = useState("");
-  const [conversationId, setConversationId] = useState("");
-  const [conversation, setConversation] = useState<AskBundle | null>(null);
-  const [question, setQuestion] = useState("");
-  const [sending, setSending] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -128,14 +121,16 @@ export default function InsightCategoryPage() {
     setLoading(true);
     setError("");
     try {
-      const [me, result] = await Promise.all([
+      const [me, result, locationResult] = await Promise.all([
         apiFetch<{ permissions: string[] }>("/api/v1/auth/me"),
         apiFetch<{ records: InsightRecord[] }>(
           `/api/v1/records?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
         ),
+        apiFetch<{ locations: InsightLocation[] }>("/api/v1/locations"),
       ]);
       setPermissions(me.permissions ?? []);
       setRecords(result.records ?? []);
+      setLocations(locationResult.locations ?? []);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -194,7 +189,6 @@ export default function InsightCategoryPage() {
   const locationCount = new Set(
     filteredRecords.flatMap((record) => (record.siteId ? [record.siteId] : [])),
   ).size;
-  const maxSourceTotal = Math.max(1, ...bySource.map((row) => row.total));
   const activeSource = selectedSource || bySource[0]?.sourceKind || "";
   const activeRecords = filteredRecords.filter(
     (record) => !activeSource || record.sourceKind === activeSource,
@@ -203,16 +197,6 @@ export default function InsightCategoryPage() {
   const canAsk = permissions.some((permission) =>
     ["chat.ask_collect", "ask_collect.use"].includes(permission),
   );
-  const sourcesByMessage = useMemo(() => {
-    const result = new Map<string, AskSource[]>();
-    for (const source of conversation?.sources ?? []) {
-      result.set(source.messageId, [
-        ...(result.get(source.messageId) ?? []),
-        source,
-      ]);
-    }
-    return result;
-  }, [conversation]);
 
   const metrics = (() => {
     if (category === "attention")
@@ -270,41 +254,27 @@ export default function InsightCategoryPage() {
       : `${filteredRecords.length} real records are in scope; ${totalSubmitted} are submitted and ${totalApproved} are approved.`;
   })();
 
-  async function sendQuestion(nextQuestion = question) {
-    const content = nextQuestion.trim();
-    if (!content || sending) return;
-    setSending(true);
-    setError("");
-    try {
-      let id = conversationId;
-      if (!id) {
-        const created = await apiFetch<{ conversation: { id: string } }>(
-          "/api/v1/ask-collect/conversations",
-          {
-            method: "POST",
-            body: JSON.stringify({
-              title: locale === "zh" ? copy.titleZh : copy.titleEn,
-              scope: activeSource ? { serviceTypeKeys: [activeSource] } : {},
-            }),
-          },
-        );
-        id = created.conversation.id;
-        setConversationId(id);
-      }
-      await apiFetch(`/api/v1/ask-collect/conversations/${id}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      });
-      setConversation(
-        await apiFetch<AskBundle>(`/api/v1/ask-collect/conversations/${id}`),
-      );
-      setQuestion("");
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setSending(false);
-    }
-  }
+  const aiScope = useMemo(() => ({
+    dateFrom,
+    dateTo,
+    ...(selectedSource
+      ? { serviceTypeKeys: [selectedSource] }
+      : selectedSources.length
+        ? { serviceTypeKeys: selectedSources }
+        : {}),
+  }), [dateFrom, dateTo, selectedSource, selectedSources]);
+  const aiInitialPrompt = useMemo(() => {
+    const sourceDigest = bySource.map((row) => `${sourceKindLabel(row.sourceKind, locale)}: total=${row.total}, submitted=${row.submitted}, approved=${row.approved}, concerns=${row.concerns}`).join("; ");
+    const categoryInstruction: Record<Category, string> = {
+      changes: locale === "zh" ? "重点解读时间趋势和来源增减。" : "Focus on time trends and source-level changes.",
+      attention: locale === "zh" ? "重点定位关注点集中来源和待处理状态。" : "Focus on concern concentration and action-needed states.",
+      gaps: locale === "zh" ? "重点指出未批准、需补充和草稿造成的证据缺口。" : "Focus on evidence gaps caused by unapproved, needs-update, and draft work.",
+      coverage: locale === "zh" ? "重点提出下一步地点和来源采集优先级。" : "Focus on the next location and source collection priorities.",
+    };
+    return locale === "zh"
+      ? `请作为图表分析助手，根据以下当前图表指标生成一份简短的初步解读，并与我有权限访问的已批准证据交叉核实。${categoryInstruction[category]}分三部分回答：关键发现、证据边界、建议下一步。不要把相关性说成因果；引用支持结论的证据。图表范围 ${dateFrom} 至 ${dateTo}；记录 ${filteredRecords.length}，提交 ${totalSubmitted}，批准 ${totalApproved}，关注点 ${totalConcerns}。按来源：${sourceDigest || "无"}`
+      : `Act as a chart analyst. Write a concise initial interpretation of these current chart metrics and cross-check it against approved evidence I am authorized to access. ${categoryInstruction[category]} Use three parts: key finding, evidence limit, and next step. Do not imply causation from correlation; cite supporting evidence. Chart scope ${dateFrom} to ${dateTo}; records ${filteredRecords.length}, submitted ${totalSubmitted}, approved ${totalApproved}, concerns ${totalConcerns}. By source: ${sourceDigest || "none"}`;
+  }, [bySource, category, dateFrom, dateTo, filteredRecords.length, locale, totalApproved, totalConcerns, totalSubmitted]);
 
   if (loading)
     return (
@@ -353,8 +323,7 @@ export default function InsightCategoryPage() {
                         : effective.filter((item) => item !== source);
                       return next.length === availableSources.length ? [] : next;
                     });
-                    setConversationId("");
-                    setConversation(null);
+                    setSelectedSource("");
                   }}
                   type="checkbox"
                 />
@@ -374,48 +343,38 @@ export default function InsightCategoryPage() {
       {filteredRecords.length ? (
         <>
           <section className="card insight-real-summary">
-            <h2>{locale === "zh" ? "范围结论" : "Scope finding"}</h2>
+            <h2>{locale === "zh" ? "快速读数" : "Quick read"}</h2>
             <p>{summary}</p>
           </section>
-          <section className="card insight-real-pipeline">
-            <div>
-              <h2>{locale === "zh" ? "按来源查看证据链" : "Evidence chain by source"}</h2>
-              <p>{locale === "zh" ? "每行均使用当前授权范围内的真实记录。" : "Every row uses real records in the current authorized scope."}</p>
-            </div>
-            <div className="insight-real-pipeline-list">
-              {bySource.map((row) => (
-                <button
-                  className={activeSource === row.sourceKind ? "active" : ""}
-                  key={row.sourceKind}
-                  onClick={() => {
-                    setSelectedSource(row.sourceKind);
-                    setShowAll(false);
-                    setConversationId("");
-                    setConversation(null);
-                  }}
-                  type="button"
-                >
-                  <span className="insight-real-pipeline-copy">
-                    <strong>{sourceKindLabel(row.sourceKind, locale)}</strong>
-                    <small>{row.total} {locale === "zh" ? "条记录" : "records"}</small>
-                  </span>
-                  <span className="insight-real-bars" aria-label={`${row.total} total, ${row.submitted} submitted, ${row.approved} approved`}>
-                    <i style={{ width: `${(row.total / maxSourceTotal) * 100}%` }} />
-                    <i style={{ width: `${(row.submitted / maxSourceTotal) * 100}%` }} />
-                    <i style={{ width: `${(row.approved / maxSourceTotal) * 100}%` }} />
-                  </span>
-                  <span className="insight-real-pipeline-values">
-                    <b>{row.total}</b><b>{row.submitted}</b><b>{row.approved}</b>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="insight-real-legend">
-              <span>{locale === "zh" ? "全部" : "All"}</span>
-              <span>{locale === "zh" ? "已提交" : "Submitted"}</span>
-              <span>{locale === "zh" ? "已批准" : "Approved"}</span>
-            </div>
-          </section>
+          <InsightCharts
+            category={category}
+            locale={locale}
+            locations={locations}
+            onSelectSource={(source) => {
+              setSelectedSource((current) => current === source ? "" : source);
+              setShowAll(false);
+            }}
+            records={filteredRecords}
+            selectedSource={selectedSource}
+          />
+
+          {canAsk ? (
+            <AiCopilotPanel
+              conversationTitle={locale === "zh" ? copy.titleZh : copy.titleEn}
+              contextSources={[{ label: "CHART-METRICS", statement: aiInitialPrompt }]}
+              description={locale === "zh" ? "ChatGPT 会先根据当前授权图表生成解读，并用你有权限访问的已批准证据交叉核实；你可以继续追问、比较或共同完善结论。" : "ChatGPT starts from the current authorized charts and cross-checks them against approved evidence you can access. Continue by asking, comparing, or refining the finding together."}
+              initialPrompt={aiInitialPrompt}
+              key={JSON.stringify(aiScope)}
+              locale={locale}
+              scope={aiScope}
+              starterPrompts={[
+                locale === "zh" ? "图表里最值得关注的异常是什么？" : "What is the most important anomaly in the chart?",
+                locale === "zh" ? "哪些结论仍缺少足够证据？" : "Which conclusions still lack enough evidence?",
+                locale === "zh" ? "把下一步行动整理成三个优先级。" : "Turn the next actions into three priorities.",
+              ]}
+              title={locale === "zh" ? "ChatGPT 初步解读与共创" : "ChatGPT initial read and co-creation"}
+            />
+          ) : null}
 
           <section className="card insight-records-panel">
             <div className="insight-records-heading">
@@ -450,66 +409,6 @@ export default function InsightCategoryPage() {
             ) : null}
           </section>
 
-          {canAsk ? (
-            <section className="card insight-ai-panel">
-              <div className="insight-ai-heading">
-                <span className="dataset-ai-avatar"><AppIcon name="sparkles" /></span>
-                <div>
-                  <h2>{locale === "zh" ? "使用已批准证据继续分析" : "Continue with approved evidence"}</h2>
-                  <p>{locale === "zh" ? "AI 回答只使用你有权限访问的已批准证据。" : "AI answers use only approved evidence you are authorized to access."}</p>
-                </div>
-              </div>
-              <div className="insight-ai-body">
-                {conversation?.messages.length ? (
-                  <div className="insight-ai-messages" aria-live="polite">
-                    {conversation.messages.map((message) => (
-                      <article className={`dataset-chat-message ${message.role}`} key={message.id}>
-                        {message.content}
-                        {sourcesByMessage.get(message.id)?.length ? (
-                          <details className="dataset-chat-sources">
-                            <summary>{locale === "zh" ? "查看证据来源" : "View evidence sources"}</summary>
-                            {sourcesByMessage.get(message.id)?.map((source) => (
-                              <div className="evidence" key={source.id}><strong>{source.citationLabel ?? (locale === "zh" ? "来源" : "Source")}</strong><p>{source.excerpt}</p></div>
-                            ))}
-                          </details>
-                        ) : null}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="insight-ai-prompts">
-                    {[
-                      locale === "zh" ? `总结${sourceKindLabel(activeSource, locale)}的已批准证据` : `Summarize approved ${sourceKindLabel(activeSource, locale)} evidence`,
-                      locale === "zh" ? "哪些结论仍需要更多证据？" : "Which conclusions still need more evidence?",
-                      locale === "zh" ? "建议下一步优先核实什么？" : "What should we verify next?",
-                    ].map((prompt) => (
-                      <button disabled={sending} key={prompt} onClick={() => void sendQuestion(prompt)} type="button"><span>{prompt}</span><AppIcon name="arrow" /></button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="insight-ai-compose">
-                <textarea
-                  aria-label={locale === "zh" ? "询问 AI 分析员" : "Ask the AI analyst"}
-                  disabled={sending}
-                  onChange={(event) => setQuestion(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void sendQuestion();
-                    }
-                  }}
-                  placeholder={locale === "zh" ? "围绕当前证据继续提问…" : "Ask a follow-up about this evidence…"}
-                  rows={2}
-                  value={question}
-                />
-                <button className="button" disabled={sending || !question.trim()} onClick={() => void sendQuestion()} type="button">
-                  <AppIcon name="sparkles" />
-                  {sending ? (locale === "zh" ? "分析中…" : "Analyzing…") : (locale === "zh" ? "分析" : "Analyze")}
-                </button>
-              </div>
-            </section>
-          ) : null}
         </>
       ) : (
         <EmptyState

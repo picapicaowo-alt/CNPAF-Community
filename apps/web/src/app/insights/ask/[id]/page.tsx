@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
+import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
@@ -73,7 +74,7 @@ export default function AskConversationPage() {
     <div className="chat-shell">
       <header className="row-between mobile-stack">
         <div>
-          <div className="eyebrow">Ask Collect</div>
+          <div className="eyebrow">ChatGPT · {locale === "zh" ? "已批准证据" : "Approved evidence"}</div>
           <h1>
             {data?.conversation.title ||
               (locale === "zh" ? "证据问答" : "Evidence question")}
@@ -99,7 +100,7 @@ export default function AskConversationPage() {
               className={`chat-message ${message.role}`}
               key={message.id}
             >
-              <div>{message.content}</div>
+              <MarkdownMessage>{message.content}</MarkdownMessage>
               {sourcesByMessage.get(message.id)?.length ? (
                 <div className="stack-sm" style={{ marginTop: 12 }}>
                   {sourcesByMessage.get(message.id)!.map((source) => (

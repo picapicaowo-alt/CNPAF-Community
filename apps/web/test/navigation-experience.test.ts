@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
   apiFetch,
+  invalidateApiReadCache,
   invalidateAuthSessionCache,
 } from "../src/lib/api-client";
 
@@ -48,14 +49,50 @@ test("authentication reads are coalesced and briefly reused", async () => {
   }
 });
 
-test("route navigation provides loading and reduced-motion-safe handoffs", () => {
-  const template = readFileSync(path.join(appRoot, "template.tsx"), "utf8");
+test("API reads are coalesced and mutations invalidate their short cache", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ call: calls }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    });
+  }) as typeof fetch;
+  invalidateApiReadCache();
+
+  try {
+    await Promise.all([
+      apiFetch("/api/v1/templates?view=cards"),
+      apiFetch("/api/v1/templates?view=cards"),
+    ]);
+    await apiFetch("/api/v1/templates?view=cards");
+    assert.equal(calls, 1);
+
+    await apiFetch("/api/v1/templates/example", { method: "DELETE" });
+    await apiFetch("/api/v1/templates?view=cards");
+    assert.equal(calls, 3);
+  } finally {
+    invalidateApiReadCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("route navigation avoids overlapping page snapshots", () => {
   const loading = readFileSync(path.join(appRoot, "loading.tsx"), "utf8");
   const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
 
-  assert.match(template, /ViewTransition/);
-  assert.match(template, /enter="route-enter"/);
+  assert.equal(existsSync(path.join(appRoot, "template.tsx")), false);
   assert.match(loading, /aria-busy="true"/);
-  assert.match(styles, /::view-transition-new\(\.route-enter\)/);
+  assert.doesNotMatch(styles, /::view-transition-(?:old|new)\(\.route-/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
+});
+
+test("the four insight cards share one equal two-column grid", () => {
+  const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
+  const insightStyles = styles.slice(styles.indexOf(".insight-register {"));
+
+  assert.match(insightStyles, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(insightStyles, /grid-auto-rows: 1fr/);
+  assert.doesNotMatch(insightStyles, /grid-column: span [23456]/);
 });

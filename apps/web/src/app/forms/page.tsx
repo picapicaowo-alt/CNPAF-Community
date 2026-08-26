@@ -68,16 +68,10 @@ export default function FormsPage() {
     try {
       const [me, list] = await Promise.all([
         apiFetch<{ permissions: string[] }>("/api/v1/auth/me"),
-        apiFetch<{ templates: Template[] }>("/api/v1/templates"),
+        apiFetch<{ templates: FormCard[] }>("/api/v1/templates?view=cards"),
       ]);
       setPermissions(me.permissions ?? []);
-      setForms(
-        await Promise.all(
-          (list.templates ?? []).map((template) =>
-            apiFetch<FormCard>(`/api/v1/templates/${template.id}`),
-          ),
-        ),
-      );
+      setForms(list.templates ?? []);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {

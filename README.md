@@ -63,10 +63,18 @@ student volunteer catalog below. Every local account uses `SEED_PASSWORD`.
 For a custom local catalog, `SEED_DEMO_USERS_JSON` accepts an organization name,
 a unique 12+ character password, and explicit `{ email, name, roleKey }` rows.
 
-AI provider and model selection come from the published workflow version. The
-seeded development workflows use the deterministic local provider. To use
-OpenAI, set `OPENAI_API_KEY` and publish a workflow version that explicitly
-selects an active OpenAI provider/model configuration.
+AI provider and model selection come from the published workflow version. With
+no API key, seeded development workflows use the deterministic local provider.
+When `OPENAI_API_KEY` is present, seeding publishes all four AI workflows against
+the OpenAI Responses API using `AI_MODEL` (default `gpt-5.4-mini`). Set
+`AI_PROVIDER=local_heuristic` to explicitly keep local analysis.
+
+For the Docker deployment profile, keep the production key in ignored
+`.env.prod-ai` and layer it over the normal deployment environment:
+
+```bash
+docker compose --env-file .env --env-file .env.prod-ai --profile app up -d --build
+```
 
 With the development server running, execute the mutating local operational
 acceptance test with:

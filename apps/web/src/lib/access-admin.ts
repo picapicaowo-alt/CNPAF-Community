@@ -1,10 +1,11 @@
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 import {
   auditEvents,
   permissionScopeAssignments,
   permissions,
   programs,
   programMemberships,
+  rolePermissions,
   roles,
   sessions,
   sites,
@@ -19,6 +20,93 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { evaluateAuthorization, getAccessContext, serializeAccessContext } from "./authorization";
 import { ApiError } from "./api-error";
+
+const AI_ACCESS_PERMISSION_KEYS = ["chat.ask_collect", "ask_collect.use"] as const;
+
+export async function getAiAccessStates(userIds: string[]) {
+  const result = new Map<string, boolean>(userIds.map((userId) => [userId, false]));
+  if (!userIds.length) return result;
+  const now = new Date();
+  const [assignmentRows, grantRows, overrideRows] = await Promise.all([
+    db.select({ userId: userRoleAssignments.userId, roleId: userRoleAssignments.roleId })
+      .from(userRoleAssignments)
+      .innerJoin(roles, eq(userRoleAssignments.roleId, roles.id))
+      .where(and(
+        inArray(userRoleAssignments.userId, userIds),
+        eq(userRoleAssignments.status, "active"),
+        eq(roles.status, "active"),
+        or(isNull(userRoleAssignments.startsAt), lte(userRoleAssignments.startsAt, now)),
+        or(isNull(userRoleAssignments.endsAt), gt(userRoleAssignments.endsAt, now)),
+      )),
+    db.select({ roleId: rolePermissions.roleId, permissionKey: permissions.key, effect: rolePermissions.effect })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .where(inArray(permissions.key, [...AI_ACCESS_PERMISSION_KEYS])),
+    db.select({ userId: userPermissionOverrides.userId, permissionKey: permissions.key, effect: userPermissionOverrides.effect })
+      .from(userPermissionOverrides)
+      .innerJoin(permissions, eq(userPermissionOverrides.permissionId, permissions.id))
+      .where(and(
+        inArray(userPermissionOverrides.userId, userIds),
+        inArray(permissions.key, [...AI_ACCESS_PERMISSION_KEYS]),
+        or(isNull(userPermissionOverrides.expiresAt), gt(userPermissionOverrides.expiresAt, now)),
+      )),
+  ]);
+  const rolesByUser = new Map<string, string[]>();
+  for (const row of assignmentRows) rolesByUser.set(row.userId, [...(rolesByUser.get(row.userId) ?? []), row.roleId]);
+  for (const userId of userIds) {
+    const assignedRoles = new Set(rolesByUser.get(userId) ?? []);
+    const roleEffects = grantRows.filter((row) => assignedRoles.has(row.roleId));
+    const overrides = overrideRows.filter((row) => row.userId === userId);
+    const enabled = AI_ACCESS_PERMISSION_KEYS.some((permissionKey) => {
+      const matchingOverrides = overrides.filter((row) => row.permissionKey === permissionKey);
+      if (matchingOverrides.some((row) => row.effect === "deny")) return false;
+      if (matchingOverrides.some((row) => row.effect === "allow")) return true;
+      const matchingRoles = roleEffects.filter((row) => row.permissionKey === permissionKey);
+      if (matchingRoles.some((row) => row.effect === "deny")) return false;
+      return matchingRoles.some((row) => row.effect === "allow");
+    });
+    result.set(userId, enabled);
+  }
+  return result;
+}
+
+export async function setUserAiAccess(input: { actorId: string; targetUserId: string; enabled: boolean; reason: string }) {
+  const before = await getUserAccess(input.targetUserId);
+  if (!before) throw new ApiError("NOT_FOUND", "User not found", 404);
+  await assertActorCan(input.actorId, "permissions.assign", { organizationId: before.user.organizationId });
+  const permissionRows = await db.select().from(permissions).where(and(
+    inArray(permissions.key, [...AI_ACCESS_PERMISSION_KEYS]),
+    eq(permissions.status, "active"),
+  ));
+  if (permissionRows.length !== AI_ACCESS_PERMISSION_KEYS.length) throw new ApiError("INTERNAL_ERROR", "AI access permissions are not configured", 500);
+  const permissionIds = permissionRows.map((permission) => permission.id);
+  const beforeEnabled = AI_ACCESS_PERMISSION_KEYS.some((key) => before.permissions.includes(key));
+  await db.transaction(async (tx) => {
+    await tx.delete(userPermissionOverrides).where(and(
+      eq(userPermissionOverrides.userId, input.targetUserId),
+      inArray(userPermissionOverrides.permissionId, permissionIds),
+    ));
+    await tx.insert(userPermissionOverrides).values(permissionRows.map((permission) => ({
+      userId: input.targetUserId,
+      permissionId: permission.id,
+      effect: input.enabled ? "allow" : "deny",
+      assignedById: input.actorId,
+      reason: input.reason,
+    })));
+    await tx.delete(sessions).where(eq(sessions.userId, input.targetUserId));
+    await audit({
+      actorId: input.actorId,
+      action: "ai_access.updated",
+      entityType: "user_access",
+      entityId: input.targetUserId,
+      targetUserId: input.targetUserId,
+      beforeState: { enabled: beforeEnabled },
+      afterState: { enabled: input.enabled, permissionKeys: AI_ACCESS_PERMISSION_KEYS },
+      reason: input.reason,
+    }, (values) => tx.insert(auditEvents).values(values));
+  });
+  return { userId: input.targetUserId, aiEnabled: input.enabled };
+}
 
 async function assertActorCan(actorId: string, permission: PermissionKey, resource: Parameters<typeof evaluateAuthorization>[2]) {
   const access = await getAccessContext(actorId);

@@ -6,6 +6,7 @@ next-env.d.ts
 dist
 .env
 .env.local
+.env.prod-ai
 *.log
 .DS_Store
 uploads

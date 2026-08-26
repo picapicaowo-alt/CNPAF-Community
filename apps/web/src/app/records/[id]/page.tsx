@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
+import { AiCopilotPanel } from "@/components/AiCopilotPanel";
 import { useI18n } from "@/components/LocaleProvider";
 import {
   ErrorState,
@@ -119,6 +120,7 @@ export default function RecordDetail() {
       record.privacyStatus !== "flagged" &&
       identity?.permissions.includes("ai.request_reclassification"),
   );
+  const canAsk = Boolean(identity?.permissions.some((permission) => ["chat.ask_collect", "ask_collect.use"].includes(permission)));
   const analysisPending = ["queued", "running"].includes(record.aiStatus);
   const analysisReady =
     record.aiStatus === "succeeded" || run?.status === "succeeded";
@@ -355,6 +357,20 @@ export default function RecordDetail() {
           ) : null}
         </aside>
       </div>
+      {canAsk ? (
+        <AiCopilotPanel
+          conversationTitle={`${locale === "zh" ? "记录" : "Record"} ${record.id.slice(0, 8).toUpperCase()}`}
+          description={locale === "zh" ? "围绕这条记录的已批准证据进行总结、质疑和共同梳理；未批准内容不会进入回答。" : "Summarize, challenge, and co-develop findings from this record's approved evidence. Unapproved content is excluded."}
+          locale={locale}
+          scope={{ recordIds: [record.id] }}
+          starterPrompts={[
+            locale === "zh" ? "用三句话总结这条记录的已批准证据。" : "Summarize this record's approved evidence in three sentences.",
+            locale === "zh" ? "哪些陈述是事实，哪些只是推断？" : "Which statements are facts and which are inferences?",
+            locale === "zh" ? "还需要补充或核实什么？" : "What still needs to be added or verified?",
+          ]}
+          title={locale === "zh" ? "与 ChatGPT 共创这条记录" : "Co-create this record with ChatGPT"}
+        />
+      ) : null}
     </div>
   );
 }

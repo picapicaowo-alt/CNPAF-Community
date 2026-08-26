@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
+import { OPEN_INSTALL_EVENT } from "@/components/PwaBits";
 import { PageHeader } from "@/components/ui";
 import { apiFetch } from "@/lib/api-client";
 
@@ -115,10 +116,21 @@ export default function MorePage() {
   const router = useRouter();
   const [permissions, setPermissions] = useState<string[]>([]);
   const [signingOut, setSigningOut] = useState(false);
+  const [installed, setInstalled] = useState(false);
   useEffect(() => {
     apiFetch<{ permissions: string[] }>("/api/v1/auth/me")
       .then((result) => setPermissions(result.permissions ?? []))
       .catch(() => undefined);
+    const displayMode = window.matchMedia("(display-mode: standalone)");
+    const iosNavigator = navigator as Navigator & { standalone?: boolean };
+    const updateInstalled = () => setInstalled(displayMode.matches || iosNavigator.standalone === true);
+    updateInstalled();
+    displayMode.addEventListener?.("change", updateInstalled);
+    window.addEventListener("appinstalled", updateInstalled);
+    return () => {
+      displayMode.removeEventListener?.("change", updateInstalled);
+      window.removeEventListener("appinstalled", updateInstalled);
+    };
   }, []);
   const allowed = useMemo(
     () =>
@@ -203,6 +215,20 @@ export default function MorePage() {
                 ))}
               {group.key === "account" ? (
                 <>
+                  {!installed ? (
+                    <button
+                      className="more-install-row"
+                      onClick={() => window.dispatchEvent(new Event(OPEN_INSTALL_EVENT))}
+                      type="button"
+                    >
+                      <span className="more-link-icon"><AppIcon name="download" /></span>
+                      <span className="more-link-copy">
+                        <strong>{locale === "zh" ? "安装 CNPAF Community" : "Install CNPAF Community"}</strong>
+                        <small>{locale === "zh" ? "按当前设备与浏览器显示正确安装方式" : "Show the right install path for this device and browser"}</small>
+                      </span>
+                      <AppIcon className="more-link-arrow" name="arrow" />
+                    </button>
+                  ) : null}
                   <div className="more-language-row">
                     <span className="more-link-icon"><AppIcon name="settings" /></span>
                     <span className="more-link-copy">

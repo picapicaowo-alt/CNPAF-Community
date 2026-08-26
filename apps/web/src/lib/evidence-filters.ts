@@ -4,6 +4,7 @@ import type { reportFiltersSchema } from "@cnpaf/shared";
 export type EvidenceFilters = z.infer<typeof reportFiltersSchema>;
 
 type FilterableRecord = {
+  id: string;
   organizationId: string | null;
   programId: string | null;
   siteId: string | null;
@@ -49,6 +50,7 @@ export function matchesEvidenceFilters(
   version: FilterableVersion,
   finding?: FilterableFinding | null,
 ) {
+  if (filters.recordIds?.length && !filters.recordIds.includes(record.id)) return false;
   if (filters.organizationIds?.length && (!record.organizationId || !filters.organizationIds.includes(record.organizationId))) return false;
   if (filters.programIds?.length && (!record.programId || !filters.programIds.includes(record.programId))) return false;
   const locationIds = new Set([...(filters.siteIds ?? []), ...(filters.locationIds ?? [])]);

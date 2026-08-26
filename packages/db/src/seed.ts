@@ -5,6 +5,7 @@ import { config } from "dotenv";
 import { and, eq } from "drizzle-orm";
 import {
   ACTIVITY_DEFINITIONS,
+  AI_OUTPUT_JSON_SCHEMA,
   CANONICAL_THEMES,
   DEFAULT_PROMPT_VERSION,
   LOOKUPS,
@@ -116,13 +117,13 @@ async function seed() {
   const activePrompt = (await db.select().from(promptVersions).where(eq(promptVersions.status, "active")).limit(1))[0]
     ?? (await db.select().from(promptVersions).where(eq(promptVersions.version, DEFAULT_PROMPT_VERSION.version)).limit(1))[0];
 
-  let outputSchema = (await db.select().from(outputSchemaVersions).where(and(eq(outputSchemaVersions.key, "record_classification"), eq(outputSchemaVersions.version, 1))).limit(1))[0];
+  let outputSchema = (await db.select().from(outputSchemaVersions).where(and(eq(outputSchemaVersions.key, "record_classification"), eq(outputSchemaVersions.version, 2))).limit(1))[0];
   if (!outputSchema) {
     [outputSchema] = await db.insert(outputSchemaVersions).values({
       key: "record_classification",
-      version: 1,
+      version: 2,
       status: "published",
-      schema: { type: "object", contract: "@cnpaf/shared#aiOutputSchema", version: DEFAULT_PROMPT_VERSION.outputSchemaVersion },
+      schema: AI_OUTPUT_JSON_SCHEMA,
     }).returning();
   }
   let provider = (await db.select().from(aiProviderConfigs).where(eq(aiProviderConfigs.key, "local_heuristic")).limit(1))[0];
@@ -137,9 +138,16 @@ async function seed() {
   if (!openAiProvider) {
     [openAiProvider] = await db.insert(aiProviderConfigs).values({ key: "openai", displayName: "OpenAI", configuration: { secretEnvironmentVariable: "OPENAI_API_KEY" } }).returning();
   }
-  const openAiModel = (await db.select().from(aiModelConfigs).where(and(eq(aiModelConfigs.providerConfigId, openAiProvider.id), eq(aiModelConfigs.key, "gpt-4o-mini"))).limit(1))[0];
+  const configuredProvider = seedConfig.aiProvider;
+  const publishOpenAi = configuredProvider === "openai"
+    || (!configuredProvider && seedConfig.openAiApiKeyConfigured);
+  if (publishOpenAi && !seedConfig.openAiApiKeyConfigured) {
+    throw new Error("OPENAI_API_KEY is required when AI_PROVIDER=openai");
+  }
+  const openAiModelName = seedConfig.aiModel;
+  let openAiModel = (await db.select().from(aiModelConfigs).where(and(eq(aiModelConfigs.providerConfigId, openAiProvider.id), eq(aiModelConfigs.key, openAiModelName))).limit(1))[0];
   if (!openAiModel) {
-    await db.insert(aiModelConfigs).values({ providerConfigId: openAiProvider.id, key: "gpt-4o-mini", modelName: "gpt-4o-mini", configuration: { responseFormat: "json_object" } });
+    [openAiModel] = await db.insert(aiModelConfigs).values({ providerConfigId: openAiProvider.id, key: openAiModelName, modelName: openAiModelName, configuration: { api: "responses", responseFormat: "json_object" } }).returning();
   }
   let workflow = (await db.select().from(aiWorkflows).where(eq(aiWorkflows.key, "record_classification")).limit(1))[0];
   if (!workflow) {
@@ -244,6 +252,51 @@ async function seed() {
     properties: { suggestion: { type: "string", minLength: 1 } },
   });
   await ensureWorkflow({ key: "report_section_draft", nameEn: "Report Section Draft", nameZh: "报告段落草稿", promptId: reportSectionPrompt.id, outputSchemaId: reportSectionOutputSchema.id, humanApprovalRequired: true });
+
+  const desiredProvider = publishOpenAi ? openAiProvider : provider;
+  const desiredModel = publishOpenAi ? openAiModel : model;
+  const publishConfiguredProviderVersion = async (workflowKey: string) => {
+    const configuredWorkflow = (await db.select().from(aiWorkflows).where(eq(aiWorkflows.key, workflowKey)).limit(1))[0];
+    if (!configuredWorkflow) throw new Error(`AI workflow not found while publishing provider configuration: ${workflowKey}`);
+    const versions = await db.select().from(aiWorkflowVersions).where(eq(aiWorkflowVersions.workflowId, configuredWorkflow.id));
+    const current = versions.find((version) => version.id === configuredWorkflow.currentPublishedVersionId)
+      ?? versions.filter((version) => version.status === "published").sort((left, right) => right.version - left.version)[0];
+    if (!current) throw new Error(`Published AI workflow version not found: ${workflowKey}`);
+    const desiredOutputSchemaId = workflowKey === "record_classification"
+      ? outputSchema.id
+      : current.outputSchemaVersionId;
+    if (
+      current.providerConfigId === desiredProvider.id
+      && current.modelConfigId === desiredModel.id
+      && current.outputSchemaVersionId === desiredOutputSchemaId
+    ) {
+      if (configuredWorkflow.currentPublishedVersionId !== current.id) {
+        await db.update(aiWorkflows).set({ currentPublishedVersionId: current.id, updatedAt: new Date() }).where(eq(aiWorkflows.id, configuredWorkflow.id));
+      }
+      return;
+    }
+    const [published] = await db.insert(aiWorkflowVersions).values({
+      workflowId: configuredWorkflow.id,
+      version: Math.max(...versions.map((version) => version.version), 0) + 1,
+      status: "published",
+      promptVersionId: current.promptVersionId,
+      outputSchemaVersionId: desiredOutputSchemaId,
+      providerConfigId: desiredProvider.id,
+      modelConfigId: desiredModel.id,
+      triggerRules: current.triggerRules,
+      permittedInputs: current.permittedInputs,
+      privacyRequirements: current.privacyRequirements,
+      retryPolicy: current.retryPolicy,
+      costCeiling: current.costCeiling,
+      humanApprovalRequired: current.humanApprovalRequired,
+      featureFlags: {},
+      publishedAt: new Date(),
+    }).returning();
+    await db.update(aiWorkflows).set({ currentPublishedVersionId: published.id, updatedAt: new Date() }).where(eq(aiWorkflows.id, configuredWorkflow.id));
+  };
+  for (const workflowKey of ["record_classification", "report_generation", "ask_collect", "report_section_draft"]) {
+    await publishConfiguredProviderVersion(workflowKey);
+  }
 
   let reportTemplate = (await db.select().from(reportTemplates).where(eq(reportTemplates.key, "evidence_summary")).limit(1))[0];
   if (!reportTemplate) {
