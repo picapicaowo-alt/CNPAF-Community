@@ -73,6 +73,10 @@ settings route. Authorized users can also select an available GPT model inside
 each Insights, Records, Data, and Reports conversation composer; the selection is
 audited and applies to that new run only. User-facing conversations require the
 OpenAI provider and never silently substitute deterministic fallback text.
+OpenAI workflows also expose optional public web search by default. Configure it
+with `OPENAI_WEB_SEARCH_ENABLED` and `OPENAI_WEB_SEARCH_CONTEXT_SIZE`; internal
+approved evidence remains authoritative, and cited external sources are stored
+with each run and shown to users as verification links.
 
 For the Docker deployment profile, keep the production key in ignored
 `.env.prod-ai` and layer it over the normal deployment environment:

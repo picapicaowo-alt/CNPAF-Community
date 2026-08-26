@@ -367,7 +367,7 @@ export default function InsightCategoryPage() {
             <AiCopilotPanel
               conversationTitle={locale === "zh" ? copy.titleZh : copy.titleEn}
               contextSources={[{ label: "CHART-METRICS", statement: aiInitialPrompt }]}
-              description={locale === "zh" ? "ChatGPT 会先根据当前授权图表生成解读，并用你有权限访问的已批准证据交叉核实；你可以继续追问、比较或共同完善结论。" : "ChatGPT starts from the current authorized charts and cross-checks them against approved evidence you can access. Continue by asking, comparing, or refining the finding together."}
+              description={locale === "zh" ? "ChatGPT 会先根据当前授权图表生成解读，并用你有权限访问的已批准证据交叉核实；需要时可检索外部公开来源补充视角，并提供链接供你核验。" : "ChatGPT starts from the current authorized charts and cross-checks them against approved evidence you can access. When useful, it can add outside perspective from public web sources with links for verification."}
               initialPrompt={aiInitialPrompt}
               key={JSON.stringify(aiScope)}
               locale={locale}

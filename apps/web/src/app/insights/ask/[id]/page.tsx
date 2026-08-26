@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
+import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { RichTextComposerInput } from "@/components/RichTextComposerInput";
 import { useI18n } from "@/components/LocaleProvider";
@@ -16,11 +17,8 @@ type Message = {
   content: string;
   createdAt: string;
 };
-type Source = {
-  id: string;
+type Source = AiDisplaySource & {
   messageId: string;
-  citationLabel?: string | null;
-  excerpt?: string | null;
 };
 type Bundle = {
   conversation: { id: string; title?: string | null };
@@ -82,8 +80,8 @@ export default function AskConversationPage() {
           </h1>
           <p className="muted">
             {locale === "zh"
-              ? "回答只检索你有权访问的已批准证据，并显示来源。"
-              : "Answers retrieve only approved evidence you can access and show their sources."}
+              ? "回答以你有权访问的已批准证据为主，可补充外部公开视角；外部来源均附可验证链接。"
+              : "Answers are grounded in approved evidence you can access and may add public outside perspective; every external source includes a verifiable link."}
           </p>
         </div>
       </header>
@@ -98,19 +96,7 @@ export default function AskConversationPage() {
               key={message.id}
             >
               <MarkdownMessage>{message.content}</MarkdownMessage>
-              {sourcesByMessage.get(message.id)?.length ? (
-                <div className="stack-sm" style={{ marginTop: 12 }}>
-                  {sourcesByMessage.get(message.id)!.map((source) => (
-                    <div className="evidence" key={source.id}>
-                      <strong>
-                        {source.citationLabel ??
-                          (locale === "zh" ? "来源" : "Source")}
-                      </strong>
-                      <div className="caption">{source.excerpt}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+              <AiSourceList locale={locale} sources={sourcesByMessage.get(message.id) ?? []} />
             </article>
           ))}
         </div>

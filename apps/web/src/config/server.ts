@@ -1,6 +1,7 @@
 import path from "node:path";
 
 export type StorageBackend = "local" | "s3";
+export type OpenAiWebSearchContextSize = "low" | "medium" | "high";
 
 function optional(name: string) {
   const value = process.env[name]?.trim();
@@ -61,9 +62,15 @@ export function getStorageRuntimeConfig() {
 }
 
 export function getOpenAiRuntimeConfig() {
+  const webSearchContextSize = optional("OPENAI_WEB_SEARCH_CONTEXT_SIZE")?.toLowerCase() ?? "medium";
+  if (!["low", "medium", "high"].includes(webSearchContextSize)) {
+    throw new Error("OPENAI_WEB_SEARCH_CONTEXT_SIZE must be low, medium, or high");
+  }
   return {
     apiKey: required("OPENAI_API_KEY"),
     endpoint: httpUrl("OPENAI_BASE_URL"),
+    webSearchEnabled: boolean("OPENAI_WEB_SEARCH_ENABLED", true),
+    webSearchContextSize: webSearchContextSize as OpenAiWebSearchContextSize,
   };
 }
 

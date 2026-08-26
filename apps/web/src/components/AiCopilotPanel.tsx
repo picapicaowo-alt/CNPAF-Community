@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { AiPromptComposer } from "@/components/AiPromptComposer";
+import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import type { OpenAiModelId } from "@/lib/openai-model-catalog";
@@ -14,7 +15,7 @@ type AskMessage = {
   content: string;
   metadata?: { attachments?: AskAttachment[]; modelName?: string };
 };
-type AskSource = { id: string; messageId: string; citationLabel?: string | null; excerpt?: string | null };
+type AskSource = AiDisplaySource & { messageId: string };
 type AskBundle = { conversation: { id: string }; messages: AskMessage[]; sources: AskSource[] };
 
 type Props = {
@@ -113,14 +114,14 @@ export function AiCopilotPanel({
   const visibleMessages = (bundle?.messages ?? []).filter((message, index) => !(index === 0 && message.role === "user" && message.content === initialPrompt));
   const lastAssistant = [...visibleMessages].reverse().find((message) => message.role === "assistant");
   const thinkingSteps = locale === "zh"
-    ? ["读取当前范围", "检索已批准证据", "组织结论与引用"]
-    : ["Reading the current scope", "Retrieving approved evidence", "Structuring findings and citations"];
+    ? ["读取当前范围", "检索内部证据与外部视角", "组织结论与可验证引用"]
+    : ["Reading the current scope", "Retrieving internal and external context", "Structuring verifiable citations"];
 
   return (
     <section className="card insight-ai-panel ai-copilot-panel">
       <div className="insight-ai-heading">
         <span className="dataset-ai-avatar"><AppIcon name="sparkles" /></span>
-        <div><h2>{title}</h2><p>{description ?? (locale === "zh" ? "ChatGPT 只使用你有权限访问的已批准证据，并保留来源引用。" : "ChatGPT uses only approved evidence you are authorized to access and preserves citations.")}</p></div>
+        <div><h2>{title}</h2><p>{description ?? (locale === "zh" ? "ChatGPT 以你有权限访问的已批准证据为主，并可检索外部公开来源补充视角；所有外部引用都会附上可验证链接。" : "ChatGPT grounds answers in approved evidence you can access and may add perspective from public web sources; every external citation includes a verifiable link.")}</p></div>
       </div>
       {error ? <div className="feedback feedback-error" role="alert">{error}</div> : null}
       <div className="insight-ai-body">
@@ -157,7 +158,7 @@ export function AiCopilotPanel({
                     ChatGPT · {message.metadata.modelName}
                   </div>
                 ) : null}
-                {sourcesByMessage.get(message.id)?.length ? <details className="dataset-chat-sources"><summary>{locale === "zh" ? "查看证据来源" : "View evidence sources"}</summary>{sourcesByMessage.get(message.id)?.map((source) => <div className="evidence" key={source.id}><strong>{source.citationLabel ?? (locale === "zh" ? "来源" : "Source")}</strong><p>{source.excerpt}</p></div>)}</details> : null}
+                <AiSourceList locale={locale} sources={sourcesByMessage.get(message.id) ?? []} />
                 {message.role === "assistant" && onUseAnswer ? <button className="button button-secondary button-small" onClick={() => onUseAnswer(message.content)} type="button">{locale === "zh" ? "用于当前内容" : "Use in current content"}</button> : null}
               </article>
             ))}

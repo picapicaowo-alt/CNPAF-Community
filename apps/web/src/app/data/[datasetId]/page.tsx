@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { AiPromptComposer } from "@/components/AiPromptComposer";
+import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState, StatusPill } from "@/components/ui";
@@ -32,11 +33,8 @@ type AskMessage = {
     modelName?: string;
   };
 };
-type AskSource = {
-  id: string;
+type AskSource = AiDisplaySource & {
   messageId: string;
-  citationLabel?: string | null;
-  excerpt?: string | null;
 };
 type AskBundle = {
   conversation: { id: string; title?: string | null };
@@ -412,7 +410,7 @@ export default function DatasetWorkspacePage() {
           <section className="card dataset-ai-panel">
             <div className="dataset-ai-heading">
               <span className="dataset-ai-avatar"><AppIcon name="sparkles" /></span>
-              <div><h2>{locale === "zh" ? "与数据集 AI 分析员对话" : "Chat with the dataset analyst"}</h2><p>{locale === "zh" ? `回答仅基于 ${selectedVersion?.recordCount ?? 0} 条已冻结记录中的已批准证据${includeMedia ? "和已确认附件" : ""}。` : `Answers are limited to approved evidence${includeMedia ? " and confirmed attachments" : ""} in these ${selectedVersion?.recordCount ?? 0} frozen records.`}</p></div>
+              <div><h2>{locale === "zh" ? "与数据集 AI 分析员对话" : "Chat with the dataset analyst"}</h2><p>{locale === "zh" ? `内部结论以 ${selectedVersion?.recordCount ?? 0} 条已冻结记录中的已批准证据${includeMedia ? "和已确认附件" : ""}为准；AI 可检索公开来源补充视角，并附上链接。` : `Internal findings remain grounded in approved evidence${includeMedia ? " and confirmed attachments" : ""} from these ${selectedVersion?.recordCount ?? 0} frozen records. AI may add linked public sources for outside perspective.`}</p></div>
             </div>
             <div className="dataset-chat-messages" aria-live="polite">
               {!conversation?.messages.length ? (
@@ -433,12 +431,10 @@ export default function DatasetWorkspacePage() {
                       ))}
                     </div>
                   ) : null}
-                  {sourcesByMessage.get(message.id)?.length ? (
-                    <details className="dataset-chat-sources"><summary>{locale === "zh" ? `${sourcesByMessage.get(message.id)!.length} 个证据来源` : `${sourcesByMessage.get(message.id)!.length} evidence sources`}</summary>{sourcesByMessage.get(message.id)!.map((source) => <div className="evidence" key={source.id}><strong>{source.citationLabel ?? (locale === "zh" ? "来源" : "Source")}</strong><p>{source.excerpt}</p></div>)}</details>
-                  ) : null}
+                  <AiSourceList locale={locale} sources={sourcesByMessage.get(message.id) ?? []} />
                 </article>
               ))}
-              {busy === "ask" ? <div className="dataset-ai-thinking"><span /><span /><span />{locale === "zh" ? "正在检索已批准证据…" : "Reviewing approved evidence…"}</div> : null}
+              {busy === "ask" ? <div className="dataset-ai-thinking"><span /><span /><span />{locale === "zh" ? "正在检索内部证据与外部视角…" : "Reviewing internal evidence and external context…"}</div> : null}
             </div>
             <div className="dataset-chat-compose">
               {hasMedia ? (
@@ -482,7 +478,7 @@ export default function DatasetWorkspacePage() {
           <aside className="card dataset-context-panel">
             <div><span className="eyebrow">{locale === "zh" ? "分析范围" : "Analysis scope"}</span><h2>{locale === "zh" ? "数据集上下文" : "Dataset context"}</h2></div>
             <dl><div><dt>{locale === "zh" ? "版本" : "Version"}</dt><dd>v{selectedVersion?.versionNumber ?? "—"}</dd></div><div><dt>{locale === "zh" ? "记录" : "Records"}</dt><dd>{selectedVersion?.recordCount ?? 0}</dd></div><div><dt>{locale === "zh" ? "附件" : "Attachments"}</dt><dd>{detail.mediaSummary.total} ({locale === "zh" ? `图片 ${detail.mediaSummary.images} · 文档 ${detail.mediaSummary.documents}` : `Images ${detail.mediaSummary.images} · Documents ${detail.mediaSummary.documents}`})</dd></div><div><dt>{locale === "zh" ? "分类" : "Classification"}</dt><dd>{dataset.dataClassification === "approved_evidence" ? (locale === "zh" ? "已批准证据" : "Approved evidence") : (locale === "zh" ? "受限数据" : "Restricted data")}</dd></div><div><dt>SHA-256</dt><dd className="mono-small">{shortHash(selectedVersion?.contentHash)}</dd></div></dl>
-            <div className="dataset-context-note"><AppIcon name="check" /><span><strong>{locale === "zh" ? "可追溯回答" : "Traceable answers"}</strong>{locale === "zh" ? "AI 回答会附上本数据集中的证据来源。" : "AI answers include evidence sources from this dataset."}</span></div>
+            <div className="dataset-context-note"><AppIcon name="check" /><span><strong>{locale === "zh" ? "可追溯回答" : "Traceable answers"}</strong>{locale === "zh" ? "AI 回答会区分内部证据与外部参考，外部来源附可点击链接。" : "AI answers distinguish internal evidence from external references and link every external source."}</span></div>
             {canReport ? <button className="button button-secondary button-wide" disabled={busy === "report"} onClick={generateInitialReport} type="button"><AppIcon name="reports" />{locale === "zh" ? "用这批数据生成报告" : "Generate a report"}</button> : null}
           </aside>
         </div>
@@ -498,7 +494,7 @@ export default function DatasetWorkspacePage() {
       {activeTab === "report" ? (
         <section className="card dataset-report-panel">
           <span className="dataset-report-icon"><AppIcon name="reports" /></span>
-          <div><span className="eyebrow">{locale === "zh" ? "从数据到报告" : "From data to report"}</span><h2>{createdReportId ? (locale === "zh" ? "初步报告已准备好" : "Initial report is ready") : (locale === "zh" ? "生成可编辑的初步报告" : "Generate an editable initial report")}</h2><p>{reportNotice || (locale === "zh" ? "AI 会以当前冻结的 Dataset Version 为唯一来源，起草执行摘要、主要发现和数据缺口。生成后需由人工审阅和采纳。" : "AI uses this frozen Dataset Version as its only source to draft an executive summary, key findings, and data gaps. Human review is required.")}</p></div>
+          <div><span className="eyebrow">{locale === "zh" ? "从数据到报告" : "From data to report"}</span><h2>{createdReportId ? (locale === "zh" ? "初步报告已准备好" : "Initial report is ready") : (locale === "zh" ? "生成可编辑的初步报告" : "Generate an editable initial report")}</h2><p>{reportNotice || (locale === "zh" ? "AI 以当前冻结的 Dataset Version 为内部证据基础，并可引用有链接的公开来源补充背景。生成后需由人工审阅和采纳。" : "AI grounds the draft in this frozen Dataset Version and may cite linked public sources for additional context. Human review is required.")}</p></div>
           <div className="dataset-report-outline">{reportSections.map((section, index) => <div key={section.sectionKey}><span>{index + 1}</span><strong>{locale === "zh" ? section.titleZh : section.titleEn}</strong></div>)}</div>
           {!createdReportId && hasMedia ? (
             <label className="dataset-media-consent">

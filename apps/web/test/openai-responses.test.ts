@@ -14,7 +14,8 @@ test("OpenAI requests use the Responses API JSON and image input contract", () =
   );
 
   assert.equal(request.model, "gpt-5.4-mini");
-  assert.equal(request.instructions, "Return JSON.");
+  assert.match(request.instructions, /^Return JSON\.\n\nExternal research policy:/);
+  assert.deepEqual(request.tools, [{ type: "web_search", search_context_size: "medium" }]);
   assert.deepEqual(request.text, { format: { type: "json_object" } });
   assert.equal(request.store, false);
   assert.deepEqual(request.input[0]?.content[0], {
@@ -34,6 +35,49 @@ test("OpenAI Responses output and token usage are normalized for workflow runs",
 
   assert.deepEqual(result.parsed, { answer: "ok" });
   assert.deepEqual(result.tokens, { in: 12, out: 4 });
+  assert.equal(result.webSearchUsed, false);
+  assert.deepEqual(result.externalSources, []);
+});
+
+test("OpenAI web citations are normalized into unique, safe external sources", () => {
+  const result = parseOpenAiResponsesBody({
+    output: [
+      { type: "web_search_call" },
+      {
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: '{"answer":"Public context"}',
+          annotations: [
+            { type: "url_citation", url: "https://example.org/research", title: "Public research" },
+            { type: "url_citation", url: "https://example.org/research", title: "Duplicate" },
+            { type: "url_citation", url: "javascript:alert(1)", title: "Unsafe" },
+          ],
+        }],
+      },
+    ],
+  });
+
+  assert.equal(result.webSearchUsed, true);
+  assert.deepEqual(result.externalSources, [{
+    title: "Duplicate",
+    url: "https://example.org/research",
+  }]);
+});
+
+test("OpenAI web search can be disabled by typed runtime configuration", () => {
+  const request = buildOpenAiResponsesRequest(
+    "Return JSON.",
+    "Answer.",
+    "gpt-5.4-mini",
+    [],
+    undefined,
+    [],
+    { enabled: false, contextSize: "low" },
+  );
+
+  assert.equal("tools" in request, false);
+  assert.equal(request.instructions, "Return JSON.");
 });
 
 test("OpenAI requests include conversation documents as Responses API file inputs", () => {

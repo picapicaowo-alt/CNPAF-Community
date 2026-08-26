@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
 import { AiCopilotPanel } from "@/components/AiCopilotPanel";
+import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
 import { useI18n } from "@/components/LocaleProvider";
 import {
   ErrorState,
@@ -110,10 +111,27 @@ export default function RecordDetail() {
   const findings =
     (data.findings as { kind: string; statement: string }[]) ?? [];
   const run = data.run as
-    | { id: string; status: string; createdAt: string; completedAt?: string | null }
+    | { id: string; status: string; createdAt: string; completedAt?: string | null; costMetadata?: unknown }
     | null
     | undefined;
   const attachments = (data.attachments as AttachmentSummary[]) ?? [];
+  const runMetadata = run?.costMetadata && typeof run.costMetadata === "object" && !Array.isArray(run.costMetadata)
+    ? run.costMetadata as { externalSources?: unknown }
+    : null;
+  const recordExternalSources: AiDisplaySource[] = Array.isArray(runMetadata?.externalSources)
+    ? runMetadata.externalSources.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        const source = value as { title?: unknown; url?: unknown };
+        if (typeof source.url !== "string") return [];
+        return [{
+          id: source.url,
+          sourceType: "external_web",
+          citationLabel: typeof source.title === "string" ? source.title : null,
+          excerpt: typeof source.title === "string" ? source.title : null,
+          metadata: { title: source.title, url: source.url },
+        }];
+      })
+    : [];
   const context = (data.context as {
     creator?: { id: string; name: string; email: string } | null;
     site?: { id: string; name: string; region?: string | null; city?: string | null } | null;
@@ -381,6 +399,7 @@ export default function RecordDetail() {
                       <p>{finding.statement}</p>
                     </div>
                   ))}
+                  <AiSourceList locale={locale} sources={recordExternalSources} />
                 </div>
               ) : (
                 <p className="muted">
@@ -498,7 +517,7 @@ export default function RecordDetail() {
       {canAsk ? (
         <AiCopilotPanel
           conversationTitle={`${locale === "zh" ? "记录" : "Record"} ${record.id.slice(0, 8).toUpperCase()}`}
-          description={locale === "zh" ? "围绕这条记录的已批准证据进行总结、质疑和共同梳理；未批准内容不会进入回答。" : "Summarize, challenge, and co-develop findings from this record's approved evidence. Unapproved content is excluded."}
+          description={locale === "zh" ? "围绕这条记录的已批准证据进行总结、质疑和共同梳理；未批准内容不会进入回答，外部公开视角会单独标示并附链接。" : "Summarize, challenge, and co-develop findings from this record's approved evidence. Unapproved content is excluded, while any public outside perspective is labeled and linked separately."}
           locale={locale}
           scope={{ recordIds: [record.id] }}
           starterPrompts={[

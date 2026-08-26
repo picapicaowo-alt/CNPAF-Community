@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  aiRuns,
   approvedFindings,
   attachments,
   auditEvents,
@@ -32,7 +33,7 @@ import { db } from "../db";
 import { audit } from "../audit";
 import { ApiError } from "../api-error";
 import { authorize, evaluateAuthorization, getAccessContext } from "../authorization";
-import { executeConfiguredWorkflow } from "../ai";
+import { executeConfiguredWorkflow, externalWebSourceId, externalWebSourcesFromMetadata } from "../ai";
 import {
   getDatasetEvidenceForAi,
   getDatasetVersionForReport,
@@ -451,7 +452,7 @@ export async function draftReportSectionWithAi(actorId: string, sectionId: strin
 }
 
 export async function getReportSectionSources(actorId: string, sectionId: string) {
-  const { version } = await requireSection(actorId, sectionId, "reports.view");
+  const { version, section } = await requireSection(actorId, sectionId, "reports.view");
   const links = await db.select().from(reportVersionEvidenceLinks).where(eq(reportVersionEvidenceLinks.reportVersionId, version.id));
   const applicable = links.filter((link) => !link.reportSectionId || link.reportSectionId === sectionId);
   const findingIds = applicable.filter((link) => link.evidenceType === "approved_finding").map((link) => link.evidenceId);
@@ -491,7 +492,7 @@ export async function getReportSectionSources(actorId: string, sectionId: string
     metadata: unknown;
     finding: unknown | null;
     attachment: ReturnType<typeof toAttachmentSummary> | null;
-    record: { id: string; programId: string | null; locationId: string | null; sourceKind: string };
+    record: { id: string; programId: string | null; locationId: string | null; sourceKind: string } | null;
   }> = [];
   for (const link of applicable) {
     const row = byId.get(link.evidenceId);
@@ -501,6 +502,22 @@ export async function getReportSectionSources(actorId: string, sectionId: string
     }
     const media = mediaById.get(link.evidenceId);
     if (media) visibleSources.push({ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: link.metadata, finding: null, attachment: toAttachmentSummary(media.attachment), record: { id: media.record.id, programId: media.record.programId, locationId: media.record.siteId, sourceKind: media.record.sourceKind } });
+  }
+  const suggestionRun = section.aiSuggestionRunId
+    ? (await db.select({ costMetadata: aiRuns.costMetadata }).from(aiRuns).where(eq(aiRuns.id, section.aiSuggestionRunId)).limit(1))[0]
+    : null;
+  for (const source of externalWebSourcesFromMetadata(suggestionRun?.costMetadata)) {
+    const sourceId = externalWebSourceId(source.url);
+    visibleSources.push({
+      id: sourceId,
+      evidenceType: "external_web",
+      evidenceId: sourceId,
+      citationLabel: source.title,
+      metadata: { title: source.title, url: source.url },
+      finding: null,
+      attachment: null,
+      record: null,
+    });
   }
   return visibleSources;
 }

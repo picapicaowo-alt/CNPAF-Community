@@ -42,6 +42,10 @@ export default function PrivacyPage() {
           Submitted text is privacy-scanned on our servers before any external
           model is called. Flagged field notes are not sent to third-party AI.
           Human review is required before AI themes/concerns become official.
+          Public web search may add outside context, but private evidence and
+          internal identifiers must not be included in search queries. Any
+          external source used in an answer is shown with a clickable
+          verification link.
         </p>
         <h2>Research use</h2>
         <p>

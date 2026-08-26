@@ -1623,6 +1623,30 @@ input[type="radio"] {
   margin: 2px 0 0;
   font-size: 11px;
 }
+.ai-source-list .ai-source-kind {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ai-external-source a {
+  display: grid;
+  gap: 2px;
+  color: var(--blue);
+  text-decoration: none;
+}
+.ai-external-source a:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ai-external-source a span {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 .dataset-ai-thinking {
   display: flex;
   width: fit-content;

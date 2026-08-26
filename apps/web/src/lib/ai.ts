@@ -30,6 +30,7 @@ import { scanPrivacy } from "./pii";
 import { audit } from "./audit";
 import { loadSourceKindPolicy } from "./source-kind";
 import { getOpenAiRuntimeConfig } from "@/config/server";
+import type { OpenAiWebSearchContextSize } from "@/config/server";
 import { isOpenAiModelId, type OpenAiModelId } from "./openai-model-catalog";
 
 const SAFETY_HINT =
@@ -116,11 +117,82 @@ export type AiFileInput = {
 type OpenAiResponsesBody = {
   output_text?: string;
   output?: Array<{
-    content?: Array<{ type?: string; text?: string }>;
+    type?: string;
+    content?: Array<{
+      type?: string;
+      text?: string;
+      annotations?: Array<{
+        type?: string;
+        url?: string;
+        title?: string;
+        start_index?: number;
+        end_index?: number;
+      }>;
+    }>;
   }>;
   usage?: { input_tokens?: number; output_tokens?: number };
   error?: { message?: string };
 };
+
+export type ExternalWebSource = {
+  title: string;
+  url: string;
+};
+
+export function externalWebSourceId(url: string) {
+  const hex = contentHash({ sourceType: "external_web", url }).slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
+}
+
+type OpenAiWebSearchOptions = {
+  enabled: boolean;
+  contextSize: OpenAiWebSearchContextSize;
+};
+
+const DEFAULT_WEB_SEARCH_OPTIONS: OpenAiWebSearchOptions = {
+  enabled: true,
+  contextSize: "medium",
+};
+
+const EXTERNAL_RESEARCH_POLICY = [
+  "Internal approved evidence and user-provided materials remain authoritative for facts about this organization, dataset, record, or report.",
+  "Use web search only when public background, current information, or an outside comparison would materially improve the answer.",
+  "Never place internal record text, personal data, organization-only identifiers, attachment contents, or verbatim private evidence into a web search query.",
+  "Clearly distinguish external context from findings grounded in internal evidence. External sources must never be used to assert unverified facts about the internal evidence.",
+  "When external web information contributes to the response, cite only sources returned by the web search tool and never invent a URL.",
+].join("\n");
+
+function normalizeExternalWebSource(urlValue: unknown, titleValue: unknown): ExternalWebSource | null {
+  if (typeof urlValue !== "string") return null;
+  try {
+    const url = new URL(urlValue);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return {
+      title: typeof titleValue === "string" && titleValue.trim()
+        ? titleValue.trim().slice(0, 500)
+        : url.hostname,
+      url: url.toString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function externalWebSourcesFromMetadata(metadata: unknown): ExternalWebSource[] {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return [];
+  const values = (metadata as { externalSources?: unknown }).externalSources;
+  if (!Array.isArray(values)) return [];
+  const result = new Map<string, ExternalWebSource>();
+  for (const value of values) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const source = normalizeExternalWebSource(
+      (value as { url?: unknown }).url,
+      (value as { title?: unknown }).title,
+    );
+    if (source) result.set(source.url, source);
+  }
+  return [...result.values()];
+}
 
 export function buildOpenAiResponsesRequest(
   system: string,
@@ -129,6 +201,7 @@ export function buildOpenAiResponsesRequest(
   images: AiImageInput[] = [],
   outputSchema?: unknown,
   files: AiFileInput[] = [],
+  webSearch: OpenAiWebSearchOptions = DEFAULT_WEB_SEARCH_OPTIONS,
 ) {
   const jsonUserInput = `Return a JSON object matching the required schema.\n${user}`;
   const content = [
@@ -151,8 +224,13 @@ export function buildOpenAiResponsesRequest(
   );
   return {
     model,
-    instructions: system,
+    instructions: webSearch.enabled
+      ? `${system}\n\nExternal research policy:\n${EXTERNAL_RESEARCH_POLICY}`
+      : system,
     input: [{ role: "user", content }],
+    ...(webSearch.enabled
+      ? { tools: [{ type: "web_search" as const, search_context_size: webSearch.contextSize }] }
+      : {}),
     text: {
       format: canUseStrictSchema
         ? {
@@ -171,12 +249,22 @@ export function parseOpenAiResponsesBody(body: OpenAiResponsesBody) {
   const raw = body.output_text
     ?? body.output?.flatMap((item) => item.content ?? []).find((item) => item.type === "output_text")?.text
     ?? "{}";
+  const externalSources = new Map<string, ExternalWebSource>();
+  for (const annotation of body.output
+    ?.flatMap((item) => item.content ?? [])
+    .flatMap((content) => content.annotations ?? []) ?? []) {
+    if (annotation.type !== "url_citation") continue;
+    const source = normalizeExternalWebSource(annotation.url, annotation.title);
+    if (source) externalSources.set(source.url, source);
+  }
   return {
     raw,
     parsed: JSON.parse(raw) as unknown,
     tokens: body.usage
       ? { in: body.usage.input_tokens ?? 0, out: body.usage.output_tokens ?? 0 }
       : undefined,
+    webSearchUsed: body.output?.some((item) => item.type === "web_search_call") ?? false,
+    externalSources: [...externalSources.values()],
   };
 }
 
@@ -187,15 +275,34 @@ async function callOpenAi(
   images: AiImageInput[] = [],
   outputSchema?: unknown,
   files: AiFileInput[] = [],
-): Promise<{ raw: string; parsed: unknown; tokens?: { in: number; out: number } }> {
-  const { apiKey, endpoint } = getOpenAiRuntimeConfig();
+): Promise<{
+  raw: string;
+  parsed: unknown;
+  tokens?: { in: number; out: number };
+  webSearchUsed: boolean;
+  externalSources: ExternalWebSource[];
+}> {
+  const {
+    apiKey,
+    endpoint,
+    webSearchEnabled,
+    webSearchContextSize,
+  } = getOpenAiRuntimeConfig();
   const res = await fetch(endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(buildOpenAiResponsesRequest(system, user, model, images, outputSchema, files)),
+    body: JSON.stringify(buildOpenAiResponsesRequest(
+      system,
+      user,
+      model,
+      images,
+      outputSchema,
+      files,
+      { enabled: webSearchEnabled, contextSize: webSearchContextSize },
+    )),
   });
   const body = (await res.json()) as OpenAiResponsesBody;
   if (!res.ok) {
@@ -312,7 +419,11 @@ export async function executeConfiguredWorkflow(input: {
     run.inputHash !== inputHash
     || (run.status !== "succeeded" && run.model !== requestedModel)
   ) throw new Error("Idempotency key is already associated with a different AI workflow request");
-  if (run.status === "succeeded") return { run, output: run.parsedOutput };
+  if (run.status === "succeeded") return {
+    run,
+    output: run.parsedOutput,
+    externalSources: externalWebSourcesFromMetadata(run.costMetadata),
+  };
   const [claimed] = await db.update(aiRuns).set({
     status: "running",
     startedAt: new Date(),
@@ -323,7 +434,11 @@ export async function executeConfiguredWorkflow(input: {
   }).where(and(eq(aiRuns.id, run.id), inArray(aiRuns.status, ["queued", "failed"]))).returning();
   if (!claimed) {
     const current = (await db.select().from(aiRuns).where(eq(aiRuns.id, run.id)).limit(1))[0];
-    if (current?.status === "succeeded") return { run: current, output: current.parsedOutput };
+    if (current?.status === "succeeded") return {
+      run: current,
+      output: current.parsedOutput,
+      externalSources: externalWebSourcesFromMetadata(current.costMetadata),
+    };
     throw new Error("Equivalent AI workflow run is already running");
   }
   run = claimed;
@@ -336,6 +451,8 @@ export async function executeConfiguredWorkflow(input: {
     let parsed: unknown;
     let raw: string;
     let tokens: { in: number; out: number } | undefined;
+    let webSearchUsed = false;
+    let externalSources: ExternalWebSource[] = [];
     if (configuration.providerKey === "openai") {
       try {
         const result = await callOpenAi(
@@ -349,6 +466,8 @@ export async function executeConfiguredWorkflow(input: {
         parsed = validateConfiguredJson(result.parsed, configuration.outputSchema?.schema);
         raw = result.raw;
         tokens = result.tokens;
+        webSearchUsed = result.webSearchUsed;
+        externalSources = result.externalSources;
       } catch (error) {
         if (
           input.allowLocalFallback === false ||
@@ -379,11 +498,15 @@ export async function executeConfiguredWorkflow(input: {
       inputTokens: tokens?.in,
       outputTokens: tokens?.out,
       tokenUsage: { input: tokens?.in ?? null, output: tokens?.out ?? null },
-      costMetadata: fallbackFrom ? { fallbackFrom } : {},
+      costMetadata: {
+        ...(fallbackFrom ? { fallbackFrom } : {}),
+        webSearchUsed,
+        externalSources,
+      },
       updatedAt: new Date(),
     }).where(eq(aiRuns.id, run.id)).returning();
     await audit({ actorId: input.createdByUserId, action: "ai_workflow_run.succeeded", entityType: "ai_run", entityId: run.id, metadata: { workflowKey: input.workflowKey, reportRunId: input.reportRunId ?? null, provider: actualProvider, model: actualModel, fallbackFrom } });
-    return { run: completed, output: parsed };
+    return { run: completed, output: parsed, externalSources };
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI workflow failed";
     await db.update(aiRuns).set({ status: "failed", error: message, errorMetadata: { message }, completedAt: new Date(), finishedAt: new Date(), updatedAt: new Date() }).where(eq(aiRuns.id, run.id));
@@ -558,6 +681,8 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
   let actualProvider = activeRun.provider;
   let actualModel = activeRun.model;
   let fallbackFrom: string | null = null;
+  let webSearchUsed = false;
+  let externalSources: ExternalWebSource[] = [];
   try {
     if (activeRun.provider === "openai") {
       const workflow = activeRun.workflowVersionId ? await resolveWorkflowConfiguration(activeRun.workflowVersionId) : null;
@@ -566,6 +691,8 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
         parsed = validateConfiguredJson(result.parsed, workflow?.outputSchema?.schema ?? { contract: "@cnpaf/shared#aiOutputSchema" });
         raw = result.raw;
         tokens = result.tokens;
+        webSearchUsed = result.webSearchUsed;
+        externalSources = result.externalSources;
       } catch (error) {
         if (!workflow?.workflowVersion || !localFallbackEnabled(workflow.workflowVersion)) throw error;
         fallbackFrom = activeRun.provider;
@@ -648,7 +775,11 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
       inputTokens: tokens?.in,
       outputTokens: tokens?.out,
       tokenUsage: { input: tokens?.in ?? null, output: tokens?.out ?? null },
-      costMetadata: fallbackFrom ? { fallbackFrom } : {},
+      costMetadata: {
+        ...(fallbackFrom ? { fallbackFrom } : {}),
+        webSearchUsed,
+        externalSources,
+      },
       error: null,
       updatedAt: new Date(),
     }).where(eq(aiRuns.id, activeRun.id)),

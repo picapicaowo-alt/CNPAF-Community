@@ -197,6 +197,7 @@ export async function runReportJob(reportRunId: string) {
       outputSchemaVersion: generation.run.outputSchemaVersion,
       provider: generation.run.provider,
       model: generation.run.model,
+      externalSources: generation.externalSources,
     };
     const [artifact] = await db.insert(reportArtifacts).values({
       reportRunId,

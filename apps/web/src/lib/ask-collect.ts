@@ -15,7 +15,7 @@ import type { z } from "zod";
 import { type askConversationBodySchema } from "@cnpaf/shared";
 import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
-import { executeConfiguredWorkflow } from "./ai";
+import { executeConfiguredWorkflow, externalWebSourceId } from "./ai";
 import type { AiFileInput, AiImageInput } from "./ai";
 import { scanPrivacy } from "./pii";
 import { matchesEvidenceFilters } from "./evidence-filters";
@@ -217,6 +217,18 @@ function contextSourceId(conversationId: string, index: number) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
 }
 
+function isSafeExternalWebSource(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  const urlValue = (metadata as { url?: unknown }).url;
+  if (typeof urlValue !== "string") return false;
+  try {
+    const url = new URL(urlValue);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function createAskConversation(actorId: string, input: ConversationInput) {
   const scope: AskScope = {
     ...input.scope,
@@ -406,7 +418,9 @@ export async function addAskMessage(
       responseInstructions: [
         "Answer the latest question directly and treat earlier messages as conversational context.",
         "Do not repeat the previous answer unless the user explicitly asks for repetition.",
-        "Use only the approved sources and user-provided files included in this input.",
+        "Use the approved sources and user-provided files as the only authority for claims about the current records, Dataset, report, or organization.",
+        "You may supplement the answer with clearly labeled public background or comparative context from web search, but never use it to fill a gap in the internal evidence.",
+        "The structured citations array is reserved for the UUIDs of approvedSources in this input; web citations are captured separately from tool annotations.",
         "If the evidence cannot support a requested conclusion, say so clearly and suggest the next useful step.",
       ],
       selectedModel: modelName ?? null,
@@ -432,6 +446,13 @@ export async function addAskMessage(
   if (generated.citations.some((citation) => !sourceById.has(citation.sourceId))) throw new Error("Ask Collect AI output cited evidence outside the authorized retrieval set");
   if (sources.length && !generated.citations.length) throw new Error("Ask Collect substantive answers must cite authorized evidence");
   const citedSources = [...new Set(generated.citations.map((citation) => citation.sourceId))].map((sourceId) => sourceById.get(sourceId)!);
+  const externalSources = generation.externalSources.map((source, index) => ({
+    id: externalWebSourceId(source.url),
+    label: `WEB-${index + 1}`,
+    statement: source.title,
+    sourceType: "external_web" as const,
+    metadata: { title: source.title, url: source.url },
+  }));
   if (generation.run.provider === "openai" && media?.selectedAttachments.length) {
     await markDatasetImagesSentToAi({
       actorId,
@@ -445,18 +466,35 @@ export async function addAskMessage(
     conversationId,
     role: "assistant",
     content: generated.answer,
-    metadata: { retrievalPolicy: "authorized_dataset_evidence_opt_in_media_and_user_uploads", questionMessageId: question.id, aiRunId: generation.run.id, modelName: generation.run.model },
+    metadata: {
+      retrievalPolicy: "authorized_internal_evidence_with_optional_cited_external_context",
+      questionMessageId: question.id,
+      aiRunId: generation.run.id,
+      modelName: generation.run.model,
+      externalSourceCount: externalSources.length,
+    },
   }).returning();
-  if (citedSources.length) {
-    await db.insert(askMessageSources).values(citedSources.map((source) => ({
-      messageId: answer.id,
-      sourceType: source.sourceType,
-      sourceId: source.id,
-      citationLabel: source.label,
-      excerpt: source.statement.slice(0, 1000),
-    })));
+  if (citedSources.length || externalSources.length) {
+    await db.insert(askMessageSources).values([
+      ...citedSources.map((source) => ({
+        messageId: answer.id,
+        sourceType: source.sourceType,
+        sourceId: source.id,
+        citationLabel: source.label,
+        excerpt: source.statement.slice(0, 1000),
+        metadata: {},
+      })),
+      ...externalSources.map((source) => ({
+        messageId: answer.id,
+        sourceType: source.sourceType,
+        sourceId: source.id,
+        citationLabel: source.label,
+        excerpt: source.statement.slice(0, 1000),
+        metadata: source.metadata,
+      })),
+    ]);
   }
-  return { question, answer, sources: citedSources, aiRun: generation.run };
+  return { question, answer, sources: [...citedSources, ...externalSources], aiRun: generation.run };
 }
 
 export async function getAskConversation(id: string, actorId: string) {
@@ -537,6 +575,7 @@ export async function getAskConversation(id: string, actorId: string) {
   }
   for (const source of sources) {
     if (source.sourceType === "conversation_upload" && uploadSourceIds.has(source.sourceId)) allowedIds.add(source.sourceId);
+    if (source.sourceType === "external_web" && isSafeExternalWebSource(source.metadata)) allowedIds.add(source.sourceId);
   }
   for (const { attachment, record } of mediaEvidence) {
     if (

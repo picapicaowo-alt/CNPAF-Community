@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
 import { AiCopilotPanel } from "@/components/AiCopilotPanel";
+import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
 import { useI18n } from "@/components/LocaleProvider";
 import {
   ErrorState,
@@ -28,6 +29,7 @@ type Section = {
   content: string;
   sortOrder: number;
   aiSuggestion?: string | null;
+  aiSuggestionRunId?: string | null;
   aiSuggestionStatus: string;
   lastEditedBy?: { name: string } | null;
   updatedAt: string;
@@ -54,6 +56,7 @@ export default function ReportEditorPage() {
   const [saveState, setSaveState] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sectionSources, setSectionSources] = useState<AiDisplaySource[]>([]);
   const load = useCallback(async () => {
     setError("");
     try {
@@ -85,6 +88,36 @@ export default function ReportEditorPage() {
     setDraftContent(selected?.content ?? "");
     setSaveState("");
   }, [selected]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!selected?.aiSuggestionRunId) {
+      setSectionSources([]);
+      return;
+    }
+    void apiFetch<{ sources: Array<{
+      id: string;
+      evidenceType: string;
+      citationLabel?: string | null;
+      finding?: unknown;
+      metadata?: unknown;
+    }> }>(`/api/v1/report-sections/${selected.id}/sources`)
+      .then(({ sources }) => {
+        if (cancelled) return;
+        setSectionSources(sources.map((source) => ({
+          id: source.id,
+          sourceType: source.evidenceType,
+          citationLabel: source.citationLabel,
+          excerpt: source.finding ? JSON.stringify(source.finding) : null,
+          metadata: source.metadata,
+        })));
+      })
+      .catch(() => {
+        if (!cancelled) setSectionSources([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.aiSuggestionRunId, selected?.id]);
   const editable = Boolean(
     data?.headVersion?.status === "draft" &&
       permissions.includes("reports.edit"),
@@ -440,6 +473,7 @@ export default function ReportEditorPage() {
                           : "AI draft suggestion"}
                       </strong>
                       <p className="pre-wrap">{selected.aiSuggestion}</p>
+                      <AiSourceList locale={locale} sources={sectionSources} />
                       {editable ? (
                         <div className="row">
                           <button
@@ -491,7 +525,7 @@ export default function ReportEditorPage() {
         <AiCopilotPanel
           conversationTitle={`${data.report.title}${selected ? ` · ${selected.title}` : ""}`}
           datasetVersionId={data.sourceDataset.version.id}
-          description={locale === "zh" ? "ChatGPT 只读取报告绑定的冻结 Dataset。你可以讨论结构、核实表述，并把回答直接用于当前章节。" : "ChatGPT reads only the report's frozen Dataset. Discuss structure, verify wording, and use an answer in the current section."}
+          description={locale === "zh" ? "ChatGPT 以报告绑定的冻结 Dataset 为内部事实基础，并可用附链接的公开来源补充视角。你可以讨论结构、核实表述，并把回答直接用于当前章节。" : "ChatGPT treats the report's frozen Dataset as the internal factual basis and may add linked public sources for outside perspective. Discuss structure, verify wording, and use an answer in the current section."}
           key={`${data.sourceDataset.version.id}:${selected?.id ?? "report"}`}
           locale={locale}
           onUseAnswer={editable && selected ? (answer) => setDraftContent((current) => current.trim() ? `${current.trim()}\n\n${answer}` : answer) : undefined}
