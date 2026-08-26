@@ -2,10 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
+import { AiPromptComposer } from "@/components/AiPromptComposer";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import type { OpenAiModelId } from "@/lib/openai-model-catalog";
 
-type AskMessage = { id: string; role: "user" | "assistant"; content: string };
+type AskAttachment = { id: string; name: string; mimeType: string; byteSize: number };
+type AskMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  metadata?: { attachments?: AskAttachment[]; modelName?: string };
+};
 type AskSource = { id: string; messageId: string; citationLabel?: string | null; excerpt?: string | null };
 type AskBundle = { conversation: { id: string }; messages: AskMessage[]; sources: AskSource[] };
 
@@ -38,6 +46,9 @@ export function AiCopilotPanel({
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [model, setModel] = useState<OpenAiModelId>("gpt-5.6-terra");
+  const [files, setFiles] = useState<File[]>([]);
+  const [privacyAttested, setPrivacyAttested] = useState(false);
   const conversationId = useRef("");
   const initialRun = useRef("");
   const scopeKey = JSON.stringify({ contextSources, datasetVersionId, scope });
@@ -48,7 +59,7 @@ export function AiCopilotPanel({
     return result;
   }, [bundle]);
 
-  const sendPrompt = useCallback(async (rawPrompt: string) => {
+  const sendPrompt = useCallback(async (rawPrompt: string, selectedFiles: File[] = []) => {
     const content = rawPrompt.trim();
     if (!content) return;
     setSending(true);
@@ -63,15 +74,29 @@ export function AiCopilotPanel({
         id = created.conversation.id;
         conversationId.current = id;
       }
-      await apiFetch(`/api/v1/ask-collect/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ content }) });
+      if (selectedFiles.length) {
+        const formData = new FormData();
+        formData.set("content", content);
+        formData.set("modelName", model);
+        formData.set("privacyAttested", String(privacyAttested));
+        for (const file of selectedFiles) formData.append("files", file);
+        await apiFetch(`/api/v1/ask-collect/conversations/${id}/messages`, { method: "POST", body: formData });
+      } else {
+        await apiFetch(`/api/v1/ask-collect/conversations/${id}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ content, modelName: model, privacyAttested: false }),
+        });
+      }
       setBundle(await apiFetch<AskBundle>(`/api/v1/ask-collect/conversations/${id}`));
       setQuestion("");
+      setFiles([]);
+      setPrivacyAttested(false);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
       setSending(false);
     }
-  }, [conversationTitle, datasetVersionId, scopeKey]);
+  }, [conversationTitle, datasetVersionId, model, privacyAttested, scopeKey]);
 
   useEffect(() => {
     if (!initialPrompt || initialRun.current === `${scopeKey}:${initialPrompt}`) return;
@@ -97,6 +122,19 @@ export function AiCopilotPanel({
             {visibleMessages.map((message) => (
               <article className={`dataset-chat-message ${message.role}`} key={message.id}>
                 <MarkdownMessage>{message.content}</MarkdownMessage>
+                {message.metadata?.attachments?.length ? (
+                  <div className="ai-message-attachments">
+                    {message.metadata.attachments.map((attachment) => (
+                      <span key={attachment.id}><AppIcon name={attachment.mimeType.startsWith("image/") ? "image" : "file"} size={15} />{attachment.name}</span>
+                    ))}
+                  </div>
+                ) : null}
+                {message.role === "assistant" && message.metadata?.modelName ? (
+                  <div className="ai-message-model">
+                    <AppIcon name="sparkles" size={14} />
+                    ChatGPT · {message.metadata.modelName}
+                  </div>
+                ) : null}
                 {sourcesByMessage.get(message.id)?.length ? <details className="dataset-chat-sources"><summary>{locale === "zh" ? "查看证据来源" : "View evidence sources"}</summary>{sourcesByMessage.get(message.id)?.map((source) => <div className="evidence" key={source.id}><strong>{source.citationLabel ?? (locale === "zh" ? "来源" : "Source")}</strong><p>{source.excerpt}</p></div>)}</details> : null}
                 {message.role === "assistant" && onUseAnswer ? <button className="button button-secondary button-small" onClick={() => onUseAnswer(message.content)} type="button">{locale === "zh" ? "用于当前内容" : "Use in current content"}</button> : null}
               </article>
@@ -108,8 +146,20 @@ export function AiCopilotPanel({
       </div>
       {lastAssistant && starterPrompts.length ? <div className="ai-copilot-suggestions">{starterPrompts.slice(0, 3).map((prompt) => <button disabled={sending} key={prompt} onClick={() => void sendPrompt(prompt)} type="button">{prompt}</button>)}</div> : null}
       <div className="insight-ai-compose">
-        <textarea aria-label={locale === "zh" ? "与 ChatGPT 共创" : "Co-create with ChatGPT"} disabled={sending} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendPrompt(question); } }} placeholder={locale === "zh" ? "围绕当前内容继续提问、比较或改写…" : "Ask a follow-up, compare evidence, or co-write…"} rows={2} value={question} />
-        <button className="button" disabled={sending || !question.trim()} onClick={() => void sendPrompt(question)} type="button"><AppIcon name="sparkles" />{sending ? (locale === "zh" ? "分析中…" : "Analyzing…") : (locale === "zh" ? "发送" : "Send")}</button>
+        <AiPromptComposer
+          files={files}
+          locale={locale}
+          model={model}
+          onFilesChange={setFiles}
+          onModelChange={setModel}
+          onPrivacyAttestedChange={setPrivacyAttested}
+          onSubmit={() => void sendPrompt(question, files)}
+          onValueChange={setQuestion}
+          placeholder={locale === "zh" ? "围绕当前内容继续提问、比较、上传文件或共同撰写…" : "Ask a follow-up, compare evidence, attach files, or co-write…"}
+          privacyAttested={privacyAttested}
+          sending={sending}
+          value={question}
+        />
       </div>
     </section>
   );

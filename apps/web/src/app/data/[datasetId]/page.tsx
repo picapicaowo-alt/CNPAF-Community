@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
+import { AiPromptComposer } from "@/components/AiPromptComposer";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState, StatusPill } from "@/components/ui";
@@ -16,6 +17,7 @@ import {
 } from "@/features/datasets/api";
 import type { DatasetDetail } from "@/features/datasets/types";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import type { OpenAiModelId } from "@/lib/openai-model-catalog";
 import { AttachmentGallery } from "@/features/attachments/components/AttachmentGallery";
 
 type WorkspaceTab = "analysis" | "records" | "report";
@@ -24,6 +26,10 @@ type AskMessage = {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  metadata?: {
+    attachments?: Array<{ id: string; name: string; mimeType: string; byteSize: number }>;
+    modelName?: string;
+  };
 };
 type AskSource = {
   id: string;
@@ -85,6 +91,9 @@ export default function DatasetWorkspacePage() {
   const [shareLink, setShareLink] = useState("");
   const [archiveReason, setArchiveReason] = useState("");
   const [includeMedia, setIncludeMedia] = useState(false);
+  const [model, setModel] = useState<OpenAiModelId>("gpt-5.6-terra");
+  const [files, setFiles] = useState<File[]>([]);
+  const [privacyAttested, setPrivacyAttested] = useState(false);
 
   const load = useCallback(async (versionId?: string) => {
     setLoading(true);
@@ -159,7 +168,7 @@ export default function DatasetWorkspacePage() {
     );
   }
 
-  async function ask(nextQuestion = question) {
+  async function ask(nextQuestion = question, selectedFiles = files) {
     const content = nextQuestion.trim();
     if (!content || !selectedVersion || !canAsk) return;
     setBusy("ask");
@@ -182,11 +191,25 @@ export default function DatasetWorkspacePage() {
         id = result.conversation.id;
         setConversationId(id);
       }
-      await apiFetch(`/api/v1/ask-collect/conversations/${id}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      });
+      if (selectedFiles.length) {
+        const formData = new FormData();
+        formData.set("content", content);
+        formData.set("modelName", model);
+        formData.set("privacyAttested", String(privacyAttested));
+        for (const file of selectedFiles) formData.append("files", file);
+        await apiFetch(`/api/v1/ask-collect/conversations/${id}/messages`, {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        await apiFetch(`/api/v1/ask-collect/conversations/${id}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ content, modelName: model, privacyAttested: false }),
+        });
+      }
       setQuestion("");
+      setFiles([]);
+      setPrivacyAttested(false);
       await loadConversation(id);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -405,6 +428,13 @@ export default function DatasetWorkspacePage() {
               ) : conversation.messages.map((message) => (
                 <article className={`dataset-chat-message ${message.role}`} key={message.id}>
                   <MarkdownMessage>{message.content}</MarkdownMessage>
+                  {message.metadata?.attachments?.length ? (
+                    <div className="ai-message-attachments">
+                      {message.metadata.attachments.map((attachment) => (
+                        <span key={attachment.id}><AppIcon name={attachment.mimeType.startsWith("image/") ? "image" : "file"} size={15} />{attachment.name}</span>
+                      ))}
+                    </div>
+                  ) : null}
                   {sourcesByMessage.get(message.id)?.length ? (
                     <details className="dataset-chat-sources"><summary>{locale === "zh" ? `${sourcesByMessage.get(message.id)!.length} 个证据来源` : `${sourcesByMessage.get(message.id)!.length} evidence sources`}</summary>{sourcesByMessage.get(message.id)!.map((source) => <div className="evidence" key={source.id}><strong>{source.citationLabel ?? (locale === "zh" ? "来源" : "Source")}</strong><p>{source.excerpt}</p></div>)}</details>
                   ) : null}
@@ -433,9 +463,22 @@ export default function DatasetWorkspacePage() {
                   </span>
                 </label>
               ) : null}
-              <textarea disabled={!canAsk || busy === "ask"} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } }} placeholder={canAsk ? (locale === "zh" ? "询问这个数据集…" : "Ask about this dataset…") : !active ? (locale === "zh" ? "数据集已归档，AI 分析不可用" : "This dataset is archived; AI analysis is unavailable") : dataset.dataClassification !== "approved_evidence" ? (locale === "zh" ? "受限数据不可用于此 AI 工作流" : "Restricted data cannot be used in this AI workflow") : (locale === "zh" ? "当前账号没有 AI 问答权限" : "AI Q&A is not available for this account")} rows={2} value={question} />
-              <button aria-label={locale === "zh" ? "发送" : "Send"} className="button" disabled={!canAsk || busy === "ask" || !question.trim()} onClick={() => void ask()} type="button"><AppIcon name="arrow" /></button>
-              <span className="caption"><AppIcon name="check" />{locale === "zh" ? "已锁定当前 Dataset Version，AI 不会查询其他记录。" : "Locked to this Dataset Version; AI will not query other records."}</span>
+              <AiPromptComposer
+                disabled={!canAsk}
+                files={files}
+                locale={locale}
+                model={model}
+                onFilesChange={setFiles}
+                onModelChange={setModel}
+                onPrivacyAttestedChange={setPrivacyAttested}
+                onSubmit={() => void ask(question, files)}
+                onValueChange={setQuestion}
+                placeholder={canAsk ? (locale === "zh" ? "询问这个数据集，或上传文件一起分析…" : "Ask about this dataset or attach files to analyze…") : !active ? (locale === "zh" ? "数据集已归档，AI 分析不可用" : "This dataset is archived; AI analysis is unavailable") : dataset.dataClassification !== "approved_evidence" ? (locale === "zh" ? "受限数据不可用于此 AI 工作流" : "Restricted data cannot be used in this AI workflow") : (locale === "zh" ? "当前账号没有 AI 问答权限" : "AI Q&A is not available for this account")}
+                privacyAttested={privacyAttested}
+                scopeNote={locale === "zh" ? "已锁定当前 Dataset Version" : "Locked to this Dataset Version"}
+                sending={busy === "ask"}
+                value={question}
+              />
             </div>
           </section>
           <aside className="card dataset-context-panel">

@@ -334,6 +334,21 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const parentRoute = pathname === "/dashboard"
     ? null
     : parentRoutes.find((route) => route.match(pathname)) ?? null;
+  const mobileRootRoute = mobileNav.some((item) => item.href === pathname);
+  const mobileBackFallback = parentRoute?.href ?? (
+    ["forms", "insights", "reports", "settings", "people", "programs", "locations", "data"]
+      .includes(routeSection)
+      ? "/more"
+      : "/dashboard"
+  );
+
+  function goBackInPwa() {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.replace(mobileBackFallback);
+  }
 
   function isActive(item: NavItem) {
     const paths = [item.href, ...(item.aliases ?? [])];
@@ -481,15 +496,27 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
       <div className="app-content">
         <header className="mobile-app-header">
-          <Link className="mobile-brand" href="/dashboard">
-            <span className="brand-mark">
-              <BrandLogo className="brand-logo-nav" label="" sizes="32px" />
-            </span>
-            <span className="mobile-brand-copy">
-              <strong>CNPAF Community</strong>
-              <span>{roleLabel}</span>
-            </span>
-          </Link>
+          <div className="mobile-header-leading">
+            {!mobileRootRoute ? (
+              <button
+                aria-label={locale === "zh" ? "返回上一页" : "Go back"}
+                className="mobile-header-back"
+                onClick={goBackInPwa}
+                type="button"
+              >
+                <AppIcon name="back" />
+              </button>
+            ) : null}
+            <Link className="mobile-brand" href="/dashboard">
+              <span className="brand-mark">
+                <BrandLogo className="brand-logo-nav" label="" sizes="32px" />
+              </span>
+              <span className="mobile-brand-copy">
+                <strong>CNPAF Community</strong>
+                <span>{roleLabel}</span>
+              </span>
+            </Link>
+          </div>
         </header>
         <main className="app-main">
           {parentRoute ? (

@@ -160,9 +160,20 @@ export function AiModelSettings() {
         }
       />
 
-      {error ? <ErrorState message={error} retry={load} /> : null}
+      {error ? (
+        <ErrorState
+          message={
+            error === "Forbidden"
+              ? locale === "zh"
+                ? "当前账号没有 AI 工作流管理权限。模型选择现在位于洞察、数据、记录和报告的对话输入框中。"
+                : "This account cannot manage AI workflows. Model choice is available inside the chat composer on insights, data, records, and reports."
+              : error
+          }
+          retry={load}
+        />
+      ) : null}
       {notice ? <div className="feedback feedback-success" role="status"><strong>{notice}</strong></div> : null}
-      {loading ? <LoadingState rows={4} /> : (
+      {loading ? <LoadingState rows={4} /> : error ? null : (
         <>
           <section className="ai-model-current" aria-labelledby="current-model-heading">
             <div className="ai-model-current-icon"><AppIcon name="sparkles" size={22} weight="fill" /></div>

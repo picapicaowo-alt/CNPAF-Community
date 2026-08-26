@@ -291,9 +291,9 @@ export default function NewTaskPage() {
           <section className="card stack-sm">
             <h2>{locale === "zh" ? "负责人员" : "Assignees"}</h2>
             {members.length ? (
-              <div className="choice-list">
+              <div className="choice-list task-assignee-list">
                 {members.map((member) => (
-                  <label className="choice" key={member.userId}>
+                  <label className="choice task-assignee-choice" key={member.userId}>
                     <input
                       checked={assigneeIds.includes(member.userId)}
                       onChange={(event) =>
@@ -305,9 +305,9 @@ export default function NewTaskPage() {
                       }
                       type="checkbox"
                     />
-                    <span>
+                    <span className="task-assignee-copy">
                       <strong>{member.name}</strong>
-                      <span className="caption" style={{ display: "block" }}>
+                      <span className="caption">
                         {member.email}
                       </span>
                     </span>

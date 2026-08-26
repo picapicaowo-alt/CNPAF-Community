@@ -101,16 +101,6 @@ const modules: Module[] = [
     permissions: ["services.manage"],
   },
   {
-    group: "administration",
-    href: "/settings/ai",
-    icon: "sparkles",
-    en: "AI model",
-    zh: "AI 模型",
-    detailEn: "Choose the site-wide model for insights, chat, and reports",
-    detailZh: "选择洞察、问答和报告使用的全站模型",
-    permissions: ["ai.configure_workflows"],
-  },
-  {
     group: "account",
     href: "/account",
     icon: "settings",
@@ -183,14 +173,6 @@ export default function MorePage() {
       detailZh: "个人资料、安全设置与语言偏好。",
     },
   ].filter((group) => allowed.some((item) => item.group === group.key));
-  const groupColumns = [
-    groups.filter((group) =>
-      group.key === "operations" || group.key === "administration"
-    ),
-    groups.filter((group) =>
-      group.key === "evidence" || group.key === "account"
-    ),
-  ];
 
   async function signOut() {
     setSigningOut(true);
@@ -212,79 +194,91 @@ export default function MorePage() {
         }
       />
       <div className="more-directory">
-        {groupColumns.map((column, columnIndex) => (
-          <div className="more-column" key={columnIndex === 0 ? "work" : "evidence-account"}>
-            {column.map((group) => (
-              <section className="more-group" key={group.key}>
-                <header className="more-group-heading">
-                  <h2>{locale === "zh" ? group.zh : group.en}</h2>
-                  <p>{locale === "zh" ? group.detailZh : group.detailEn}</p>
-                </header>
-                <div className="more-link-list">
-                  {allowed
-                    .filter((item) => item.group === group.key)
-                    .map((item) => (
-                      <Link className="more-link-row" href={item.href} key={item.href}>
-                        <span className="more-link-icon"><AppIcon name={item.icon} /></span>
-                        <span className="more-link-copy">
-                          <strong>{locale === "zh" ? item.zh : item.en}</strong>
-                          <small>{locale === "zh" ? item.detailZh : item.detailEn}</small>
-                        </span>
-                        <AppIcon className="more-link-arrow" name="arrow" />
-                      </Link>
-                    ))}
-                  {group.key === "account" ? (
-                    <>
-                      {!installed ? (
-                        <button
-                          className="more-install-row"
-                          onClick={() => window.dispatchEvent(new Event(OPEN_INSTALL_EVENT))}
-                          type="button"
-                        >
-                          <span className="more-link-icon"><AppIcon name="download" /></span>
-                          <span className="more-link-copy">
-                            <strong>{locale === "zh" ? "安装 CNPAF Community" : "Install CNPAF Community"}</strong>
-                            <small>{locale === "zh" ? "按当前设备与浏览器显示正确安装方式" : "Show the right install path for this device and browser"}</small>
-                          </span>
-                          <AppIcon className="more-link-arrow" name="arrow" />
-                        </button>
-                      ) : null}
-                      <div className="more-language-row">
-                        <span className="more-link-icon"><AppIcon name="settings" /></span>
-                        <span className="more-link-copy">
-                          <strong>{locale === "zh" ? "界面语言" : "Interface language"}</strong>
-                          <small>{locale === "zh" ? "当前使用中文" : "Currently using English"}</small>
-                        </span>
-                        <button
-                          className="button button-secondary button-small"
-                          onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-                          type="button"
-                        >
-                          {locale === "zh" ? "English" : "中文"}
-                        </button>
-                      </div>
+        {[
+          groups.filter((group) => ["operations", "administration"].includes(group.key)),
+          groups.filter((group) => ["evidence", "account"].includes(group.key)),
+        ].map((column, columnIndex) => (
+          <div className="more-column" key={columnIndex}>
+            {column.map((group) => {
+              const headingId = `more-group-${group.key}`;
+
+              return (
+                <section className="more-group" key={group.key}>
+              <header className="more-group-heading">
+                <h2 id={headingId}>{locale === "zh" ? group.zh : group.en}</h2>
+                <p>{locale === "zh" ? group.detailZh : group.detailEn}</p>
+              </header>
+              <div
+                aria-labelledby={headingId}
+                className="more-link-list"
+                role="region"
+                tabIndex={0}
+              >
+                {allowed
+                  .filter((item) => item.group === group.key)
+                  .map((item) => (
+                    <Link className="more-link-row" href={item.href} key={item.href}>
+                      <span className="more-link-icon"><AppIcon name={item.icon} /></span>
+                      <span className="more-link-copy">
+                        <strong>{locale === "zh" ? item.zh : item.en}</strong>
+                        <small>{locale === "zh" ? item.detailZh : item.detailEn}</small>
+                      </span>
+                      <AppIcon className="more-link-arrow" name="arrow" />
+                    </Link>
+                  ))}
+                {group.key === "account" ? (
+                  <>
+                    {!installed ? (
                       <button
-                        className="more-signout-row"
-                        disabled={signingOut}
-                        onClick={signOut}
+                        className="more-install-row"
+                        onClick={() => window.dispatchEvent(new Event(OPEN_INSTALL_EVENT))}
                         type="button"
                       >
-                        <span className="more-link-icon"><AppIcon name="logout" /></span>
+                        <span className="more-link-icon"><AppIcon name="download" /></span>
                         <span className="more-link-copy">
-                          <strong>{locale === "zh" ? "安全退出" : "Sign out securely"}</strong>
-                          <small>
-                            {locale === "zh"
-                              ? "结束当前登录并返回登录页"
-                              : "End this session and return to sign in"}
-                          </small>
+                          <strong>{locale === "zh" ? "安装 CNPAF Community" : "Install CNPAF Community"}</strong>
+                          <small>{locale === "zh" ? "按当前设备与浏览器显示正确安装方式" : "Show the right install path for this device and browser"}</small>
                         </span>
                         <AppIcon className="more-link-arrow" name="arrow" />
                       </button>
-                    </>
-                  ) : null}
-                </div>
+                    ) : null}
+                    <div className="more-language-row">
+                      <span className="more-link-icon"><AppIcon name="settings" /></span>
+                      <span className="more-link-copy">
+                        <strong>{locale === "zh" ? "界面语言" : "Interface language"}</strong>
+                        <small>{locale === "zh" ? "当前使用中文" : "Currently using English"}</small>
+                      </span>
+                      <button
+                        className="button button-secondary button-small"
+                        onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+                        type="button"
+                      >
+                        {locale === "zh" ? "English" : "中文"}
+                      </button>
+                    </div>
+                    <button
+                      className="more-signout-row"
+                      disabled={signingOut}
+                      onClick={signOut}
+                      type="button"
+                    >
+                      <span className="more-link-icon"><AppIcon name="logout" /></span>
+                      <span className="more-link-copy">
+                        <strong>{locale === "zh" ? "安全退出" : "Sign out securely"}</strong>
+                        <small>
+                          {locale === "zh"
+                            ? "结束当前登录并返回登录页"
+                            : "End this session and return to sign in"}
+                        </small>
+                      </span>
+                      <AppIcon className="more-link-arrow" name="arrow" />
+                    </button>
+                  </>
+                ) : null}
+              </div>
               </section>
-            ))}
+              );
+            })}
           </div>
         ))}
       </div>

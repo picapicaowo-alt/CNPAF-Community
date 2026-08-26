@@ -105,3 +105,13 @@ test("the More directory stacks unequal groups in independent columns", () => {
   assert.match(styles, /\.more-directory\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.more-column\s*\{[\s\S]*?align-content: start/);
 });
+
+test("standalone mobile workspaces keep navigation and forms inside the viewport", () => {
+  const chrome = readFileSync(path.join(appRoot, "../components/AppChrome.tsx"), "utf8");
+  const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
+
+  assert.match(chrome, /className="mobile-header-back"/);
+  assert.match(chrome, /router\.back\(\)/);
+  assert.match(styles, /\.mobile-header-back\s*\{[\s\S]*?width: 44px;[\s\S]*?height: 44px/);
+  assert.match(styles, /\.forms-manage-page\s*\{[\s\S]*?max-width: 100%;[\s\S]*?overflow-x: clip/);
+});

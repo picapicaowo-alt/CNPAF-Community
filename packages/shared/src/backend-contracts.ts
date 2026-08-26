@@ -440,7 +440,9 @@ export const askConversationBodySchema = z.object({
 
 export const askMessageBodySchema = z.object({
   content: z.string().min(1).max(40_000),
-});
+  modelName: z.string().min(1).max(80).optional(),
+  privacyAttested: z.boolean().default(false),
+}).strict();
 
 export const askAiOutputSchema = z.object({
   answer: z.string().min(1).max(40_000),

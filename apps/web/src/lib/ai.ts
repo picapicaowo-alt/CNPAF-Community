@@ -30,6 +30,7 @@ import { scanPrivacy } from "./pii";
 import { audit } from "./audit";
 import { loadSourceKindPolicy } from "./source-kind";
 import { getOpenAiRuntimeConfig } from "@/config/server";
+import { isOpenAiModelId, type OpenAiModelId } from "./openai-model-catalog";
 
 const SAFETY_HINT =
   /不给他吃饭|虐待|打人|受伤|abuse|starv|neglect|hit him|hit her|not feeding/i;
@@ -105,6 +106,13 @@ export type AiImageInput = {
   body: Buffer;
 };
 
+export type AiFileInput = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  body: Buffer;
+};
+
 type OpenAiResponsesBody = {
   output_text?: string;
   output?: Array<{
@@ -120,6 +128,7 @@ export function buildOpenAiResponsesRequest(
   model: string,
   images: AiImageInput[] = [],
   outputSchema?: unknown,
+  files: AiFileInput[] = [],
 ) {
   const jsonUserInput = `Return a JSON object matching the required schema.\n${user}`;
   const content = [
@@ -127,6 +136,11 @@ export function buildOpenAiResponsesRequest(
     ...images.map((image) => ({
       type: "input_image",
       image_url: `data:${image.mimeType};base64,${image.body.toString("base64")}`,
+    })),
+    ...files.map((file) => ({
+      type: "input_file",
+      filename: file.filename,
+      file_data: `data:${file.mimeType};base64,${file.body.toString("base64")}`,
     })),
   ];
   const canUseStrictSchema = Boolean(
@@ -172,6 +186,7 @@ async function callOpenAi(
   model: string,
   images: AiImageInput[] = [],
   outputSchema?: unknown,
+  files: AiFileInput[] = [],
 ): Promise<{ raw: string; parsed: unknown; tokens?: { in: number; out: number } }> {
   const { apiKey, endpoint } = getOpenAiRuntimeConfig();
   const res = await fetch(endpoint, {
@@ -180,7 +195,7 @@ async function callOpenAi(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(buildOpenAiResponsesRequest(system, user, model, images, outputSchema)),
+    body: JSON.stringify(buildOpenAiResponsesRequest(system, user, model, images, outputSchema, files)),
   });
   const body = (await res.json()) as OpenAiResponsesBody;
   if (!res.ok) {
@@ -250,11 +265,25 @@ export async function executeConfiguredWorkflow(input: {
   createdByUserId?: string | null;
   reportRunId?: string | null;
   imageInputs?: AiImageInput[];
+  fileInputs?: AiFileInput[];
+  modelOverride?: OpenAiModelId;
+  requiredProviderKey?: "openai";
+  allowLocalFallback?: boolean;
 }) {
   const existingRun = (await db.select().from(aiRuns).where(eq(aiRuns.idempotencyKey, input.idempotencyKey)).limit(1))[0];
   const configuration = await resolveWorkflowConfiguration(input.workflowVersionId ?? existingRun?.workflowVersionId, input.workflowKey);
   const workflow = configuration.workflowVersion;
   const prompt = configuration.prompt;
+  if (
+    input.requiredProviderKey &&
+    configuration.providerKey !== input.requiredProviderKey
+  ) {
+    throw new Error(
+      `This workflow requires ${input.requiredProviderKey}, but ${configuration.providerKey} is currently published`,
+    );
+  }
+  if (input.modelOverride && !isOpenAiModelId(input.modelOverride)) throw new Error("Unsupported OpenAI model");
+  const requestedModel = input.modelOverride ?? configuration.modelName;
   const inputHash = contentHash(input.inputSnapshot);
   let run = existingRun;
   if (!run) {
@@ -264,7 +293,7 @@ export async function executeConfiguredWorkflow(input: {
       promptVersionId: prompt.id,
       outputSchemaVersionId: configuration.outputSchema?.id,
       provider: configuration.providerKey,
-      model: configuration.modelName,
+      model: requestedModel,
       promptVersion: prompt.version,
       outputSchemaVersion: configuration.outputSchema ? `${configuration.outputSchema.key}@${configuration.outputSchema.version}` : prompt.outputSchemaVersion,
       inputHash,
@@ -281,6 +310,7 @@ export async function executeConfiguredWorkflow(input: {
     run.reportRunId !== (input.reportRunId ?? null) ||
     run.createdByUserId !== (input.createdByUserId ?? null) ||
     run.inputHash !== inputHash
+    || (run.status !== "succeeded" && run.model !== requestedModel)
   ) throw new Error("Idempotency key is already associated with a different AI workflow request");
   if (run.status === "succeeded") return { run, output: run.parsedOutput };
   const [claimed] = await db.update(aiRuns).set({
@@ -300,7 +330,7 @@ export async function executeConfiguredWorkflow(input: {
 
   const resolveLocalOutput = async () => typeof input.localOutput === "function" ? await input.localOutput() : input.localOutput;
   let actualProvider = configuration.providerKey;
-  let actualModel = configuration.modelName;
+  let actualModel = requestedModel;
   let fallbackFrom: string | null = null;
   try {
     let parsed: unknown;
@@ -311,15 +341,21 @@ export async function executeConfiguredWorkflow(input: {
         const result = await callOpenAi(
           prompt.systemPrompt,
           JSON.stringify(input.inputSnapshot),
-          configuration.modelName,
+          requestedModel,
           input.imageInputs,
           configuration.outputSchema?.schema,
+          input.fileInputs,
         );
         parsed = validateConfiguredJson(result.parsed, configuration.outputSchema?.schema);
         raw = result.raw;
         tokens = result.tokens;
       } catch (error) {
-        if (!localFallbackEnabled(workflow)) throw error;
+        if (
+          input.allowLocalFallback === false ||
+          !localFallbackEnabled(workflow)
+        ) {
+          throw error;
+        }
         fallbackFrom = configuration.providerKey;
         actualProvider = "local_heuristic";
         actualModel = "local-v1";
@@ -346,7 +382,7 @@ export async function executeConfiguredWorkflow(input: {
       costMetadata: fallbackFrom ? { fallbackFrom } : {},
       updatedAt: new Date(),
     }).where(eq(aiRuns.id, run.id)).returning();
-    await audit({ actorId: input.createdByUserId, action: "ai_workflow_run.succeeded", entityType: "ai_run", entityId: run.id, metadata: { workflowKey: input.workflowKey, reportRunId: input.reportRunId ?? null, provider: actualProvider, fallbackFrom } });
+    await audit({ actorId: input.createdByUserId, action: "ai_workflow_run.succeeded", entityType: "ai_run", entityId: run.id, metadata: { workflowKey: input.workflowKey, reportRunId: input.reportRunId ?? null, provider: actualProvider, model: actualModel, fallbackFrom } });
     return { run: completed, output: parsed };
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI workflow failed";

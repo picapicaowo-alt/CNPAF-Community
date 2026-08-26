@@ -1,4 +1,5 @@
 import { asc, eq, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import {
   approvedFindings,
   attachments,
@@ -14,6 +15,7 @@ import { type askConversationBodySchema } from "@cnpaf/shared";
 import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
 import { executeConfiguredWorkflow } from "./ai";
+import type { AiFileInput, AiImageInput } from "./ai";
 import { scanPrivacy } from "./pii";
 import { matchesEvidenceFilters } from "./evidence-filters";
 import { normalizeAskAiOutput } from "./ask-citations";
@@ -21,6 +23,8 @@ import {
   markDatasetImagesSentToAi,
   prepareDatasetAiMedia,
 } from "./dataset-ai-media";
+import { putObject } from "./storage";
+import { isOpenAiModelId, type OpenAiModelId } from "./openai-model-catalog";
 
 type ConversationInput = z.infer<typeof askConversationBodySchema>;
 type AskScope = ConversationInput["scope"] & {
@@ -28,6 +32,140 @@ type AskScope = ConversationInput["scope"] & {
   includeMedia?: boolean;
   contextSources?: ConversationInput["contextSources"];
 };
+
+type IncomingAskFile = { name: string; mimeType: string; body: Buffer };
+type AskMessageOptions = {
+  modelName?: string;
+  privacyAttested?: boolean;
+  files?: IncomingAskFile[];
+};
+
+type StoredAskAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  byteSize: number;
+  storageKey: string;
+};
+
+const ASK_FILE_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  csv: "text/csv",
+  txt: "text/plain",
+  md: "text/markdown",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+};
+
+const MAX_ASK_FILES = 5;
+const MAX_ASK_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_ASK_TOTAL_BYTES = 25 * 1024 * 1024;
+
+function safeUploadName(value: string) {
+  const basename = value.split(/[\\/]/).pop()?.trim() || "attachment";
+  return basename.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 180);
+}
+
+function normalizedAskMime(name: string, declared: string) {
+  const extension = name.split(".").pop()?.toLowerCase() ?? "";
+  const expected = ASK_FILE_TYPES[extension];
+  if (!expected) throw new Error(`Unsupported attachment type: ${name}`);
+  if (declared && declared !== "application/octet-stream" && declared !== expected) {
+    const jpegAlias = expected === "image/jpeg" && declared === "image/jpg";
+    if (!jpegAlias) throw new Error(`Attachment type does not match its filename: ${name}`);
+  }
+  return expected;
+}
+
+function decodeXmlEntities(value: string) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
+}
+
+export async function extractAskFileTextForPrivacy(name: string, mimeType: string, body: Buffer) {
+  if (mimeType.startsWith("image/")) return "";
+  if (mimeType.startsWith("text/")) return body.toString("utf8");
+  if (mimeType === "application/pdf") {
+    const pdfParse = (await import("pdf-parse")).default;
+    return (await pdfParse(body, { max: 500 })).text;
+  }
+  if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const mammoth = await import("mammoth");
+    return (await mammoth.extractRawText({ buffer: body })).value;
+  }
+  if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+    const { strFromU8, unzipSync } = await import("fflate");
+    const archive = unzipSync(new Uint8Array(body));
+    return Object.entries(archive)
+      .filter(([path]) => path === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/.test(path))
+      .flatMap(([, bytes]) => {
+        const xml = strFromU8(bytes);
+        return [...xml.matchAll(/<(?:t|v)(?:\s[^>]*)?>([\s\S]*?)<\/(?:t|v)>/g)]
+          .map((match) => decodeXmlEntities(match[1] ?? ""));
+      })
+      .join("\n");
+  }
+  if (mimeType === "application/msword" || mimeType === "application/vnd.ms-excel") {
+    throw new Error(`Legacy Office attachment cannot be privacy-screened reliably; convert it to .docx or .xlsx: ${name}`);
+  }
+  throw new Error(`Attachment cannot be privacy-screened: ${name}`);
+}
+
+async function storeAskFiles(
+  conversationId: string,
+  actorId: string,
+  files: IncomingAskFile[],
+  privacyAttested: boolean,
+) {
+  if (!files.length) return [] as Array<{ attachment: StoredAskAttachment; body: Buffer }>;
+  if (!privacyAttested) throw new Error("Confirm that every attachment is de-identified before sending it to AI");
+  if (files.length > MAX_ASK_FILES) throw new Error(`A message can include at most ${MAX_ASK_FILES} attachments`);
+  if (files.reduce((sum, file) => sum + file.body.byteLength, 0) > MAX_ASK_TOTAL_BYTES) throw new Error("Attachments exceed the 25 MB combined limit");
+
+  const prepared = await Promise.all(files.map(async (file) => {
+    const name = safeUploadName(file.name);
+    if (!file.body.byteLength) throw new Error(`Attachment is empty: ${name}`);
+    if (file.body.byteLength > MAX_ASK_FILE_BYTES) throw new Error(`Attachment exceeds 10 MB: ${name}`);
+    const mimeType = normalizedAskMime(name, file.mimeType);
+    if (!mimeType.startsWith("image/")) {
+      let extractedText = "";
+      try {
+        extractedText = await extractAskFileTextForPrivacy(name, mimeType, file.body);
+      } catch (error) {
+        if (error instanceof Error && /privacy-screened|cannot be privacy-screened/.test(error.message)) throw error;
+        throw new Error(`Could not privacy-screen attachment: ${name}`);
+      }
+      if (!extractedText.trim()) throw new Error(`Attachment has no readable text to privacy-screen: ${name}`);
+      const scan = scanPrivacy({
+        sourceKind: "ask_collect_attachment",
+        qualitative: extractedText.slice(0, 500_000),
+        attribution: {},
+        policy: { allowedIdentifierFields: [], privacyDisposition: "flag" },
+      });
+      if (scan.status === "flagged") throw new Error(`Attachment contains possible personal information: ${name}`);
+    }
+    const id = randomUUID();
+    const extension = name.split(".").pop()?.toLowerCase() ?? "bin";
+    const storageKey = `ask-conversations/${actorId}/${conversationId}/${id}.${extension}`;
+    return {
+      attachment: { id, name, mimeType, byteSize: file.body.byteLength, storageKey },
+      body: file.body,
+    };
+  }));
+  for (const item of prepared) await putObject(item.attachment.storageKey, item.body, item.attachment.mimeType);
+  return prepared;
+}
 
 function searchableStatement(value: unknown) {
   return (value as { statement?: string } | null)?.statement?.trim() ?? "";
@@ -51,7 +189,12 @@ export async function createAskConversation(actorId: string, input: Conversation
   return conversation;
 }
 
-export async function addAskMessage(conversationId: string, actorId: string, content: string) {
+export async function addAskMessage(
+  conversationId: string,
+  actorId: string,
+  content: string,
+  options: AskMessageOptions = {},
+) {
   const conversation = (await db.select().from(askConversations).where(eq(askConversations.id, conversationId)).limit(1))[0];
   if (!conversation || conversation.userId !== actorId || conversation.status !== "active") throw new Error("Conversation not found");
   const questionPrivacy = scanPrivacy({
@@ -61,7 +204,20 @@ export async function addAskMessage(conversationId: string, actorId: string, con
     policy: { allowedIdentifierFields: [], privacyDisposition: "flag" },
   });
   if (questionPrivacy.status === "flagged") throw new Error("Question contains possible personal information and cannot be sent to the configured AI provider");
-  const [question] = await db.insert(askMessages).values({ conversationId, role: "user", content }).returning();
+  if (options.modelName && !isOpenAiModelId(options.modelName)) throw new Error("Unsupported OpenAI model");
+  const modelName = options.modelName as OpenAiModelId | undefined;
+  const priorMessages = await db.select({ role: askMessages.role, content: askMessages.content })
+    .from(askMessages)
+    .where(eq(askMessages.conversationId, conversationId))
+    .orderBy(asc(askMessages.createdAt));
+  const uploads = await storeAskFiles(conversationId, actorId, options.files ?? [], Boolean(options.privacyAttested));
+  const uploadMetadata = uploads.map(({ attachment }) => attachment);
+  const [question] = await db.insert(askMessages).values({
+    conversationId,
+    role: "user",
+    content,
+    metadata: { modelName: modelName ?? null, attachments: uploadMetadata },
+  }).returning();
   const candidates = await db
     .select({ approved: approvedFindings, version: recordVersions, record: records })
     .from(approvedFindings)
@@ -116,7 +272,19 @@ export async function addAskMessage(conversationId: string, actorId: string, con
     statement: source.statement,
     sourceType: "conversation_context" as const,
   }));
-  const sources = [...evidenceSources, ...mediaSources, ...conversationContextSources];
+  const uploadedSources = uploadMetadata.map((attachment) => ({
+    id: attachment.id,
+    label: `FILE-${attachment.id.slice(0, 8)}`,
+    statement: `User-provided conversation attachment: ${attachment.name}`,
+    sourceType: "conversation_upload" as const,
+  }));
+  const sources = [...evidenceSources, ...mediaSources, ...conversationContextSources, ...uploadedSources];
+  const uploadImageInputs: AiImageInput[] = uploads
+    .filter(({ attachment }) => attachment.mimeType.startsWith("image/"))
+    .map(({ attachment, body }) => ({ id: attachment.id, mimeType: attachment.mimeType, body }));
+  const uploadFileInputs: AiFileInput[] = uploads
+    .filter(({ attachment }) => !attachment.mimeType.startsWith("image/"))
+    .map(({ attachment, body }) => ({ id: attachment.id, filename: attachment.name, mimeType: attachment.mimeType, body }));
   const localOutput = {
     answer: sources.length
       ? `Found ${sources.length} authorized source(s) relevant to the current conversation scope. ` + sources.map((source) => `[${source.label}] ${source.statement}`).join(" ")
@@ -129,7 +297,15 @@ export async function addAskMessage(conversationId: string, actorId: string, con
     createdByUserId: actorId,
     inputSnapshot: {
       conversationId,
-      question: content,
+      latestQuestion: content,
+      conversationHistory: priorMessages.slice(-12),
+      responseInstructions: [
+        "Answer the latest question directly and treat earlier messages as conversational context.",
+        "Do not repeat the previous answer unless the user explicitly asks for repetition.",
+        "Use only the approved sources and user-provided files included in this input.",
+        "If the evidence cannot support a requested conclusion, say so clearly and suggest the next useful step.",
+      ],
+      selectedModel: modelName ?? null,
       requestedScope,
       datasetVersionId: datasetVersionId ?? null,
       mediaContext: {
@@ -141,7 +317,11 @@ export async function addAskMessage(conversationId: string, actorId: string, con
       approvedSources: sources.map((source) => ({ id: source.id, label: source.label, statement: source.statement })),
     },
     localOutput,
-    imageInputs,
+    imageInputs: [...imageInputs, ...uploadImageInputs],
+    fileInputs: uploadFileInputs,
+    modelOverride: modelName,
+    requiredProviderKey: "openai",
+    allowLocalFallback: false,
   });
   const generated = normalizeAskAiOutput(generation.output, sources);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
@@ -161,7 +341,7 @@ export async function addAskMessage(conversationId: string, actorId: string, con
     conversationId,
     role: "assistant",
     content: generated.answer,
-    metadata: { retrievalPolicy: "authorized_dataset_evidence_and_opt_in_images", questionMessageId: question.id, aiRunId: generation.run.id },
+    metadata: { retrievalPolicy: "authorized_dataset_evidence_opt_in_media_and_user_uploads", questionMessageId: question.id, aiRunId: generation.run.id, modelName: generation.run.model },
   }).returning();
   if (citedSources.length) {
     await db.insert(askMessageSources).values(citedSources.map((source) => ({
@@ -186,6 +366,11 @@ export async function getAskConversation(id: string, actorId: string) {
   const sourceIds = sources.filter((source) => source.sourceType === "approved_finding").map((source) => source.sourceId);
   const attachmentSourceIds = sources.filter((source) => source.sourceType === "attachment").map((source) => source.sourceId);
   const contextSourceIds = sources.filter((source) => source.sourceType === "conversation_context").map((source) => source.sourceId);
+  const uploadSourceIds = new Set(messages.flatMap((message) => {
+    if (message.role !== "user") return [];
+    const metadata = message.metadata as { attachments?: StoredAskAttachment[] } | null;
+    return (metadata?.attachments ?? []).map((attachment) => attachment.id);
+  }));
   const evidence = sourceIds.length ? await db
     .select({ id: approvedFindings.id, record: records })
     .from(approvedFindings)
@@ -212,6 +397,9 @@ export async function getAskConversation(id: string, actorId: string) {
     }).allowed,
   ).map(({ id: evidenceId }) => evidenceId));
   if (contextSourceIds.includes(conversation.id)) allowedIds.add(conversation.id);
+  for (const source of sources) {
+    if (source.sourceType === "conversation_upload" && uploadSourceIds.has(source.sourceId)) allowedIds.add(source.sourceId);
+  }
   const savedScope = (conversation.scope ?? {}) as AskScope;
   const datasetRecordVersions = savedScope.datasetVersionId
     ? await db.select({ recordVersionId: datasetRecords.recordVersionId })
@@ -239,7 +427,19 @@ export async function getAskConversation(id: string, actorId: string) {
   const restrictedMessageIds = new Set(sources.filter((source) => !allowedIds.has(source.sourceId)).map((source) => source.messageId));
   return {
     conversation,
-    messages: messages.map((message) => restrictedMessageIds.has(message.id) ? { ...message, content: "This saved answer is no longer available under your current access scope.", metadata: { accessRevoked: true } } : message),
+    messages: messages.map((message) => {
+      if (restrictedMessageIds.has(message.id)) return { ...message, content: "This saved answer is no longer available under your current access scope.", metadata: { accessRevoked: true } };
+      const metadata = message.metadata as { attachments?: StoredAskAttachment[] } | null;
+      return {
+        ...message,
+        metadata: {
+          ...(metadata ?? {}),
+          ...(metadata?.attachments
+            ? { attachments: metadata.attachments.map(({ storageKey: _storageKey, ...attachment }) => attachment) }
+            : {}),
+        },
+      };
+    }),
     sources: visibleSources,
   };
 }

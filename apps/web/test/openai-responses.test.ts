@@ -36,6 +36,32 @@ test("OpenAI Responses output and token usage are normalized for workflow runs",
   assert.deepEqual(result.tokens, { in: 12, out: 4 });
 });
 
+test("OpenAI requests include conversation documents as Responses API file inputs", () => {
+  const request = buildOpenAiResponsesRequest(
+    "Return JSON.",
+    "Compare the attachment with approved evidence.",
+    "gpt-5.6-terra",
+    [],
+    undefined,
+    [{
+      id: "file-1",
+      filename: "findings.pdf",
+      mimeType: "application/pdf",
+      body: Buffer.from("pdf"),
+    }],
+  );
+
+  const fileContent = request.input[0]?.content[1];
+  assert.deepEqual(fileContent && "filename" in fileContent
+    ? { type: fileContent.type, filename: fileContent.filename }
+    : null, {
+    type: "input_file",
+    filename: "findings.pdf",
+  });
+  assert.ok(fileContent && "file_data" in fileContent);
+  assert.match(fileContent.file_data, /^data:application\/pdf;base64,/);
+});
+
 test("OpenAI requests pin configured workflow schemas with strict structured output", () => {
   const schema = {
     type: "object",
