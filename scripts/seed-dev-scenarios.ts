@@ -123,10 +123,14 @@ const sectionId = stableUuid("template-section");
 const existingTemplate = (await db.select().from(templates).where(and(eq(templates.organizationId, organizationId), eq(templates.key, "community-access-follow-up"))).limit(1))[0];
 if (!existingTemplate) {
   await db.transaction(async (tx) => {
-    await tx.insert(templates).values({ id: templateId, key: "community-access-follow-up", templateTypeKey: "observation", organizationId, status: "published", currentPublishedVersionId: templateVersionId, createdById: admin.id });
+    // `templates.current_published_version_id` points back to `template_versions`.
+    // Create the parent first, then publish the version atomically to satisfy the
+    // database-level circular reference without disabling constraints.
+    await tx.insert(templates).values({ id: templateId, key: "community-access-follow-up", templateTypeKey: "activity", organizationId, status: "draft", createdById: admin.id });
     await tx.insert(templateVersions).values({ id: templateVersionId, templateId, version: 1, status: "published", nameEn: "Community Access and Follow-up Visit", nameZh: "社区服务可及性与跟进访视表", descriptionEn: "Structured operational follow-up for accessibility, language, transportation, and program preference observations.", descriptionZh: "用于记录无障碍、语言、交通接送与活动偏好的结构化运营访视。", configuration: { fixture: SCENARIO_KEY }, publishedAt: daysAgo(30), createdById: admin.id });
     await tx.insert(templateSections).values({ id: sectionId, templateVersionId, key: "visit-observation", labelEn: "Visit observation", labelZh: "访视观察", helpTextEn: "Record de-identified operational observations only.", helpTextZh: "仅记录已去标识化的运营观察。", sortOrder: 0 });
     await tx.insert(templateFields).values(fieldDefinitions.map((field, index) => ({ id: stableUuid(`field:${field.key}`), templateSectionId: sectionId, ...field, sortOrder: index, allowMissingReason: false, allowCustomEntry: false, validation: field.fieldTypeKey === "rating_scale" ? { min: 1, max: 5 } : {}, configuration: { fixture: SCENARIO_KEY } })));
+    await tx.update(templates).set({ status: "published", currentPublishedVersionId: templateVersionId, updatedAt: new Date() }).where(eq(templates.id, templateId));
   });
 }
 const actualTemplate = existingTemplate ?? (await db.select().from(templates).where(eq(templates.id, templateId)).limit(1))[0];
@@ -188,6 +192,6 @@ console.log(JSON.stringify({ ok: true, target: TARGET, fixture: SCENARIO_KEY, pr
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(error);
   process.exitCode = 1;
 });
