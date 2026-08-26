@@ -68,6 +68,7 @@ export function LoadingState({ rows = 3 }: { rows?: number }) {
       className="loading-list"
       aria-label={locale === "zh" ? "正在加载" : "Loading"}
       aria-busy="true"
+      role="status"
     >
       {Array.from({ length: rows }, (_, index) => (
         <div className="skeleton-row" key={index} />

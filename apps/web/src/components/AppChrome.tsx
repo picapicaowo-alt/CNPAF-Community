@@ -272,7 +272,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       .catch((error) => {
         if (active) setMe(null);
         if (error instanceof ClientApiError && error.status === 401)
-          router.replace("/login");
+          window.location.replace("/login");
       })
       .finally(() => {
         if (active) setLoaded(true);
@@ -280,12 +280,12 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [pathname, publicPage]);
+  }, [publicPage]);
 
   useEffect(() => {
     if (publicPage) return;
     const refreshProfile = () => {
-      void apiFetch<MeResponse>("/api/v1/auth/me")
+      void apiFetch<MeResponse>("/api/v1/auth/me", { cache: "reload" })
         .then(setMe)
         .catch(() => undefined);
     };
