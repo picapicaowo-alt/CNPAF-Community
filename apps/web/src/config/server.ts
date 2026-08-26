@@ -31,6 +31,16 @@ function httpUrl(name: string) {
   return url.toString();
 }
 
+function integer(name: string, fallback: number, minimum: number, maximum: number) {
+  const raw = optional(name);
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
 /**
  * The only web-runtime environment boundary. Server modules consume typed
  * configuration from here instead of reading process.env independently.
@@ -71,6 +81,12 @@ export function getOpenAiRuntimeConfig() {
     endpoint: httpUrl("OPENAI_BASE_URL"),
     webSearchEnabled: boolean("OPENAI_WEB_SEARCH_ENABLED", true),
     webSearchContextSize: webSearchContextSize as OpenAiWebSearchContextSize,
+  };
+}
+
+export function getInsightRuntimeConfig() {
+  return {
+    liveRefreshMs: integer("INSIGHT_LIVE_REFRESH_MS", 30_000, 5_000, 300_000),
   };
 }
 

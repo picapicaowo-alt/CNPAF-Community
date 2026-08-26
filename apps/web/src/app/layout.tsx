@@ -3,6 +3,7 @@ import { Noto_Sans_SC } from "next/font/google";
 import { AppChrome } from "@/components/AppChrome";
 import { LocaleProvider } from "@/components/LocaleProvider";
 import { InstallBanner, ServiceWorkerRegistrar } from "@/components/PwaBits";
+import { getInsightRuntimeConfig } from "@/config/server";
 import "./globals.css";
 import "./adaptive-design.css";
 
@@ -55,8 +56,14 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { liveRefreshMs } = getInsightRuntimeConfig();
   return (
-    <html data-scroll-behavior="smooth" lang="zh" suppressHydrationWarning>
+    <html
+      data-insight-refresh-ms={liveRefreshMs}
+      data-scroll-behavior="smooth"
+      lang="zh"
+      suppressHydrationWarning
+    >
       <body className={cnpafSans.variable}>
         <template
           data-impeccable-contract="43c0ea9d"

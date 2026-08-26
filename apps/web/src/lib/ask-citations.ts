@@ -1,6 +1,12 @@
 import { askAiOutputSchema } from "@cnpaf/shared";
+import { displayAskCitationLabels } from "./ask-citation-display";
 
-type AskCitationSource = { id: string; label: string };
+type AskCitationSource = {
+  id: string;
+  label: string;
+  displayLabel?: string;
+  href?: string;
+};
 
 function citationToken(value: string) {
   return value.trim().replace(/^\[|\]$/g, "").toLocaleLowerCase();
@@ -28,5 +34,9 @@ export function normalizeAskAiOutput(output: unknown, sources: AskCitationSource
         return { ...item, sourceId: aliases.get(citationToken(item.sourceId)) ?? item.sourceId };
       })
     : raw.citations;
-  return askAiOutputSchema.parse({ ...output, citations });
+  const parsed = askAiOutputSchema.parse({ ...output, citations });
+  return {
+    ...parsed,
+    answer: displayAskCitationLabels(parsed.answer, sources),
+  };
 }

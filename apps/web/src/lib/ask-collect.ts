@@ -20,6 +20,8 @@ import type { AiFileInput, AiImageInput } from "./ai";
 import { scanPrivacy } from "./pii";
 import { matchesEvidenceFilters } from "./evidence-filters";
 import { normalizeAskAiOutput } from "./ask-citations";
+import { isAskSourceVersionInScope } from "./ask-source-scope";
+import { recordReference } from "@/features/records/display";
 import {
   markDatasetImagesSentToAi,
   prepareDatasetAiMedia,
@@ -48,6 +50,15 @@ type StoredAskAttachment = {
   mimeType: string;
   byteSize: number;
   storageKey: string;
+};
+
+type AskSourceMetadata = Record<string, unknown>;
+type AskSource = {
+  id: string;
+  label: string;
+  statement: string;
+  sourceType: string;
+  metadata?: AskSourceMetadata;
 };
 
 const ASK_FILE_TYPES: Record<string, string> = {
@@ -173,6 +184,22 @@ function searchableStatement(value: unknown) {
   return (value as { statement?: string } | null)?.statement?.trim() ?? "";
 }
 
+function recordSourceMetadata(input: {
+  recordId: string;
+  recordReference: string;
+  sourceKind: string;
+  occurredAt?: Date | null;
+  snapshotMode: "live" | "dataset";
+}) {
+  return {
+    recordId: input.recordId,
+    recordReference: input.recordReference,
+    sourceKind: input.sourceKind,
+    occurredAt: input.occurredAt?.toISOString() ?? null,
+    snapshotMode: input.snapshotMode,
+  } satisfies AskSourceMetadata;
+}
+
 function readableEvidenceValue(value: unknown): string {
   if (value == null || value === "") return "Not provided";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -288,7 +315,12 @@ export async function addAskMessage(
   );
   const authorized = candidates
     .filter(({ approved, version, record }) =>
-      (!datasetVersionId || frozenRecordVersionIds.has(version.id)) &&
+      isAskSourceVersionInScope({
+        datasetVersionId,
+        frozenRecordVersionIds,
+        recordHeadVersionId: record.headVersionId,
+        recordVersionId: version.id,
+      }) &&
       matchesEvidenceFilters(evidenceScope, record, version, approved) &&
       ["clear", "redacted"].includes(record.privacyStatus) &&
       record.researchUseStatus !== "restricted" &&
@@ -305,12 +337,27 @@ export async function addAskMessage(
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 25);
-  const evidenceSources = authorized.map(({ approved }) => ({
-    id: approved.id,
-    label: `AF-${approved.id.slice(0, 8)}`,
-    statement: searchableStatement(approved.approvedValue) || "Approved evidence",
-    sourceType: "approved_finding" as const,
-  }));
+  const evidenceSources: AskSource[] = authorized.map(({ approved, record, version }) => {
+    const reference = recordReference({
+      id: record.id,
+      sourceKind: record.sourceKind,
+      occurredAt: version.occurredAt,
+      updatedAt: record.updatedAt,
+    });
+    return {
+      id: approved.id,
+      label: `AF-${reference}-${approved.id.slice(0, 8).toUpperCase()}`,
+      statement: searchableStatement(approved.approvedValue) || "Approved evidence",
+      sourceType: "approved_finding",
+      metadata: recordSourceMetadata({
+        recordId: record.id,
+        recordReference: reference,
+        sourceKind: record.sourceKind,
+        occurredAt: version.occurredAt,
+        snapshotMode: datasetVersionId ? "dataset" : "live",
+      }),
+    };
+  });
   const datasetRecordSources = datasetVersionId
     ? await getDatasetEvidenceForAi(actorId, datasetVersionId)
     : [];
@@ -348,7 +395,7 @@ export async function addAskMessage(
       answer,
     ]);
   }
-  const approvedRecordSources = approvedRecordRows
+  const approvedRecordSources: AskSource[] = approvedRecordRows
     .filter(({ record, version }) =>
       matchesEvidenceFilters(evidenceScope, record, version, null) &&
       ["clear", "redacted"].includes(record.privacyStatus) &&
@@ -362,12 +409,27 @@ export async function addAskMessage(
         dataClassification: "approved_evidence",
       }).allowed,
     )
-    .map(({ record, version }) => ({
-      id: version.id,
-      label: `REC-${record.id.slice(0, 8).toUpperCase()}`,
-      statement: approvedRecordStatement(version, answersByVersion.get(version.id) ?? []),
-      sourceType: "approved_record" as const,
-    }))
+    .map(({ record, version }) => {
+      const reference = recordReference({
+        id: record.id,
+        sourceKind: record.sourceKind,
+        occurredAt: version.occurredAt,
+        updatedAt: record.updatedAt,
+      });
+      return {
+        id: version.id,
+        label: reference,
+        statement: approvedRecordStatement(version, answersByVersion.get(version.id) ?? []),
+        sourceType: "approved_record",
+        metadata: recordSourceMetadata({
+          recordId: record.id,
+          recordReference: reference,
+          sourceKind: record.sourceKind,
+          occurredAt: version.occurredAt,
+          snapshotMode: "live",
+        }),
+      };
+    })
     .filter((source) => source.statement.trim());
   const media = requestedScope.includeMedia && datasetVersionId
     ? await prepareDatasetAiMedia(actorId, datasetVersionId)
@@ -387,7 +449,7 @@ export async function addAskMessage(
     statement: `User-provided conversation attachment: ${attachment.name}`,
     sourceType: "conversation_upload" as const,
   }));
-  const sources = [
+  const sources: AskSource[] = [
     ...evidenceSources,
     ...datasetRecordSources,
     ...approvedRecordSources,
@@ -421,6 +483,7 @@ export async function addAskMessage(
         "Use the approved sources and user-provided files as the only authority for claims about the current records, Dataset, report, or organization.",
         "You may supplement the answer with clearly labeled public background or comparative context from web search, but never use it to fill a gap in the internal evidence.",
         "The structured citations array is reserved for the UUIDs of approvedSources in this input; web citations are captured separately from tool annotations.",
+        "In the human-facing answer, cite internal evidence with the supplied source label and never expose a raw source UUID.",
         "If the evidence cannot support a requested conclusion, say so clearly and suggest the next useful step.",
       ],
       selectedModel: modelName ?? null,
@@ -432,7 +495,12 @@ export async function addAskMessage(
         attachmentSourceIds: mediaSources.map((source) => source.id),
         omittedAttachmentCount: (media?.totalAttachmentCount ?? 0) - mediaSources.length,
       },
-      approvedSources: sources.map((source) => ({ id: source.id, label: source.label, statement: source.statement })),
+      approvedSources: sources.map((source) => ({
+        id: source.id,
+        label: source.label,
+        statement: source.statement,
+        metadata: source.metadata ?? {},
+      })),
     },
     localOutput,
     imageInputs: [...imageInputs, ...uploadImageInputs],
@@ -482,7 +550,7 @@ export async function addAskMessage(
         sourceId: source.id,
         citationLabel: source.label,
         excerpt: source.statement.slice(0, 1000),
-        metadata: {},
+        metadata: source.metadata ?? {},
       })),
       ...externalSources.map((source) => ({
         messageId: answer.id,
@@ -515,7 +583,7 @@ export async function getAskConversation(id: string, actorId: string) {
     return (metadata?.attachments ?? []).map((attachment) => attachment.id);
   }));
   const evidence = sourceIds.length ? await db
-    .select({ id: approvedFindings.id, record: records })
+    .select({ id: approvedFindings.id, version: recordVersions, record: records })
     .from(approvedFindings)
     .innerJoin(recordVersions, eq(approvedFindings.recordVersionId, recordVersions.id))
     .innerJoin(records, eq(recordVersions.recordId, records.id))
@@ -539,7 +607,8 @@ export async function getAskConversation(id: string, actorId: string) {
         .where(eq(datasetRecords.datasetVersionId, savedScope.datasetVersionId))
     : [];
   const datasetRecordVersionIds = new Set(datasetRecordVersions.map((row) => row.recordVersionId));
-  const allowedIds = new Set(evidence.filter(({ record }) =>
+  const allowedIds = new Set(evidence.filter(({ version, record }) =>
+    (record.headVersionId === version.id || datasetRecordVersionIds.has(version.id)) &&
     ["clear", "redacted"].includes(record.privacyStatus) &&
     record.researchUseStatus !== "restricted" &&
     evaluateAuthorization(access, "records.view_approved", {
@@ -593,7 +662,47 @@ export async function getAskConversation(id: string, actorId: string) {
       }).allowed
     ) allowedIds.add(attachment.id);
   }
-  const visibleSources = sources.filter((source) => allowedIds.has(source.sourceId));
+  const recordMetadataBySourceId = new Map<string, AskSourceMetadata>();
+  for (const { id: evidenceId, version, record } of evidence) {
+    const reference = recordReference({
+      id: record.id,
+      sourceKind: record.sourceKind,
+      occurredAt: version.occurredAt,
+      updatedAt: record.updatedAt,
+    });
+    recordMetadataBySourceId.set(evidenceId, recordSourceMetadata({
+      recordId: record.id,
+      recordReference: reference,
+      sourceKind: record.sourceKind,
+      occurredAt: version.occurredAt,
+      snapshotMode: datasetRecordVersionIds.has(version.id) ? "dataset" : "live",
+    }));
+  }
+  for (const { version, record } of approvedRecordEvidence) {
+    const reference = recordReference({
+      id: record.id,
+      sourceKind: record.sourceKind,
+      occurredAt: version.occurredAt,
+      updatedAt: record.updatedAt,
+    });
+    recordMetadataBySourceId.set(version.id, recordSourceMetadata({
+      recordId: record.id,
+      recordReference: reference,
+      sourceKind: record.sourceKind,
+      occurredAt: version.occurredAt,
+      snapshotMode: datasetRecordVersionIds.has(version.id) ? "dataset" : "live",
+    }));
+  }
+  const visibleSources = sources
+    .filter((source) => allowedIds.has(source.sourceId))
+    .map((source) => {
+      const hydrated = recordMetadataBySourceId.get(source.sourceId);
+      if (!hydrated) return source;
+      const saved = source.metadata && typeof source.metadata === "object" && !Array.isArray(source.metadata)
+        ? source.metadata as AskSourceMetadata
+        : {};
+      return { ...source, metadata: { ...hydrated, ...saved } };
+    });
   const restrictedMessageIds = new Set(sources.filter((source) => !allowedIds.has(source.sourceId)).map((source) => source.messageId));
   return {
     conversation,

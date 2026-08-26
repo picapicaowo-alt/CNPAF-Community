@@ -143,6 +143,34 @@ export default function InsightCategoryPage() {
     void load();
   }, [load]);
 
+  const refreshRecords = useCallback(async () => {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const result = await apiFetch<{ records: InsightRecord[] }>(
+        `/api/v1/records?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
+        { cache: "no-store" },
+      );
+      setRecords(result.records ?? []);
+      setError("");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    const refresh = () => void refreshRecords();
+    const refreshMs = Number(document.documentElement.dataset.insightRefreshMs);
+    if (!Number.isFinite(refreshMs) || refreshMs <= 0) return;
+    const timer = window.setInterval(refresh, refreshMs);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [refreshRecords]);
+
   const availableSources = useMemo(
     () => [...new Set(records.map((record) => record.sourceKind))].sort(),
     [records],
@@ -262,12 +290,20 @@ export default function InsightCategoryPage() {
   const aiScope = useMemo(() => ({
     dateFrom,
     dateTo,
+    recordIds: filteredRecords.map((record) => record.id).sort(),
     ...(selectedSource
       ? { serviceTypeKeys: [selectedSource] }
       : selectedSources.length
         ? { serviceTypeKeys: selectedSources }
         : {}),
-  }), [dateFrom, dateTo, selectedSource, selectedSources]);
+  }), [dateFrom, dateTo, filteredRecords, selectedSource, selectedSources]);
+  const aiDataRevision = useMemo(
+    () => filteredRecords
+      .map((record) => `${record.id}:${record.updatedAt}:${record.reviewStatus}:${record.concernCount}`)
+      .sort()
+      .join("|"),
+    [filteredRecords],
+  );
   const aiInitialPrompt = useMemo(() => {
     const sourceDigest = bySource.map((row) => `${sourceKindLabel(row.sourceKind, locale)}: total=${row.total}, submitted=${row.submitted}, approved=${row.approved}, concerns=${row.concerns}`).join("; ");
     const categoryInstruction: Record<Category, string> = {
@@ -369,7 +405,7 @@ export default function InsightCategoryPage() {
               contextSources={[{ label: "CHART-METRICS", statement: aiInitialPrompt }]}
               description={locale === "zh" ? "ChatGPT 会先根据当前授权图表生成解读，并用你有权限访问的已批准证据交叉核实；需要时可检索外部公开来源补充视角，并提供链接供你核验。" : "ChatGPT starts from the current authorized charts and cross-checks them against approved evidence you can access. When useful, it can add outside perspective from public web sources with links for verification."}
               initialPrompt={aiInitialPrompt}
-              key={JSON.stringify(aiScope)}
+              key={JSON.stringify({ scope: aiScope, dataRevision: aiDataRevision })}
               locale={locale}
               scope={aiScope}
               starterPrompts={[

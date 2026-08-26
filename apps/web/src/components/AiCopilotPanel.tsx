@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { AiPromptComposer } from "@/components/AiPromptComposer";
-import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
+import { AiSourceList, aiSourceCitation, type AiDisplaySource } from "@/components/AiSourceList";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { displayAskCitationLabels } from "@/lib/ask-citation-display";
 import type { OpenAiModelId } from "@/lib/openai-model-catalog";
 
 type AskAttachment = { id: string; name: string; mimeType: string; byteSize: number };
@@ -15,7 +16,7 @@ type AskMessage = {
   content: string;
   metadata?: { attachments?: AskAttachment[]; modelName?: string };
 };
-type AskSource = AiDisplaySource & { messageId: string };
+type AskSource = AiDisplaySource & { messageId: string; sourceId: string };
 type AskBundle = { conversation: { id: string }; messages: AskMessage[]; sources: AskSource[] };
 
 type Props = {
@@ -144,7 +145,21 @@ export function AiCopilotPanel({
           <div className="insight-ai-messages" aria-live="polite">
             {visibleMessages.map((message) => (
               <article className={`dataset-chat-message ${message.role}`} key={message.id}>
-                <MarkdownMessage>{message.content}</MarkdownMessage>
+                <MarkdownMessage>
+                  {displayAskCitationLabels(
+                    message.content,
+                    (sourcesByMessage.get(message.id) ?? []).flatMap((source) => {
+                      if (!source.citationLabel) return [];
+                      const citation = aiSourceCitation(source, locale);
+                      return [{
+                        id: source.sourceId,
+                        label: source.citationLabel,
+                        displayLabel: citation.label,
+                        href: citation.href,
+                      }];
+                    }),
+                  )}
+                </MarkdownMessage>
                 {message.metadata?.attachments?.length ? (
                   <div className="ai-message-attachments">
                     {message.metadata.attachments.map((attachment) => (

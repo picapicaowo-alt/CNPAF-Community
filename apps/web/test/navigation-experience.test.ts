@@ -97,6 +97,17 @@ test("the four insight cards share one equal two-column grid", () => {
   assert.doesNotMatch(insightStyles, /grid-column: span [23456]/);
 });
 
+test("insight AI follows the live authorized record set", () => {
+  const page = readFileSync(path.join(appRoot, "insights/[category]/page.tsx"), "utf8");
+  const layout = readFileSync(path.join(appRoot, "layout.tsx"), "utf8");
+
+  assert.match(page, /dataset\.insightRefreshMs/);
+  assert.match(layout, /data-insight-refresh-ms=\{liveRefreshMs\}/);
+  assert.match(page, /recordIds: filteredRecords\.map/);
+  assert.match(page, /dataRevision: aiDataRevision/);
+  assert.match(page, /visibilitychange/);
+});
+
 test("the More directory keeps equal scrollable cards in independent columns", () => {
   const page = readFileSync(path.join(appRoot, "more/page.tsx"), "utf8");
   const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");

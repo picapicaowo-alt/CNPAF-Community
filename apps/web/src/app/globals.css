@@ -1647,6 +1647,21 @@ input[type="radio"] {
   font-size: 10px;
   overflow-wrap: anywhere;
 }
+.ai-internal-record-source {
+  display: grid;
+  gap: 2px;
+  color: var(--blue);
+  text-decoration: none;
+}
+.ai-internal-record-source:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ai-internal-record-source span {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 .dataset-ai-thinking {
   display: flex;
   width: fit-content;

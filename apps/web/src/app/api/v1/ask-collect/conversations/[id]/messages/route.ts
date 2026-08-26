@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { askMessageBodySchema } from "@cnpaf/shared";
 import { addAskMessage } from "@/lib/ask-collect";
-import { jsonError, requireAnyPermission } from "@/lib/http";
+import { jsonError, privateNoStoreJson, requireAnyPermission } from "@/lib/http";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { user, error } = await requireAnyPermission(["chat.ask_collect", "ask_collect.use"]);
@@ -23,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (files.length > 5) return jsonError("A message can include at most 5 attachments", 413);
     if (files.some((file) => file.size > 10 * 1024 * 1024)) return jsonError("Each attachment must be 10 MB or smaller", 413);
     if (files.reduce((sum, file) => sum + file.size, 0) > 25 * 1024 * 1024) return jsonError("Attachments exceed the 25 MB combined limit", 413);
-    return NextResponse.json(await addAskMessage(
+    return privateNoStoreJson(await addAskMessage(
       (await params).id,
       user.id,
       parsed.data.content,

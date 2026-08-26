@@ -85,3 +85,13 @@ export function requireRegistryManagement(registryKey: string) {
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
+
+export function privateNoStoreJson<T>(body: T, init?: { status?: number }) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      "Cache-Control": "private, no-store, max-age=0",
+      "Pragma": "no-cache",
+    },
+  });
+}

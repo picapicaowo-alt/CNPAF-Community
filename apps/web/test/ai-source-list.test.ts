@@ -9,10 +9,17 @@ test("AI source lists distinguish internal evidence and link external references
     locale: "zh",
     sources: [
       {
-        id: "internal-1",
+        id: "00000000-0000-4000-8000-000000000001",
         sourceType: "approved_record",
-        citationLabel: "REC-1234",
+        citationLabel: "FV-20260807-160D9654",
         excerpt: "Approved internal evidence",
+        metadata: {
+          recordId: "160d9654-0000-4000-8000-000000000001",
+          recordReference: "FV-20260807-160D9654",
+          sourceKind: "field_visit",
+          occurredAt: "2026-08-07T12:00:00.000Z",
+          snapshotMode: "live",
+        },
       },
       {
         id: "external-1",
@@ -29,6 +36,10 @@ test("AI source lists distinguish internal evidence and link external references
   assert.match(html, /rel="noopener noreferrer"/);
   assert.match(html, /外部来源/);
   assert.match(html, /内部证据/);
+  assert.match(html, /实时内部证据/);
+  assert.match(html, /现场访视/);
+  assert.match(html, /记录编号 FV-20260807-160D9654/);
+  assert.match(html, /href="\/records\/160d9654-0000-4000-8000-000000000001"/);
 });
 
 test("AI source lists never create links for unsafe external URLs", () => {

@@ -695,11 +695,29 @@ export async function getDatasetEvidenceForAi(actorId: string, datasetVersionId:
     source.version.id,
     source.version.fieldPolicy as FieldPolicy,
   );
+  const frozenVersions = rows.length
+    ? await db.select({ id: recordVersions.id, occurredAt: recordVersions.occurredAt })
+        .from(recordVersions)
+        .where(inArray(recordVersions.id, rows.map((row) => row.recordVersionId)))
+    : [];
+  const occurredAtByVersionId = new Map(
+    frozenVersions.map((version) => [version.id, version.occurredAt]),
+  );
   return rows.map((row, index) => ({
     id: row.recordVersionId,
     label: `DATASET-v${source.version.versionNumber}-REC-${String(index + 1).padStart(3, "0")}`,
     statement: JSON.stringify(row),
     sourceType: "approved_record" as const,
+    metadata: {
+      recordId: row.record.id,
+      recordReference: null,
+      sourceKind: row.record.sourceKind,
+      occurredAt: occurredAtByVersionId.get(row.recordVersionId)?.toISOString() ?? null,
+      snapshotMode: "dataset",
+      datasetVersionId: source.version.id,
+      datasetVersionNumber: source.version.versionNumber,
+      datasetOrdinal: index + 1,
+    },
   }));
 }
 

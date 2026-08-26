@@ -5,7 +5,7 @@ import {
   reportFiltersSchema,
   submitBodySchema,
 } from "@cnpaf/shared";
-import { requirePermission, requireUser, jsonError } from "@/lib/http";
+import { requirePermission, requireUser, jsonError, privateNoStoreJson } from "@/lib/http";
 import { listRecordsForUser, submitRecord, upsertDraft } from "@/lib/records";
 import { processJobs } from "@/lib/jobs";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
     user!,
     Object.keys(rawFilters).length ? parsed.data : undefined,
   );
-  return NextResponse.json({ records: rows });
+  return privateNoStoreJson({ records: rows });
 }
 
 export async function POST(req: Request) {
