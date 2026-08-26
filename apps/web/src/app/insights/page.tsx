@@ -12,6 +12,7 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { sourceKindLabel, workflowLabel } from "@/lib/display-labels";
 
 type Analytics = {
   authorizedRecordCount: number;
@@ -121,7 +122,7 @@ export default function InsightsPage() {
         description={
           locale === "zh"
             ? "先看变化和需要关注的事项，再看图表。"
-            : "Start with what changed and what needs attention — charts come second."
+            : "Start with what changed and what needs attention. Charts come second."
         }
       />
       {error ? <ErrorState message={error} retry={load} /> : null}
@@ -164,6 +165,7 @@ export default function InsightsPage() {
           {[
             {
               href: "/insights/changes",
+              priority: false,
               title: locale === "zh" ? "发生了什么变化？" : "What changed?",
               detail:
                 locale === "zh"
@@ -174,6 +176,7 @@ export default function InsightsPage() {
             },
             {
               href: "/insights/attention",
+              priority: totalConcerns > 0,
               title: locale === "zh" ? "什么需要关注？" : "What needs attention?",
               detail:
                 locale === "zh"
@@ -184,17 +187,21 @@ export default function InsightsPage() {
             },
             {
               href: "/insights/gaps",
+              priority: false,
               title: locale === "zh" ? "我们还不知道什么？" : "What do we still not know?",
               detail: lowestCompletion
-                ? `${lowestCompletion.sourceKind} · ${locale === "zh" ? "最低完成率" : "lowest completion"}`
+                ? locale === "zh"
+                  ? `${sourceKindLabel(lowestCompletion.sourceKind, locale)}，完成率最低`
+                  : `${sourceKindLabel(lowestCompletion.sourceKind, locale)} has the lowest completion rate`
                 : locale === "zh"
                   ? "目前没有足够的完成率数据。"
                   : "There is not enough completion data yet.",
-              value: lowestCompletion ? Math.round(lowestCompletion.rate * 100) : "—",
+              value: lowestCompletion ? Math.round(lowestCompletion.rate * 100) : "-",
               unit: lowestCompletion ? "%" : "",
             },
             {
               href: "/insights/coverage",
+              priority: false,
               title: locale === "zh" ? "下一步在哪里采集？" : "Where should we collect more?",
               detail:
                 locale === "zh"
@@ -203,9 +210,12 @@ export default function InsightsPage() {
               value: "→",
               unit: locale === "zh" ? "采集建议" : "guidance",
             },
-          ].map((item, index) => (
-            <Link className="insight-register-row" href={item.href} key={item.href}>
-              <span className="insight-register-rank">0{index + 1}</span>
+          ].map((item) => (
+            <Link
+              className={`insight-register-row${item.priority ? " is-priority" : ""}`}
+              href={item.href}
+              key={item.href}
+            >
               <span className="insight-register-copy">
                 <strong>{item.title}</strong>
                 <span>{item.detail}</span>
@@ -245,7 +255,7 @@ export default function InsightsPage() {
                   <StatusPill
                     tone={report.status === "published" ? "green" : "amber"}
                   >
-                    {report.status}
+                    {workflowLabel(report.status, locale)}
                   </StatusPill>
                 </div>
                 <AppIcon

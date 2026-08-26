@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui";
 import { apiFetch } from "@/lib/api-client";
 
 type Module = {
+  group: "operations" | "evidence" | "administration" | "account";
   href: string;
   icon: AppIconName;
   en: string;
@@ -18,6 +19,7 @@ type Module = {
 };
 const modules: Module[] = [
   {
+    group: "operations",
     href: "/programs",
     icon: "reports",
     en: "Programs",
@@ -27,6 +29,7 @@ const modules: Module[] = [
     permissions: ["programs.view"],
   },
   {
+    group: "operations",
     href: "/locations",
     icon: "locations",
     en: "Locations",
@@ -36,6 +39,7 @@ const modules: Module[] = [
     permissions: ["locations.view"],
   },
   {
+    group: "administration",
     href: "/people",
     icon: "people",
     en: "People & accounts",
@@ -45,6 +49,7 @@ const modules: Module[] = [
     permissions: ["people.view", "users.view"],
   },
   {
+    group: "evidence",
     href: "/data",
     icon: "data",
     en: "Data & sharing",
@@ -54,6 +59,7 @@ const modules: Module[] = [
     permissions: ["datasets.download", "datasets.create"],
   },
   {
+    group: "evidence",
     href: "/reports",
     icon: "reports",
     en: "Reports",
@@ -63,6 +69,7 @@ const modules: Module[] = [
     permissions: ["reports.view"],
   },
   {
+    group: "evidence",
     href: "/ops/analytics",
     icon: "insights",
     en: "Analytics detail",
@@ -72,6 +79,7 @@ const modules: Module[] = [
     permissions: ["analytics.view", "insights.view"],
   },
   {
+    group: "administration",
     href: "/ops/jobs",
     icon: "settings",
     en: "System jobs",
@@ -81,6 +89,7 @@ const modules: Module[] = [
     permissions: ["settings.manage"],
   },
   {
+    group: "administration",
     href: "/settings/configuration",
     icon: "settings",
     en: "Custom configuration",
@@ -90,6 +99,7 @@ const modules: Module[] = [
     permissions: ["services.manage"],
   },
   {
+    group: "account",
     href: "/account",
     icon: "settings",
     en: "My account",
@@ -118,6 +128,36 @@ export default function MorePage() {
       ),
     [permissions],
   );
+  const groups = [
+    {
+      key: "operations" as const,
+      en: "Operations",
+      zh: "采集与运营",
+      detailEn: "Programs and places that define collection scope.",
+      detailZh: "定义采集范围的项目与地点。",
+    },
+    {
+      key: "evidence" as const,
+      en: "Evidence and outputs",
+      zh: "证据与成果",
+      detailEn: "Research access, analysis, reports, and controlled sharing.",
+      detailZh: "研究访问、分析、报告与受控共享。",
+    },
+    {
+      key: "administration" as const,
+      en: "Administration",
+      zh: "系统管理",
+      detailEn: "People, services, and background operations.",
+      detailZh: "人员、服务与后台运行管理。",
+    },
+    {
+      key: "account" as const,
+      en: "Account",
+      zh: "个人账号",
+      detailEn: "Your profile, security, and language preference.",
+      detailZh: "个人资料、安全设置与语言偏好。",
+    },
+  ].filter((group) => allowed.some((item) => item.group === group.key));
   return (
     <div className="stack">
       <PageHeader
@@ -128,45 +168,45 @@ export default function MorePage() {
             : "Open specialized workspaces and account settings."
         }
       />
-      <div className="grid-3">
-        {allowed.map((item) => (
-          <Link
-            className="card card-interactive row-between"
-            href={item.href}
-            key={item.href}
-          >
-            <div className="row" style={{ flexWrap: "nowrap" }}>
-              <span className="empty-icon">
-                <AppIcon name={item.icon} />
-              </span>
-              <span>
-                <h3>{locale === "zh" ? item.zh : item.en}</h3>
-                <span className="caption">
-                  {locale === "zh" ? item.detailZh : item.detailEn}
-                </span>
-              </span>
+      <div className="more-directory">
+        {groups.map((group) => (
+          <section className="more-group" key={group.key}>
+            <header className="more-group-heading">
+              <h2>{locale === "zh" ? group.zh : group.en}</h2>
+              <p>{locale === "zh" ? group.detailZh : group.detailEn}</p>
+            </header>
+            <div className="more-link-list">
+              {allowed
+                .filter((item) => item.group === group.key)
+                .map((item) => (
+                  <Link className="more-link-row" href={item.href} key={item.href}>
+                    <span className="more-link-icon"><AppIcon name={item.icon} /></span>
+                    <span className="more-link-copy">
+                      <strong>{locale === "zh" ? item.zh : item.en}</strong>
+                      <small>{locale === "zh" ? item.detailZh : item.detailEn}</small>
+                    </span>
+                    <AppIcon className="more-link-arrow" name="arrow" />
+                  </Link>
+                ))}
+              {group.key === "account" ? (
+                <div className="more-language-row">
+                  <span className="more-link-icon"><AppIcon name="settings" /></span>
+                  <span className="more-link-copy">
+                    <strong>{locale === "zh" ? "界面语言" : "Interface language"}</strong>
+                    <small>{locale === "zh" ? "当前使用中文" : "Currently using English"}</small>
+                  </span>
+                  <button
+                    className="button button-secondary button-small"
+                    onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+                    type="button"
+                  >
+                    {locale === "zh" ? "English" : "中文"}
+                  </button>
+                </div>
+              ) : null}
             </div>
-            <AppIcon
-              name="arrow"
-              style={{ width: 18, height: 18, color: "var(--muted)" }}
-            />
-          </Link>
+          </section>
         ))}
-      </div>
-      <div className="card row-between">
-        <div>
-          <h3>{locale === "zh" ? "语言" : "Language"}</h3>
-          <p className="muted">
-            {locale === "zh" ? "当前：中文" : "Current: English"}
-          </p>
-        </div>
-        <button
-          className="button button-secondary"
-          onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
-          type="button"
-        >
-          {locale === "zh" ? "Switch to English" : "切换到中文"}
-        </button>
       </div>
     </div>
   );

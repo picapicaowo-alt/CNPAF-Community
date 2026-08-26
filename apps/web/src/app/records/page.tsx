@@ -36,6 +36,7 @@ import { fetchRecordFilterOptions } from "@/features/records/api";
 import { RecordsFiltersPanel } from "@/features/records/components/RecordsFiltersPanel";
 import { recordFilterStateFromParams } from "@/features/records/model";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { sourceKindLabel, workflowLabel } from "@/lib/display-labels";
 import { taskDate } from "@/lib/task-ui";
 
 type RecordRow = {
@@ -70,17 +71,17 @@ type Location = {
   city?: string | null;
 };
 
-function status(row: RecordRow) {
+function status(row: RecordRow, locale: "zh" | "en") {
   if (row.privacyStatus === "flagged")
-    return { label: "Privacy flagged", tone: "red" as const };
+    return { label: locale === "zh" ? "隐私已标记" : "Privacy flagged", tone: "red" as const };
   if (row.reviewStatus === "needs_completion")
-    return { label: "Needs update", tone: "amber" as const };
+    return { label: locale === "zh" ? "需要补充" : "Needs update", tone: "amber" as const };
   if (row.reviewStatus === "approved")
-    return { label: "Approved", tone: "green" as const };
+    return { label: workflowLabel("approved", locale), tone: "green" as const };
   if (["queued", "running"].includes(row.aiStatus))
-    return { label: "Analyzing", tone: "blue" as const };
+    return { label: locale === "zh" ? "正在分析" : "Analyzing", tone: "blue" as const };
   return {
-    label: row.reviewStatus || row.recordStatus,
+    label: workflowLabel(row.reviewStatus || row.recordStatus, locale),
     tone: "neutral" as const,
   };
 }
@@ -531,7 +532,7 @@ function RecordsContent() {
               </thead>
               <tbody>
                 {visible.map((row) => {
-                  const itemStatus = status(row);
+                  const itemStatus = status(row, locale);
                   const location = row.siteId
                     ? locationById.get(row.siteId)
                     : null;
@@ -568,10 +569,10 @@ function RecordsContent() {
                         </div>
                       </td>
                       <td>
-                        <strong>{location?.name ?? row.sourceKind}</strong>
+                        <strong>{location?.name ?? sourceKindLabel(row.sourceKind, locale)}</strong>
                         <div className="caption">
                           {location
-                            ? row.sourceKind
+                            ? sourceKindLabel(row.sourceKind, locale)
                             : locale === "zh"
                               ? "未关联地点"
                               : "No linked location"}
@@ -607,7 +608,7 @@ function RecordsContent() {
                           </div>
                         ) : null}
                       </td>
-                      <td>{row.researchUseStatus}</td>
+                      <td>{workflowLabel(row.researchUseStatus, locale)}</td>
                       <td>{taskDate(row.occurredAt ?? row.updatedAt, locale)}</td>
                     </tr>
                   );

@@ -14,6 +14,7 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { templateTypeLabel } from "@/lib/display-labels";
 import { FormPreviewPopover } from "@/features/forms/components/FormPreviewPopover";
 import {
   TemplateLaunchModal,
@@ -361,9 +362,12 @@ export default function FormsPage() {
         }
       />
       {canCreate ? (
-        <section className="form-quick-add" aria-label="Quick Add">
+        <section
+          className="form-quick-add"
+          aria-label={locale === "zh" ? "快速新建" : "Quick Add"}
+        >
           <div className="form-quick-add-label">
-            <span className="eyebrow">Quick Add</span>
+            <span className="eyebrow">{locale === "zh" ? "快速新建" : "Quick Add"}</span>
             <span>{locale === "zh" ? "常用模板" : "Favorite templates"}</span>
           </div>
           <div className="form-quick-add-items">
@@ -454,7 +458,9 @@ export default function FormsPage() {
                     <AppIcon name="forms" />
                   </span>
                   <div className="form-card-heading-copy">
-                    <span className="form-card-type">{template.templateTypeKey}</span>
+                    <span className="form-card-type">
+                      {templateTypeLabel(template.templateTypeKey, locale)}
+                    </span>
                     <h2>{name}</h2>
                   </div>
                   <div className="row form-status-group">
@@ -489,7 +495,7 @@ export default function FormsPage() {
                   ) : null}
                   <span>
                     <AppIcon name="clock" />
-                    v{display?.version ?? "—"}
+                    v{display?.version ?? "-"}
                   </span>
                 </div>
                 <div className="form-card-actions">

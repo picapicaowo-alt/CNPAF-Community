@@ -14,6 +14,13 @@ const reviewItemLabels: Record<string, { zh: string; en: string }> = {
   custom_entry: { zh: "自定义选项", en: "Custom entry" },
 };
 
+const templateTypeLabels: Record<string, { zh: string; en: string }> = {
+  activity: { zh: "活动", en: "Activity" },
+  survey: { zh: "问卷", en: "Survey" },
+  interview: { zh: "访谈", en: "Interview" },
+  observation: { zh: "观察", en: "Observation" },
+};
+
 const workflowLabels: Record<string, { zh: string; en: string }> = {
   pending: { zh: "待处理", en: "Pending" },
   open: { zh: "待处理", en: "Open" },
@@ -27,6 +34,18 @@ const workflowLabels: Record<string, { zh: string; en: string }> = {
   needs_completion: { zh: "退回补充", en: "Return for completion" },
   re_run_requested: { zh: "重新分析", en: "Run analysis again" },
   keep_free_text: { zh: "保留原文", en: "Keep as free text" },
+  approved: { zh: "已批准", en: "Approved" },
+  published: { zh: "已发布", en: "Published" },
+  draft: { zh: "草稿", en: "Draft" },
+  queued: { zh: "等待分析", en: "Queued" },
+  running: { zh: "正在分析", en: "Analyzing" },
+  flagged: { zh: "已标记", en: "Flagged" },
+  approved_for_research: { zh: "可用于研究", en: "Approved for research" },
+  not_submitted: { zh: "尚未提交审核", en: "Not submitted" },
+  not_assessed: { zh: "尚未评估", en: "Not assessed" },
+  restricted: { zh: "受限", en: "Restricted" },
+  pending_research_review: { zh: "等待研究审核", en: "Pending research review" },
+  excluded_from_research: { zh: "不用于研究", en: "Excluded from research" },
 };
 
 function humanize(value: string) {
@@ -44,6 +63,10 @@ export function reviewItemLabel(value: string, locale: Locale) {
 
 export function workflowLabel(value: string, locale: Locale) {
   return workflowLabels[value]?.[locale] ?? humanize(value);
+}
+
+export function templateTypeLabel(value: string, locale: Locale) {
+  return templateTypeLabels[value]?.[locale] ?? humanize(value);
 }
 
 export function reviewItemSummary(

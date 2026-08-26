@@ -4,44 +4,6 @@
  * field notebook, evidence registry, administrative console.
  */
 
-:root {
-  color-scheme: light;
-  --canvas: #edf2f3;
-  --surface: #fbfcfc;
-  --surface-soft: #f3f6f6;
-  --surface-blue: #e4f1f8;
-  --surface-green: #e7f5ef;
-  --surface-amber: #fff1df;
-  --surface-red: #fbe9e9;
-  --surface-violet: #eeeaf5;
-  --ink: #18323f;
-  --muted: #5b707a;
-  --muted-strong: #405964;
-  --line: #cad7db;
-  --line-strong: #aebfc5;
-  --navy: #075f98;
-  --navy-deep: #06466f;
-  --blue: #0873b8;
-  --blue-dark: #075b91;
-  --brand-orange: #e86f19;
-  --green: #116b4e;
-  --amber: #9a500f;
-  --red: #af343b;
-  --violet: #65538f;
-  --shadow-sm: 0 5px 14px rgba(20, 56, 72, 0.06);
-  --shadow-md: 0 18px 44px rgba(20, 56, 72, 0.11);
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 14px;
-  --radius-xl: 16px;
-  --font:
-    var(--font-cnpaf), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    ui-sans-serif, system-ui, sans-serif;
-  --font-data: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --content-max: 1440px;
-  --sidebar-width: 232px;
-}
-
 * {
   scrollbar-color: #9eb2ba transparent;
   scrollbar-width: thin;
@@ -399,7 +361,7 @@ textarea {
 
 input::placeholder,
 textarea::placeholder {
-  color: #6c7e85;
+  color: #536a74;
   opacity: 1;
 }
 
@@ -855,7 +817,7 @@ time {
 
 /* Reviewer and coordinator: evidence registry */
 .work-surface-evidence {
-  --content-max: 1480px;
+  --content-max: 1380px;
 }
 
 .work-surface-evidence .app-main {
@@ -883,7 +845,7 @@ time {
 
 .work-surface-evidence[data-route-section="review"] .app-main,
 .work-surface-evidence[data-route-section="records"] .app-main {
-  max-width: 1540px;
+  max-width: 1440px;
 }
 
 .work-surface-evidence .list-panel {
@@ -901,7 +863,7 @@ time {
 
 /* Administrator: dense, familiar control surface inside the brand system */
 .work-surface-admin {
-  --content-max: 1380px;
+  --content-max: 1320px;
   --canvas: #eef1f2;
 }
 
@@ -1130,6 +1092,104 @@ time {
   background: var(--surface-blue);
   color: var(--navy-deep);
   box-shadow: var(--shadow-md);
+}
+
+.install-prompt {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 80;
+  display: grid;
+  width: min(calc(100% - 32px), 430px);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 14px;
+  padding: 16px;
+  border: 1px solid #a9cbd9;
+  border-radius: var(--radius-lg);
+  background: rgba(251, 252, 252, 0.98);
+  box-shadow: 0 22px 60px rgba(20, 56, 72, 0.2);
+  color: var(--ink);
+}
+
+.install-prompt-logo {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--navy-deep);
+}
+
+.install-prompt-logo img {
+  width: 40px;
+  height: 40px;
+}
+
+.install-prompt-copy {
+  min-width: 0;
+  padding-right: 26px;
+}
+
+.install-prompt-copy strong {
+  font-size: 15px;
+}
+
+.install-prompt-copy p,
+.install-instructions p {
+  margin: 4px 0 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.install-prompt-action {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.install-prompt-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+}
+
+.install-prompt-close:hover {
+  background: var(--surface-soft);
+}
+
+.install-prompt-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.install-instructions {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border-left: 3px solid var(--brand-orange);
+  border-radius: var(--radius-sm);
+  background: var(--surface-amber);
+}
+
+@media (max-width: 620px) {
+  .install-prompt {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    width: calc(100% - 24px);
+  }
+
+  .public-shell .install-prompt {
+    bottom: max(12px, env(safe-area-inset-bottom));
+  }
 }
 
 @media (max-width: 1100px) {
@@ -1539,5 +1599,349 @@ time {
   .button,
   .btn {
     border: 1px solid ButtonText;
+  }
+}
+
+/* Role homes use one evidence spine and change the content, not just the heading. */
+.role-home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(250px, 0.65fr);
+  gap: 14px;
+}
+
+.role-home-primary {
+  display: grid;
+  min-height: 260px;
+  align-content: end;
+  gap: 8px;
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  background: var(--navy-deep);
+  box-shadow: var(--shadow-md);
+  color: #f7fbfc;
+}
+
+.role-home-primary > strong {
+  font-family: var(--font-data);
+  font-size: clamp(3rem, 7vw, 5.4rem);
+  font-weight: 620;
+  letter-spacing: -0.07em;
+  line-height: 0.95;
+}
+
+.role-home-label,
+.role-home-primary > span:not(.role-home-link) {
+  color: #d4e7ef;
+}
+
+.role-home-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.role-home-link svg,
+.role-home-stat svg,
+.role-home-link-row > svg {
+  width: 17px;
+  height: 17px;
+}
+
+.role-home-side {
+  display: grid;
+  gap: 14px;
+}
+
+.role-home-stat {
+  display: grid;
+  min-height: 123px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.role-home-stat > span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.role-home-stat > strong {
+  font-family: var(--font-data);
+  font-size: 2rem;
+  font-weight: 650;
+}
+
+.role-home-links {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.role-home-link-row {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.role-home-link-row:last-child {
+  border-bottom: 0;
+}
+
+.role-home-link-row > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}
+
+.role-home-link-row small {
+  color: var(--muted);
+}
+
+/* More is a role-filtered directory, grouped by purpose. */
+.more-directory {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+
+.more-group {
+  min-width: 0;
+}
+
+.more-group-heading {
+  min-height: 68px;
+  padding: 0 2px 12px;
+}
+
+.more-group-heading h2,
+.more-group-heading p {
+  margin: 0;
+}
+
+.more-group-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.more-link-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.more-link-row,
+.more-language-row {
+  display: grid;
+  min-height: 76px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.more-link-row:last-child,
+.more-language-row:last-child {
+  border-bottom: 0;
+}
+
+.more-link-row:hover {
+  background: var(--surface-blue);
+}
+
+.more-link-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--surface-blue);
+  color: var(--blue-dark);
+}
+
+.more-link-icon svg,
+.more-link-arrow {
+  width: 17px;
+  height: 17px;
+}
+
+.more-link-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.more-link-copy small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.more-link-arrow {
+  color: var(--muted);
+}
+
+/* Form management is a two-column working list at wide sizes. */
+.forms-manage-page .form-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.forms-manage-page .form-manage-card {
+  min-height: 276px;
+  grid-template-rows: auto minmax(42px, auto) auto auto auto;
+  gap: 12px;
+  padding: 18px;
+}
+
+.forms-manage-page .form-card-copy {
+  min-height: 42px;
+}
+
+/* Insights are a compact decision board with one semantic attention state. */
+.insight-register {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.insight-register-row,
+.insight-register-row:first-child {
+  display: grid;
+  min-height: 168px;
+  grid-column: span 3;
+  grid-template-areas:
+    "value arrow"
+    "copy copy";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.insight-register-row:first-child {
+  grid-column: span 4;
+  border-left: 3px solid var(--blue);
+  background: linear-gradient(135deg, var(--surface) 42%, var(--surface-blue));
+}
+
+.insight-register-row:nth-child(2) {
+  grid-column: span 2;
+}
+
+.insight-register-row.is-priority {
+  border-left: 3px solid var(--brand-orange);
+}
+
+.insight-register-row:hover,
+.insight-register-row:focus-visible {
+  border-color: var(--line-strong);
+  box-shadow: 0 12px 28px rgba(20, 56, 72, 0.1);
+  transform: translateY(-2px);
+}
+
+.insight-register-copy {
+  grid-area: copy;
+  align-content: start;
+  gap: 8px;
+}
+
+.insight-register-copy strong {
+  font-size: clamp(1.04rem, 1.5vw, 1.24rem);
+  letter-spacing: -0.02em;
+}
+
+.insight-register-copy span {
+  max-width: 48ch;
+  line-height: 1.55;
+}
+
+.insight-register-value {
+  grid-area: value;
+  justify-items: start;
+  padding: 0;
+}
+
+.insight-register-value strong {
+  color: var(--navy-deep);
+  font-size: 1.85rem;
+}
+
+.insight-register-row > svg {
+  display: block;
+  grid-area: arrow;
+  width: 19px;
+  height: 19px;
+  justify-self: end;
+  color: var(--blue-dark);
+  transition: transform 160ms ease;
+}
+
+.insight-register-row:hover > svg {
+  transform: translateX(3px);
+}
+
+@media (max-width: 900px) {
+  .role-home-hero,
+  .more-directory,
+  .forms-manage-page .form-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-register {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .insight-register-row,
+  .insight-register-row:first-child,
+  .insight-register-row:nth-child(2) {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .insight-register {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-register-row,
+  .insight-register-row:first-child {
+    min-height: 152px;
+  }
+
+  .role-home-primary {
+    min-height: 220px;
+    padding: 22px;
+  }
+
+  .more-link-row,
+  .more-language-row {
+    min-height: 70px;
+    gap: 10px;
+    padding: 10px 12px;
   }
 }

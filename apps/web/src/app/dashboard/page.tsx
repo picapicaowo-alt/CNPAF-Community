@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
-import { BrandSlogan } from "@/components/BrandSlogan";
 import { useI18n } from "@/components/LocaleProvider";
 import {
   EmptyState,
@@ -25,7 +24,11 @@ import {
   type TaskSummary,
 } from "@/lib/task-ui";
 
-type Me = { user: { name: string }; permissions: string[] };
+type Me = {
+  user: { name: string };
+  roles: Array<{ key: string; nameEn: string; nameZh: string }>;
+  permissions: string[];
+};
 type ReviewItem = {
   id: string;
   itemType: string;
@@ -33,7 +36,12 @@ type ReviewItem = {
   status: string;
   updatedAt: string;
 };
-type RecordRow = { id: string; reviewStatus: string };
+type RecordRow = {
+  id: string;
+  reviewStatus: string;
+  researchUseStatus?: string;
+};
+type ReportRow = { id: string; status: string };
 
 export default function DashboardPage() {
   const { locale } = useI18n();
@@ -41,6 +49,7 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [records, setRecords] = useState<RecordRow[]>([]);
+  const [reports, setReports] = useState<ReportRow[]>([]);
   const [drafts, setDrafts] = useState<LocalDraft[]>([]);
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +61,7 @@ export default function DashboardPage() {
     try {
       const identity = await apiFetch<Me>("/api/v1/auth/me");
       setMe(identity);
+      const canReadTasks = identity.permissions.includes("tasks.view");
       const canReview = identity.permissions.includes("review.view");
       const canReadRecords = identity.permissions.some((key) =>
         ["records.view", "records.view_own", "records.view_approved"].includes(
@@ -63,10 +73,13 @@ export default function DashboardPage() {
         reviewResult,
         recordResult,
         notificationResult,
+        reportResult,
         localDrafts,
       ] =
         await Promise.all([
-          apiFetch<{ tasks: TaskSummary[] }>("/api/v1/tasks/today"),
+          canReadTasks
+            ? apiFetch<{ tasks: TaskSummary[] }>("/api/v1/tasks/today")
+            : Promise.resolve({ tasks: [] }),
           canReview
             ? apiFetch<{ items: ReviewItem[] }>("/api/v1/review/inbox")
             : Promise.resolve({ items: [] }),
@@ -78,12 +91,16 @@ export default function DashboardPage() {
                 "/api/v1/notifications?status=unread",
               )
             : Promise.resolve({ notifications: [] }),
+          identity.permissions.includes("reports.view")
+            ? apiFetch<{ reports: ReportRow[] }>("/api/v1/reports")
+            : Promise.resolve({ reports: [] }),
           listLocalDrafts().catch(() => []),
         ]);
       setTasks(taskResult.tasks ?? []);
       setReviewItems(reviewResult.items ?? []);
       setRecords(recordResult.records ?? []);
       setNotifications(notificationResult.notifications ?? []);
+      setReports(reportResult.reports ?? []);
       setDrafts(localDrafts ?? []);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -97,6 +114,7 @@ export default function DashboardPage() {
   }, [load]);
 
   const permissions = useMemo(() => new Set(me?.permissions ?? []), [me]);
+  const roleKey = me?.roles?.[0]?.key ?? "volunteer";
   const staffView =
     permissions.has("review.view") || permissions.has("tasks.create");
   const currentTask =
@@ -111,7 +129,7 @@ export default function DashboardPage() {
   const hour = new Date().getHours();
   const greeting =
     locale === "zh"
-      ? `${hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好"}，${me?.user.name ?? ""}`
+      ? `${hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好"}，${me?.roles?.[0]?.nameZh ?? me?.user.name ?? ""}`
       : `${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}, ${me?.user.name ?? ""}`;
 
   if (loading)
@@ -129,6 +147,103 @@ export default function DashboardPage() {
       </>
     );
 
+  const openNotification = (notificationId: string) => {
+    setNotifications((current) =>
+      current.filter((notification) => notification.id !== notificationId),
+    );
+    void apiFetch(`/api/v1/notifications/${notificationId}/read`, {
+      method: "POST",
+    });
+  };
+
+  if (roleKey === "winston_research") {
+    const researchReady = records.filter(
+      (record) => record.researchUseStatus === "approved_for_research",
+    ).length;
+    const publishedReports = reports.filter(
+      (report) => report.status === "published",
+    ).length;
+    return (
+      <div className="stack stakeholder-home">
+        <PageHeader
+          title={locale === "zh" ? "研究入口" : "Research access"}
+          description={
+            locale === "zh"
+              ? "查看已批准证据、研究洞察与可共享成果。"
+              : "Explore approved evidence, research insights, and shareable outputs."
+          }
+        />
+        <NotificationPanel
+          locale={locale}
+          notifications={notifications}
+          onOpen={openNotification}
+        />
+        <section className="role-home-hero">
+          <Link className="role-home-primary" href="/insights">
+            <span className="role-home-label">
+              {locale === "zh" ? "授权证据范围" : "Authorized evidence"}
+            </span>
+            <strong>{records.length}</strong>
+            <span>
+              {locale === "zh"
+                ? "从已审核证据开始探索变化、关注点与缺口"
+                : "Start with reviewed evidence, changes, concerns, and gaps"}
+            </span>
+            <span className="role-home-link">
+              {locale === "zh" ? "打开洞察" : "Open insights"}
+              <AppIcon name="arrow" />
+            </span>
+          </Link>
+          <div className="role-home-side">
+            <Link className="role-home-stat" href="/records">
+              <span>{locale === "zh" ? "可用于研究" : "Research ready"}</span>
+              <strong>{researchReady}</strong>
+              <AppIcon name="arrow" />
+            </Link>
+            <Link className="role-home-stat" href="/reports">
+              <span>{locale === "zh" ? "已发布报告" : "Published reports"}</span>
+              <strong>{publishedReports}</strong>
+              <AppIcon name="arrow" />
+            </Link>
+          </div>
+        </section>
+        <section>
+          <div className="section-title">
+            <h2>{locale === "zh" ? "研究资源" : "Research resources"}</h2>
+          </div>
+          <div className="role-home-links">
+            {[
+              {
+                href: "/data",
+                icon: "data" as const,
+                title: locale === "zh" ? "数据集与下载" : "Datasets and downloads",
+                detail: locale === "zh" ? "使用受控导出继续分析" : "Continue analysis with controlled exports",
+              },
+              {
+                href: "/insights/gaps",
+                icon: "insights" as const,
+                title: locale === "zh" ? "证据缺口" : "Evidence gaps",
+                detail: locale === "zh" ? "识别仍需补充的来源与范围" : "Identify sources and scopes that need more evidence",
+              },
+              {
+                href: "/reports",
+                icon: "reports" as const,
+                title: locale === "zh" ? "研究报告" : "Research reports",
+                detail: locale === "zh" ? "查看人工编辑与发布的成果" : "Read human-authored, published findings",
+              },
+            ].map((item) => (
+              <Link className="role-home-link-row" href={item.href} key={item.href}>
+                <span className="attention-icon"><AppIcon name={item.icon} /></span>
+                <span><strong>{item.title}</strong><small>{item.detail}</small></span>
+                <AppIcon name="arrow" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   if (!staffView) {
     return (
       <div className="stack">
@@ -136,18 +251,10 @@ export default function DashboardPage() {
           title={locale === "zh" ? "今天" : "Today"}
           description={greeting}
         />
-        <BrandSlogan className="dashboard-slogan" compact />
         <NotificationPanel
           locale={locale}
           notifications={notifications}
-          onOpen={(notificationId) => {
-            setNotifications((current) =>
-              current.filter((notification) => notification.id !== notificationId),
-            );
-            void apiFetch(`/api/v1/notifications/${notificationId}/read`, {
-              method: "POST",
-            });
-          }}
+          onOpen={openNotification}
         />
         {currentTask ? (
           <Link
@@ -260,8 +367,13 @@ export default function DashboardPage() {
   const needsUpdate = records.filter(
     (record) => record.reviewStatus === "needs_completion",
   ).length;
-  const adminView = permissions.has("people.create_account");
-  const attentionItems = [
+  const researchReady = records.filter(
+    (record) => record.researchUseStatus === "approved_for_research",
+  ).length;
+  const adminView = roleKey === "admin";
+  const researchView = roleKey === "research_lead";
+  const operationsView = roleKey === "operations_reviewer";
+  const defaultAttentionItems = [
     {
       href: "/review",
       icon: "review" as const,
@@ -299,46 +411,76 @@ export default function DashboardPage() {
       priority: needsUpdate > 0,
     },
   ];
+  const researchAttentionItems = [
+    {
+      href: "/records",
+      icon: "records" as const,
+      count: researchReady,
+      label: locale === "zh" ? "可用于研究的证据" : "Evidence ready for research",
+      detail: locale === "zh" ? "查看已批准进入研究范围的记录" : "Review records approved for research use",
+      action: locale === "zh" ? "查看证据" : "View evidence",
+      priority: false,
+    },
+    {
+      href: "/insights/gaps",
+      icon: "insights" as const,
+      count: needsUpdate,
+      label: locale === "zh" ? "需要补齐的证据" : "Evidence gaps to close",
+      detail: locale === "zh" ? "定位不完整来源与采集覆盖缺口" : "Locate incomplete sources and coverage gaps",
+      action: locale === "zh" ? "查看缺口" : "View gaps",
+      priority: needsUpdate > 0,
+    },
+    {
+      href: "/reports",
+      icon: "reports" as const,
+      count: reports.length,
+      label: locale === "zh" ? "研究报告" : "Research reports",
+      detail: locale === "zh" ? "整理证据并维护报告版本" : "Synthesize evidence and maintain report versions",
+      action: locale === "zh" ? "打开报告" : "Open reports",
+      priority: false,
+    },
+  ];
+  const attentionItems = researchView
+    ? researchAttentionItems
+    : defaultAttentionItems;
+  const homeTitle = adminView
+    ? locale === "zh" ? "系统管理" : "System administration"
+    : researchView
+      ? locale === "zh" ? "研究工作台" : "Research workspace"
+      : locale === "zh" ? "审核工作台" : "Review workspace";
+  const homeDescription = adminView
+    ? locale === "zh"
+      ? "先查看系统待办，再进入人员、表单与配置管理。"
+      : "Review system work, then manage people, forms, and configuration."
+    : researchView
+      ? locale === "zh"
+        ? "从可用证据、缺口和报告出发，决定下一步研究工作。"
+        : "Start with usable evidence, gaps, and reports to direct the next research step."
+      : locale === "zh"
+        ? "优先核对风险和缺失证据，再协调今天的采集任务。"
+        : "Review risky or incomplete evidence first, then coordinate today's collection work.";
   return (
     <div className={`stack staff-command ${adminView ? "staff-command-admin" : "staff-command-evidence"}`}>
       <PageHeader
-        title={
-          adminView
-            ? locale === "zh"
-              ? "管理概览"
-              : "Administration"
-            : locale === "zh"
-              ? "证据登记"
-              : "Evidence docket"
-        }
-        description={
-          locale === "zh"
-            ? adminView
-              ? "查看待处理事项，并进入人员、表单与系统配置。"
-              : "先处理有风险或缺失的证据，再安排今天的采集工作。"
-            : adminView
-              ? "Review pending work, then manage people, forms, and configuration."
-              : "Resolve risky or incomplete evidence before scheduling collection work."
-        }
+        title={homeTitle}
+        description={homeDescription}
       />
-      <BrandSlogan className="dashboard-slogan" compact />
       <NotificationPanel
         locale={locale}
         notifications={notifications}
-        onOpen={(notificationId) => {
-          setNotifications((current) =>
-            current.filter((notification) => notification.id !== notificationId),
-          );
-          void apiFetch(`/api/v1/notifications/${notificationId}/read`, {
-            method: "POST",
-          });
-        }}
+        onOpen={openNotification}
       />
       <section>
         <div className="section-title">
-          <h2>{locale === "zh" ? "处置队列" : "Action queue"}</h2>
+          <h2>
+            {researchView
+              ? locale === "zh" ? "研究优先事项" : "Research priorities"
+              : locale === "zh" ? "处置队列" : "Action queue"}
+          </h2>
           <span className="caption">
-            {locale === "zh" ? "按证据风险排序" : "Ordered by evidence risk"}
+            {researchView
+              ? locale === "zh" ? "按研究可用性组织" : "Organized by research readiness"
+              : locale === "zh" ? "按证据风险排序" : "Ordered by evidence risk"}
           </span>
         </div>
         <div className="attention-register">
@@ -368,7 +510,11 @@ export default function DashboardPage() {
 
       <section>
         <div className="section-title">
-          <h2>{locale === "zh" ? "今天" : "Today"}</h2>
+          <h2>
+            {operationsView
+              ? locale === "zh" ? "今日审核与采集" : "Today's review and collection"
+              : locale === "zh" ? "今天" : "Today"}
+          </h2>
         </div>
         <div className="content-aside">
           <div className="list-panel">

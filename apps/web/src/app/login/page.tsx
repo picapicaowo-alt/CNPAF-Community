@@ -41,12 +41,11 @@ export default function LoginPage() {
             label="Chinese Psychological Assistance Foundation"
             priority
           />
-          <BrandSlogan className="auth-slogan" />
-          <p>
-            {locale === "zh"
-              ? "让每一份社区声音都有清晰去向：安全采集、协作审核，并把已批准的证据转化为可信洞察。"
-              : "Give every community voice a clear path forward, collect safely, review together, and turn approved evidence into trusted insight."}
-          </p>
+          <BrandSlogan
+            className="auth-slogan"
+            showChinese={locale === "zh"}
+          />
+          <p>A future shaped by every community.</p>
         </div>
         <span className="auth-footnote">
           Community Needs & Programs Assessment Framework

@@ -33,6 +33,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [filter, setFilter] = useState<(typeof filters)[number]>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [programId, setProgramId] = useState("");
   const [templateVersionId, setTemplateVersionId] = useState("");
@@ -181,6 +182,15 @@ export default function TasksPage() {
   const visibleIds = visible.map((task) => task.id);
   const allVisibleSelected =
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  const activeFilterCount = [
+    query.trim(),
+    programId,
+    templateVersionId,
+    locationId,
+    assigneeId,
+    dueFrom,
+    dueTo,
+  ].filter(Boolean).length;
 
   function toggleVisible() {
     setSelectedIds((current) =>
@@ -195,9 +205,13 @@ export default function TasksPage() {
       <PageHeader
         title={locale === "zh" ? "任务" : "Tasks"}
         description={
-          locale === "zh"
-            ? "规划由谁、在何时何地采集什么。"
-            : "Plan who collects what, where, and when."
+          canCreate
+            ? locale === "zh"
+              ? "规划由谁、在何时何地采集什么。"
+              : "Plan who collects what, where, and when."
+            : locale === "zh"
+              ? "查看并完成分配给你的采集任务。"
+              : "View and complete your assigned collection tasks."
         }
         actions={
           canCreate ? (
@@ -221,25 +235,60 @@ export default function TasksPage() {
         ))}
       </div>
       {!loading && !error && tasks.length ? (
-        <section className="card stack-sm">
-          <div className="row-between mobile-stack">
-            <div>
-              <h2>{locale === "zh" ? "筛选任务" : "Filter tasks"}</h2>
-              <div className="caption">
+        <section className={`card task-filter-card${filtersOpen ? " expanded" : ""}`}>
+          <button
+            aria-expanded={filtersOpen}
+            className="task-filter-toggle"
+            onClick={() => setFiltersOpen((current) => !current)}
+            type="button"
+          >
+            <span className="task-filter-toggle-icon">
+              <AppIcon name="filter" />
+            </span>
+            <span className="task-filter-toggle-copy">
+              <strong>{locale === "zh" ? "筛选任务" : "Filter tasks"}</strong>
+              <span>
                 {locale === "zh"
                   ? `显示 ${visible.length} / ${tasks.length} 个任务`
                   : `Showing ${visible.length} of ${tasks.length} tasks`}
+              </span>
+            </span>
+            {activeFilterCount ? (
+              <span className="task-filter-count">
+                {locale === "zh"
+                  ? `${activeFilterCount} 项已应用`
+                  : `${activeFilterCount} applied`}
+              </span>
+            ) : null}
+            <span className="task-filter-action">
+              {filtersOpen
+                ? locale === "zh"
+                  ? "收起"
+                  : "Collapse"
+                : locale === "zh"
+                  ? "展开"
+                  : "Expand"}
+              <span aria-hidden="true">⌄</span>
+            </span>
+          </button>
+          {filtersOpen ? (
+            <div className="task-filter-content stack-sm">
+              <div className="row-between">
+                <span className="caption">
+                  {locale === "zh"
+                    ? "按项目、表单、地点、负责人或截止日期缩小范围"
+                    : "Narrow by program, form, location, assignee, or due date"}
+                </span>
+                <button
+                  className="button button-secondary button-small"
+                  disabled={!activeFilterCount}
+                  onClick={resetFilters}
+                  type="button"
+                >
+                  {locale === "zh" ? "重置筛选" : "Reset filters"}
+                </button>
               </div>
-            </div>
-            <button
-              className="button button-secondary button-small"
-              onClick={resetFilters}
-              type="button"
-            >
-              {locale === "zh" ? "重置筛选" : "Reset filters"}
-            </button>
-          </div>
-          <div className="form-grid">
+              <div className="form-grid">
             <label className="field-full">
               {locale === "zh" ? "搜索" : "Search"}
               <input
@@ -325,7 +374,9 @@ export default function TasksPage() {
                 value={dueTo}
               />
             </label>
-          </div>
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
       {canAssign || canEdit ? (

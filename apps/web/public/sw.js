@@ -1,11 +1,13 @@
-const CACHE = "cnpaf-shell-v3";
+const CACHE = "cnpaf-shell-v4";
 const SHELL = [
   "/login",
-  "/dashboard",
   "/offline",
-  "/capture",
   "/manifest.webmanifest",
   "/icon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-maskable-512.png",
+  "/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {

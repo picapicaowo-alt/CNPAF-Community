@@ -157,6 +157,7 @@ export default function NewTaskPage() {
       .catch(() => setMembers([]));
   }, [programId]);
   const selectedProgram = programs.find((program) => program.id === programId);
+  const selectedForm = forms.find((form) => form.id === templateVersionId);
   const visibleLocations = useMemo(
     () =>
       locations.filter(
@@ -222,8 +223,8 @@ export default function NewTaskPage() {
               ? "已复制原任务的表单与设置；负责人、日期和状态需重新确认。"
               : "Form and settings were copied; assignees, dates, and status must be confirmed again."
             : locale === "zh"
-              ? "明确采集内容、地点、截止时间与负责人员。"
-              : "Define what to collect, where, by when, and who is responsible."
+              ? "选择一份已发布表单，再明确地点、截止时间与负责人员。"
+              : "Choose a published form, then define where, by when, and who is responsible."
         }
         actions={
           <Link
@@ -257,6 +258,35 @@ export default function NewTaskPage() {
                 ? "关闭此选项会保存为草稿，之后可在任务详情中开放。"
                 : "Turn this off to save a draft that can be opened later."}
             </p>
+          </section>
+          <section className="card task-form-link-card stack-sm">
+            <div className="task-form-link-heading">
+              <span><AppIcon name="forms" /></span>
+              <div>
+                <h2>{locale === "zh" ? "任务—表单联动" : "Task–form link"}</h2>
+                <p>
+                  {locale === "zh"
+                    ? "每个任务绑定一个已发布表单版本。"
+                    : "Every task links to one published form version."}
+                </p>
+              </div>
+            </div>
+            {selectedForm ? (
+              <div className="task-form-link-selection">
+                <span>{locale === "zh" ? "当前绑定" : "Linked form"}</span>
+                <strong>
+                  {locale === "zh" ? selectedForm.nameZh : selectedForm.nameEn}
+                </strong>
+                <small>v{selectedForm.version}</small>
+              </div>
+            ) : null}
+            <div className="task-form-link-flow" aria-label={locale === "zh" ? "任务表单流程" : "Task form flow"}>
+              <span>{locale === "zh" ? "发布并分配" : "Publish & assign"}</span>
+              <b aria-hidden="true">→</b>
+              <span>{locale === "zh" ? "开始任务" : "Start task"}</span>
+              <b aria-hidden="true">→</b>
+              <span>{locale === "zh" ? "填写表单" : "Fill form"}</span>
+            </div>
           </section>
           <section className="card stack-sm">
             <h2>{locale === "zh" ? "负责人员" : "Assignees"}</h2>
@@ -321,7 +351,7 @@ export default function NewTaskPage() {
               </select>
             </label>
             <label>
-              {locale === "zh" ? "采集表单" : "Collection form"}
+              {locale === "zh" ? "关联采集表单" : "Linked collection form"}
               <select
                 onChange={(event) => setTemplateVersionId(event.target.value)}
                 value={templateVersionId}
@@ -340,7 +370,13 @@ export default function NewTaskPage() {
                     {locale === "zh" ? "创建表单" : "Create a form"}
                   </Link>
                 </span>
-              ) : null}
+              ) : (
+                <span className="caption">
+                  {locale === "zh"
+                    ? "志愿者点击“开始任务”后，将直接进入这份表单。"
+                    : "When a volunteer selects “Start task,” this form opens directly."}
+                </span>
+              )}
             </label>
             <label>
               {locale === "zh" ? "任务类型" : "Task type"}
@@ -422,9 +458,13 @@ export default function NewTaskPage() {
                 ? locale === "zh"
                   ? "正在创建…"
                   : "Creating…"
-                : locale === "zh"
-                  ? "创建任务"
-                  : "Create task"}
+                : openNow
+                  ? locale === "zh"
+                    ? "发布并分配任务"
+                    : "Publish and assign task"
+                  : locale === "zh"
+                    ? "保存任务草稿"
+                    : "Save task draft"}
             </button>
           </div>
         </main>

@@ -45,32 +45,40 @@ type Props = {
 
 const PALETTE = {
   ink: "#18323f",
-  grid: "#dce5e7",
-  blue: "#0873b8",
-  blueOpen: "#b9dbea",
-  gold: "#d86615",
-  goldOpen: "#f4cda8",
-  violet: "#607a87",
-  violetOpen: "#d4dfe3",
-  green: "#116b4e",
-  greenOpen: "#b9dccd",
-  neutral: "#7f929a",
-  neutralOpen: "#dce4e6",
-  chartGold: "#df6d1a",
-  chartBlue: "#0873b8",
-  chartPink: "#116b4e",
+  grid: "#e7edf2",
+  blue100: "#bfeaf5",
+  blue200: "#8bd5e9",
+  blue300: "#60b8de",
+  blue400: "#3a9bcf",
+  blue500: "#036eb7",
+  pink100: "#fbf5f7",
+  pink200: "#f5e2e8",
+  pink300: "#efcdd8",
+  pink400: "#e5b4c4",
+  pink500: "#d58fa8",
+  purple100: "#f7f4fa",
+  purple200: "#ece4f4",
+  purple300: "#ddcfeb",
+  purple400: "#c5b0dc",
+  purple500: "#a68bc7",
+  yellow100: "#fffdf4",
+  yellow200: "#fff6cb",
+  yellow300: "#ffeaa1",
+  yellow400: "#ffda65",
+  yellow500: "#ffbf00",
 };
 
 type TrendSeriesKey = "started" | "submitted" | "approved";
 
 const TREND_SERIES: Array<{
   key: TrendSeriesKey;
-  color: string;
+  softColor: string;
+  activeColor: string;
   dash?: string;
 }> = [
-  { key: "started", color: PALETTE.chartGold, dash: "2 7" },
-  { key: "submitted", color: PALETTE.chartBlue, dash: "9 5" },
-  { key: "approved", color: PALETTE.chartPink },
+  { key: "started", softColor: PALETTE.yellow200, activeColor: PALETTE.yellow500, dash: "2 7" },
+  { key: "submitted", softColor: PALETTE.blue200, activeColor: PALETTE.blue500, dash: "9 5" },
+  { key: "approved", softColor: PALETTE.pink200, activeColor: PALETTE.pink500 },
 ];
 
 const tooltipStyle = {
@@ -344,7 +352,12 @@ function ChangesCharts({ records, locale }: Omit<Props, "category" | "dateFrom" 
                   <i
                     aria-hidden="true"
                     className={series.dash ? "dashed" : "solid"}
-                    style={{ borderTopColor: series.color }}
+                    style={{
+                      borderTopColor:
+                        activeSeries === series.key
+                          ? series.activeColor
+                          : series.softColor,
+                    }}
                   />
                   <span>{labels[series.key]}</span>
                 </label>
@@ -369,19 +382,20 @@ function ChangesCharts({ records, locale }: Omit<Props, "category" | "dateFrom" 
             {TREND_SERIES.filter((series) => visibleSeries[series.key]).map((series) => {
               const focused = activeSeries === series.key;
               const muted = Boolean(activeSeries && !focused);
+              const stroke = focused ? series.activeColor : series.softColor;
               return (
                 <Line
                   activeDot={{ r: focused ? 7 : 5, strokeWidth: 2 }}
                   dataKey={series.key}
-                  dot={{ fill: "white", r: focused ? 4 : 3, stroke: series.color, strokeWidth: focused ? 3 : 2 }}
+                  dot={{ fill: "white", r: focused ? 4 : 3, stroke, strokeWidth: focused ? 3 : 2 }}
                   isAnimationActive={false}
                   key={series.key}
                   name={labels[series.key]}
                   onClick={() => setActiveSeries((current) => current === series.key ? null : series.key)}
-                  stroke={series.color}
+                  stroke={stroke}
                   strokeDasharray={series.dash}
                   strokeOpacity={muted ? 0.2 : 1}
-                  strokeWidth={focused ? 4 : 2.7}
+                  strokeWidth={focused ? 4.2 : 2.5}
                   style={{ cursor: "pointer" }}
                   type="linear"
                 />
@@ -403,7 +417,7 @@ function ChangesCharts({ records, locale }: Omit<Props, "category" | "dateFrom" 
             <YAxis dataKey="source" type="category" width={92} tickLine={false} />
             <ReferenceLine stroke={PALETTE.ink} x={0} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="change" fill={PALETTE.blue} isAnimationActive={false} name={locale === "zh" ? "变化" : "Change"} radius={[0, 5, 5, 0]}>
+            <Bar dataKey="change" fill={PALETTE.blue200} isAnimationActive={false} name={locale === "zh" ? "变化" : "Change"} radius={[0, 5, 5, 0]}>
               <LabelList dataKey="change" position="right" />
             </Bar>
           </BarChart>
@@ -418,7 +432,8 @@ function AttentionCharts({ records, locale }: Omit<Props, "category" | "dateFrom
   const severities = severityData(records, locale);
   const matrix = concernMatrix(records);
   const maxCell = Math.max(1, ...matrix.flatMap((row) => row.cells.map((cell) => cell.count)));
-  const severityColors = [PALETTE.gold, PALETTE.goldOpen, PALETTE.neutralOpen];
+  const severityColors = [PALETTE.pink500, PALETTE.yellow400, PALETTE.blue100];
+  const [cumulativeFocused, setCumulativeFocused] = useState(false);
 
   return (
     <div className="insight-viz-grid">
@@ -435,8 +450,19 @@ function AttentionCharts({ records, locale }: Omit<Props, "category" | "dateFrom
             <YAxis allowDecimals={false} axisLine={false} tickLine={false} yAxisId="count" />
             <YAxis axisLine={false} domain={[0, 100]} orientation="right" tickFormatter={(value) => `${value}%`} tickLine={false} yAxisId="share" />
             <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="count" fill={PALETTE.gold} isAnimationActive={false} name={locale === "zh" ? "关注点" : "Concerns"} radius={[5, 5, 0, 0]} yAxisId="count" />
-            <Line dataKey="cumulative" dot={{ fill: "white", r: 4 }} isAnimationActive={false} name={locale === "zh" ? "累计占比" : "Cumulative share"} stroke={PALETTE.ink} strokeWidth={2.5} yAxisId="share" />
+            <Bar dataKey="count" fill={PALETTE.yellow200} isAnimationActive={false} name={locale === "zh" ? "关注点" : "Concerns"} radius={[5, 5, 0, 0]} yAxisId="count" />
+            <Line
+              activeDot={{ r: cumulativeFocused ? 7 : 5, strokeWidth: 2 }}
+              dataKey="cumulative"
+              dot={{ fill: "white", r: cumulativeFocused ? 4 : 3 }}
+              isAnimationActive={false}
+              name={locale === "zh" ? "累计占比" : "Cumulative share"}
+              onClick={() => setCumulativeFocused((current) => !current)}
+              stroke={cumulativeFocused ? PALETTE.purple500 : PALETTE.purple200}
+              strokeWidth={cumulativeFocused ? 4.2 : 2.5}
+              style={{ cursor: "pointer" }}
+              yAxisId="share"
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -508,9 +534,9 @@ function GapsCharts({ records, locale }: Omit<Props, "category" | "dateFrom" | "
             <YAxis dataKey="source" tickLine={false} type="category" width={100} />
             <Tooltip contentStyle={tooltipStyle} />
             <Legend />
-            <Bar dataKey="approved" fill={PALETTE.violet} isAnimationActive={false} name={locale === "zh" ? "已批准" : "Approved"} stackId="pipeline" />
-            <Bar dataKey="pending" fill={PALETTE.violetOpen} isAnimationActive={false} name={locale === "zh" ? "待批准" : "Pending"} stackId="pipeline" />
-            <Bar dataKey="unsubmitted" fill={PALETTE.neutralOpen} isAnimationActive={false} name={locale === "zh" ? "未提交" : "Not submitted"} radius={[0, 5, 5, 0]} stackId="pipeline" />
+            <Bar dataKey="approved" fill={PALETTE.purple400} isAnimationActive={false} name={locale === "zh" ? "已批准" : "Approved"} stackId="pipeline" />
+            <Bar dataKey="pending" fill={PALETTE.purple200} isAnimationActive={false} name={locale === "zh" ? "待批准" : "Pending"} stackId="pipeline" />
+            <Bar dataKey="unsubmitted" fill={PALETTE.purple100} isAnimationActive={false} name={locale === "zh" ? "未提交" : "Not submitted"} radius={[0, 5, 5, 0]} stackId="pipeline" />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -526,7 +552,7 @@ function GapsCharts({ records, locale }: Omit<Props, "category" | "dateFrom" | "
             <XAxis dataKey="range" tickLine={false} />
             <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="count" fill={PALETTE.violet} isAnimationActive={false} name={locale === "zh" ? "记录" : "Records"} radius={[5, 5, 0, 0]}>
+            <Bar dataKey="count" fill={PALETTE.purple300} isAnimationActive={false} name={locale === "zh" ? "记录" : "Records"} radius={[5, 5, 0, 0]}>
               <LabelList dataKey="count" position="top" />
             </Bar>
           </BarChart>
@@ -556,7 +582,7 @@ function CoverageCharts({ records, locale, dateFrom, dateTo }: Omit<Props, "cate
             <ReferenceLine stroke={PALETTE.ink} strokeDasharray="4 4" x={100} />
             <ReferenceLine stroke={PALETTE.ink} strokeDasharray="4 4" y={35} />
             <Tooltip contentStyle={tooltipStyle} cursor={{ strokeDasharray: "3 3" }} />
-            <Scatter data={coverage} fill={PALETTE.green} isAnimationActive={false} name={locale === "zh" ? "来源地点组合" : "Source-location cohort"} />
+            <Scatter data={coverage} fill={PALETTE.pink400} isAnimationActive={false} name={locale === "zh" ? "来源地点组合" : "Source-location cohort"} />
           </ScatterChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -572,7 +598,7 @@ function CoverageCharts({ records, locale, dateFrom, dateTo }: Omit<Props, "cate
             <XAxis hide type="number" />
             <YAxis dataKey="shortLabel" interval={0} tick={{ fontSize: 11 }} tickLine={false} type="category" width={146} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="priority" fill={PALETTE.green} isAnimationActive={false} name={locale === "zh" ? "优先级分数" : "Priority score"} radius={[0, 5, 5, 0]}>
+            <Bar dataKey="priority" fill={PALETTE.blue300} isAnimationActive={false} name={locale === "zh" ? "优先级分数" : "Priority score"} radius={[0, 5, 5, 0]}>
               <LabelList dataKey="gap" formatter={(value: unknown) => locale === "zh" ? `缺 ${value}` : `Gap ${value}`} position="right" />
             </Bar>
           </BarChart>
