@@ -3,7 +3,7 @@
   --canvas: #edf2f3;
   --surface: #fbfcfc;
   --surface-soft: #f3f6f6;
-  --surface-blue: #e4f1f8;
+  --surface-blue: #edf1ff;
   --surface-green: #e7f5ef;
   --surface-amber: #fff1df;
   --surface-red: #fbe9e9;
@@ -13,10 +13,10 @@
   --muted-strong: #405964;
   --line: #cad7db;
   --line-strong: #aebfc5;
-  --navy: #075f98;
-  --navy-deep: #06466f;
-  --blue: #0873b8;
-  --blue-dark: #075b91;
+  --navy: #3366ff;
+  --navy-deep: #2448b8;
+  --blue: #3366ff;
+  --blue-dark: #264fd5;
   --brand-orange: #e86f19;
   --green: #116b4e;
   --amber: #9a500f;

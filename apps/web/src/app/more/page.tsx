@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
@@ -111,7 +112,9 @@ const modules: Module[] = [
 
 export default function MorePage() {
   const { locale, setLocale } = useI18n();
+  const router = useRouter();
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [signingOut, setSigningOut] = useState(false);
   useEffect(() => {
     apiFetch<{ permissions: string[] }>("/api/v1/auth/me")
       .then((result) => setPermissions(result.permissions ?? []))
@@ -158,6 +161,16 @@ export default function MorePage() {
       detailZh: "个人资料、安全设置与语言偏好。",
     },
   ].filter((group) => allowed.some((item) => item.group === group.key));
+
+  async function signOut() {
+    setSigningOut(true);
+    await apiFetch<void>("/api/v1/auth/logout", { method: "POST" }).catch(
+      () => undefined,
+    );
+    router.replace("/login");
+    router.refresh();
+  }
+
   return (
     <div className="stack">
       <PageHeader
@@ -189,20 +202,39 @@ export default function MorePage() {
                   </Link>
                 ))}
               {group.key === "account" ? (
-                <div className="more-language-row">
-                  <span className="more-link-icon"><AppIcon name="settings" /></span>
-                  <span className="more-link-copy">
-                    <strong>{locale === "zh" ? "界面语言" : "Interface language"}</strong>
-                    <small>{locale === "zh" ? "当前使用中文" : "Currently using English"}</small>
-                  </span>
+                <>
+                  <div className="more-language-row">
+                    <span className="more-link-icon"><AppIcon name="settings" /></span>
+                    <span className="more-link-copy">
+                      <strong>{locale === "zh" ? "界面语言" : "Interface language"}</strong>
+                      <small>{locale === "zh" ? "当前使用中文" : "Currently using English"}</small>
+                    </span>
+                    <button
+                      className="button button-secondary button-small"
+                      onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+                      type="button"
+                    >
+                      {locale === "zh" ? "English" : "中文"}
+                    </button>
+                  </div>
                   <button
-                    className="button button-secondary button-small"
-                    onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
+                    className="more-signout-row"
+                    disabled={signingOut}
+                    onClick={signOut}
                     type="button"
                   >
-                    {locale === "zh" ? "English" : "中文"}
+                    <span className="more-link-icon"><AppIcon name="logout" /></span>
+                    <span className="more-link-copy">
+                      <strong>{locale === "zh" ? "安全退出" : "Sign out securely"}</strong>
+                      <small>
+                        {locale === "zh"
+                          ? "结束当前登录并返回登录页"
+                          : "End this session and return to sign in"}
+                      </small>
+                    </span>
+                    <AppIcon className="more-link-arrow" name="arrow" />
                   </button>
-                </div>
+                </>
               ) : null}
             </div>
           </section>

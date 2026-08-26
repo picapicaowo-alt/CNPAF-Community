@@ -2,8 +2,9 @@ type Locale = "zh" | "en";
 
 const sourceKindLabels: Record<string, { zh: string; en: string }> = {
   field_visit: { zh: "现场访视", en: "Field visit" },
-  expert_interview: { zh: "专家访谈", en: "Expert interview" },
+  professor_interview: { zh: "专家访谈", en: "Expert interview" },
   literature: { zh: "文献资料", en: "Literature" },
+  other: { zh: "其他来源", en: "Other source" },
 };
 
 const reviewItemLabels: Record<string, { zh: string; en: string }> = {

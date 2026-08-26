@@ -47,23 +47,22 @@ export function ServiceWorkerRegistrar() {
     if (navigator.onLine && pathname !== "/login") void flushOutbox();
   }, [pathname]);
 
-  if (!waiting || pathname === "/login") return null;
-  return (
-    <div className="banner update-banner">
-      <div>App update available. 有新版本。</div>
-      <button
-        className="btn secondary"
-        type="button"
-        onClick={() => {
-          if (sessionStorage.getItem(CAPTURE_LOCK) === "1") return;
-          waiting.postMessage({ type: "SKIP_WAITING" });
-          window.location.reload();
-        }}
-      >
-        Reload when not capturing 空闲时更新
-      </button>
-    </div>
-  );
+  useEffect(() => {
+    if (!waiting || pathname === "/login") return;
+    if (sessionStorage.getItem(CAPTURE_LOCK) === "1") return;
+    let reloading = false;
+    const reload = () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", reload);
+    waiting.postMessage({ type: "SKIP_WAITING" });
+    return () =>
+      navigator.serviceWorker.removeEventListener("controllerchange", reload);
+  }, [pathname, waiting]);
+
+  return null;
 }
 
 export function InstallBanner() {
@@ -145,7 +144,7 @@ export function InstallBanner() {
       </div>
       <button className="button install-prompt-action" onClick={install} type="button">
         <AppIcon name="download" />
-        Download app
+        {locale === "zh" ? "下载应用" : "Download app"}
       </button>
       {instructionsOpen ? (
         <div className="install-instructions" role="status">

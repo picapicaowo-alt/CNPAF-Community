@@ -476,12 +476,11 @@ export default function FormsPage() {
                     ) : null}
                   </div>
                 </div>
-                <div className="form-card-copy">
-                  <p className="muted">
-                    {description ||
-                      (locale === "zh" ? "尚未添加表单说明。" : "No description yet.")}
-                  </p>
-                </div>
+                {description ? (
+                  <div className="form-card-copy">
+                    <p className="muted">{description}</p>
+                  </div>
+                ) : null}
                 <div className="form-card-meta">
                   <span>
                     <AppIcon name="forms" />

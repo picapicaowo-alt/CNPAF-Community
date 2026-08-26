@@ -25,6 +25,7 @@ import {
   taskCreateBodySchema,
   taskBulkActionBodySchema,
   taskAssignmentTransitionBodySchema,
+  taskUpdateBodySchema,
 } from "@cnpaf/shared";
 import type {
   FormAnswers,
@@ -176,6 +177,17 @@ test("task creation requires at least one assignee in the atomic workflow", () =
     taskCreateBodySchema.safeParse({ ...base, assigneeIds: [ids.collector] })
       .success,
     true,
+  );
+});
+
+test("task edits can select another published form version", () => {
+  assert.equal(
+    taskUpdateBodySchema.safeParse({ templateVersionId: ids.form }).success,
+    true,
+  );
+  assert.equal(
+    taskUpdateBodySchema.safeParse({ templateVersionId: "not-a-version" }).success,
+    false,
   );
 });
 

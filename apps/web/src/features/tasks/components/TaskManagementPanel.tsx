@@ -27,6 +27,17 @@ type LocationChoice = {
 };
 
 type RegistryItem = { key: string; labelEn: string; labelZh: string };
+type Template = {
+  id: string;
+  organizationId?: string | null;
+  currentPublishedVersionId?: string | null;
+};
+type FormChoice = {
+  id: string;
+  nameEn: string;
+  nameZh: string;
+  version: number;
+};
 
 type Props = {
   task: Omit<TaskSummary, "myAssignment" | "assignments">;
@@ -45,6 +56,7 @@ export function TaskManagementPanel({
   const [members, setMembers] = useState<ProgramMembership[]>([]);
   const [locations, setLocations] = useState<LocationChoice[]>([]);
   const [taskTypes, setTaskTypes] = useState<RegistryItem[]>([]);
+  const [forms, setForms] = useState<FormChoice[]>([]);
   const [editing, setEditing] = useState(false);
   const [canManageTaskTypes, setCanManageTaskTypes] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -62,12 +74,13 @@ export function TaskManagementPanel({
         setCanManage(allowed);
         setCanManageTaskTypes(permissions.includes("services.manage"));
         if (!allowed) return;
-        const [program, locationResult, typeResult] = await Promise.all([
+        const [program, locationResult, typeResult, templateResult] = await Promise.all([
           getProgram(task.programId),
           apiFetch<{ locations: LocationChoice[] }>("/api/v1/locations"),
           apiFetch<{ items: RegistryItem[] }>(
             "/api/v1/config/registries/task_type?status=active",
           ),
+          apiFetch<{ templates: Template[] }>("/api/v1/templates"),
         ]);
         if (!active) return;
         setMembers(
@@ -82,6 +95,36 @@ export function TaskManagementPanel({
           ),
         );
         setTaskTypes(typeResult.items ?? []);
+        const formBundles = await Promise.all(
+          (templateResult.templates ?? [])
+            .filter(
+              (template) =>
+                !template.organizationId ||
+                template.organizationId === task.organizationId,
+            )
+            .map((template) =>
+              apiFetch<{ versions: FormChoice[] }>(
+                `/api/v1/templates/${template.id}`,
+              )
+                .then((bundle) => ({ template, versions: bundle.versions }))
+                .catch(() => ({ template, versions: [] as FormChoice[] })),
+            ),
+        );
+        if (!active) return;
+        const publishedForms = formBundles.flatMap(({ template, versions }) =>
+          versions.filter(
+            (version) => version.id === template.currentPublishedVersionId,
+          ),
+        );
+        if (!publishedForms.some((form) => form.id === task.templateVersionId)) {
+          publishedForms.unshift({
+            id: task.templateVersionId,
+            nameEn: task.form.nameEn,
+            nameZh: task.form.nameZh,
+            version: task.form.versionNumber,
+          });
+        }
+        setForms(publishedForms);
       })
       .catch((caught) => active && setError(errorMessage(caught)));
     return () => {
@@ -100,6 +143,13 @@ export function TaskManagementPanel({
     ["assigned", "in_progress"].includes(assignment.status),
   );
   const acceptsAssignments = ["draft", "open"].includes(task.status);
+  const canChangeForm =
+    acceptsAssignments &&
+    !assignments.some(
+      (assignment) =>
+        ["in_progress", "completed"].includes(assignment.status) ||
+        Boolean(assignment.recordId),
+    );
 
   if (!canManage) return null;
 
@@ -130,6 +180,7 @@ export function TaskManagementPanel({
         title: draft.title.trim(),
         instructions: draft.instructions.trim() || null,
         taskTypeKey: draft.taskTypeKey,
+        templateVersionId: draft.templateVersionId,
         siteId: draft.siteId || null,
         priority: Number(draft.priority),
         dueAt: draft.dueAt ? new Date(draft.dueAt).toISOString() : null,
@@ -267,13 +318,6 @@ export function TaskManagementPanel({
                 </option>
               ))}
             </select>
-            {taskTypes.length <= 1 ? (
-              <span className="caption">
-                {locale === "zh"
-                  ? "目前只有一个可用任务类型；新增配置后即可在这里切换。"
-                  : "Only one task type is active; add another configuration to switch it here."}
-              </span>
-            ) : null}
           </div>
           <label>
             {locale === "zh" ? "地点" : "Location"}
@@ -288,6 +332,31 @@ export function TaskManagementPanel({
                 </option>
               ))}
             </select>
+          </label>
+          <label className="field-full">
+            {locale === "zh" ? "采集表单" : "Collection form"}
+            <select
+              disabled={!canChangeForm}
+              onChange={(event) =>
+                changeDraft("templateVersionId", event.target.value)
+              }
+              value={draft.templateVersionId}
+            >
+              {forms.map((form) => (
+                <option key={form.id} value={form.id}>
+                  {locale === "zh" ? form.nameZh : form.nameEn} · v{form.version}
+                </option>
+              ))}
+            </select>
+            <span className="caption">
+              {canChangeForm
+                ? locale === "zh"
+                  ? "可在采集开始前替换为其他已发布表单。"
+                  : "You can switch to another published form before collection begins."
+                : locale === "zh"
+                  ? "已有负责人开始采集，表单版本已锁定以保护现有数据。"
+                  : "Collection has started, so this form version is locked to protect existing data."}
+            </span>
           </label>
           <label>
             {locale === "zh" ? "截止时间" : "Due date"}
@@ -432,6 +501,7 @@ function taskDraft(
     title: task.title,
     instructions: task.instructions ?? "",
     taskTypeKey: task.taskTypeKey,
+    templateVersionId: task.templateVersionId,
     siteId: task.siteId ?? "",
     dueAt: toLocalDateTime(task.dueAt),
     priority: String(task.priority),
