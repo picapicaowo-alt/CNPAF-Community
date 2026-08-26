@@ -1004,6 +1004,20 @@ select:focus {
   color: var(--navy-deep);
 }
 
+.field-selection-help {
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.field-selection-help > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
 .feedback-success {
   border-color: #bddccd;
   background: var(--surface-green);

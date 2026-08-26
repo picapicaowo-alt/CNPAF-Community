@@ -136,3 +136,10 @@ test("administrators can explicitly grant the admin role from People", () => {
   assert.match(people, /确认设为管理员/);
   assert.match(roleRoute, /requirePermission\("roles\.assign"\)/);
 });
+
+test("review field-selection guidance stays compact and left aligned", () => {
+  const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
+
+  assert.match(styles, /\.field-selection-help\s*\{[\s\S]*?justify-content: flex-start;[\s\S]*?gap: 8px;[\s\S]*?font-size: 13px;/);
+  assert.match(styles, /\.field-selection-help > svg\s*\{[\s\S]*?flex: 0 0 16px;/);
+});
