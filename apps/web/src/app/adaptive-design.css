@@ -722,7 +722,7 @@ select:focus {
 }
 
 .staff-command-admin .attention-register {
-  border-radius: 10px;
+  border-radius: 9px;
 }
 
 .stat-card {
@@ -1250,7 +1250,7 @@ time {
 .install-instructions p {
   margin: 4px 0 0;
   color: var(--muted-strong);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -2105,7 +2105,14 @@ time {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
-  gap: 18px;
+  gap: 20px;
+}
+
+.more-column {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 20px;
 }
 
 .more-group {
@@ -2205,6 +2212,220 @@ time {
 
 .more-link-arrow {
   color: var(--muted);
+}
+
+/* AI model settings extend the administrator's flat, ruled control language. */
+.ai-model-settings {
+  max-width: 1180px;
+}
+
+.ai-model-current {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.ai-model-current-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+}
+
+.ai-model-current h2,
+.ai-model-current p {
+  margin: 0;
+}
+
+.ai-model-current h2 {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ai-model-current strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 1.8rem;
+  letter-spacing: -0.025em;
+}
+
+.ai-model-current p {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.ai-model-form {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.ai-model-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 22px;
+  border: 0;
+}
+
+.ai-model-fieldset legend {
+  padding: 0;
+  font-size: 1.08rem;
+  font-weight: 690;
+}
+
+.ai-model-help {
+  max-width: 72ch;
+  margin: 6px 0 18px;
+  color: var(--muted);
+}
+
+.ai-model-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.ai-model-option {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 178px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 18px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ai-model-option:hover {
+  background: var(--surface-soft);
+}
+
+.ai-model-option.is-selected {
+  z-index: 1;
+  background: var(--surface-blue);
+  box-shadow: inset 0 0 0 2px var(--blue);
+}
+
+.ai-model-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ai-model-option:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  outline-offset: -3px;
+}
+
+.ai-model-radio {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: #fff;
+  color: #fff;
+}
+
+.ai-model-option.is-selected .ai-model-radio {
+  border-color: var(--blue);
+  background: var(--blue);
+}
+
+.ai-model-option-copy {
+  display: grid;
+  gap: 9px;
+}
+
+.ai-model-option-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-model-option-heading strong {
+  font-size: 1.08rem;
+}
+
+.ai-model-option-heading small {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.ai-model-option.is-selected .ai-model-option-heading small {
+  background: #fff;
+  color: var(--blue-dark);
+}
+
+.ai-model-description {
+  min-height: 46px;
+  color: var(--muted-strong);
+  line-height: 1.55;
+}
+
+.ai-model-tradeoffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ai-model-tradeoffs span {
+  display: inline-flex;
+  gap: 7px;
+}
+
+.ai-model-tradeoffs b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.ai-model-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.ai-model-actions p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.ai-model-actions .button {
+  flex: 0 0 auto;
 }
 
 /* Form management is a two-column working list at wide sizes. */
@@ -2823,8 +3044,11 @@ h3 {
 
 @media (max-width: 900px) {
   .role-home-hero,
-  .more-directory,
   .forms-manage-page .form-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .more-directory {
     grid-template-columns: 1fr;
   }
 
@@ -2836,6 +3060,10 @@ h3 {
   .insight-register-row:first-child,
   .insight-register-row:nth-child(2) {
     grid-column: span 1;
+  }
+
+  .ai-model-options {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2861,5 +3089,30 @@ h3 {
     min-height: 70px;
     gap: 10px;
     padding: 10px 12px;
+  }
+
+  .ai-model-current,
+  .ai-model-fieldset {
+    padding: 16px;
+  }
+
+  .ai-model-option {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .ai-model-description {
+    min-height: 0;
+  }
+
+  .ai-model-actions {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px 16px;
+  }
+
+  .ai-model-actions .button {
+    width: 100%;
+    min-height: 48px;
   }
 }

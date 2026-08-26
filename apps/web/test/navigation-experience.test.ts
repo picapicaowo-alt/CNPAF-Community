@@ -96,3 +96,12 @@ test("the four insight cards share one equal two-column grid", () => {
   assert.match(insightStyles, /grid-auto-rows: 1fr/);
   assert.doesNotMatch(insightStyles, /grid-column: span [23456]/);
 });
+
+test("the More directory stacks unequal groups in independent columns", () => {
+  const page = readFileSync(path.join(appRoot, "more/page.tsx"), "utf8");
+  const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
+
+  assert.match(page, /className="more-column"/);
+  assert.match(styles, /\.more-directory\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.more-column\s*\{[\s\S]*?align-content: start/);
+});
