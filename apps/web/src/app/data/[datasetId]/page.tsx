@@ -5,8 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { AiPromptComposer } from "@/components/AiPromptComposer";
+import { AskMarkdownMessage } from "@/components/AskMarkdownMessage";
 import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
-import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState, StatusPill } from "@/components/ui";
 import {
@@ -35,6 +35,7 @@ type AskMessage = {
 };
 type AskSource = AiDisplaySource & {
   messageId: string;
+  sourceId: string;
 };
 type AskBundle = {
   conversation: { id: string; title?: string | null };
@@ -423,7 +424,11 @@ export default function DatasetWorkspacePage() {
                 </div>
               ) : conversation.messages.map((message) => (
                 <article className={`dataset-chat-message ${message.role}`} key={message.id}>
-                  <MarkdownMessage>{message.content}</MarkdownMessage>
+                  <AskMarkdownMessage
+                    content={message.content}
+                    locale={locale}
+                    sources={sourcesByMessage.get(message.id) ?? []}
+                  />
                   {message.metadata?.attachments?.length ? (
                     <div className="ai-message-attachments">
                       {message.metadata.attachments.map((attachment) => (

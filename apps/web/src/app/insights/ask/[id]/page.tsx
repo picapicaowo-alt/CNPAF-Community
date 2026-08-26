@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
+import { AskMarkdownMessage } from "@/components/AskMarkdownMessage";
 import { AiSourceList, type AiDisplaySource } from "@/components/AiSourceList";
-import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { RichTextComposerInput } from "@/components/RichTextComposerInput";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState } from "@/components/ui";
@@ -19,6 +19,7 @@ type Message = {
 };
 type Source = AiDisplaySource & {
   messageId: string;
+  sourceId: string;
 };
 type Bundle = {
   conversation: { id: string; title?: string | null };
@@ -95,7 +96,11 @@ export default function AskConversationPage() {
               className={`chat-message ${message.role}`}
               key={message.id}
             >
-              <MarkdownMessage>{message.content}</MarkdownMessage>
+              <AskMarkdownMessage
+                content={message.content}
+                locale={locale}
+                sources={sourcesByMessage.get(message.id) ?? []}
+              />
               <AiSourceList locale={locale} sources={sourcesByMessage.get(message.id) ?? []} />
             </article>
           ))}

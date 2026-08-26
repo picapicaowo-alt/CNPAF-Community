@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { AskMarkdownMessage } from "../src/components/AskMarkdownMessage";
 import { AiSourceList } from "../src/components/AiSourceList";
 
 test("AI source lists distinguish internal evidence and link external references", () => {
@@ -55,4 +56,30 @@ test("AI source lists never create links for unsafe external URLs", () => {
 
   assert.doesNotMatch(html, /href=/);
   assert.doesNotMatch(html, /Unsafe/);
+});
+
+test("every Ask surface can render a friendly linked record citation", () => {
+  const source = {
+    id: "source-row",
+    sourceId: "00000000-0000-4000-8000-000000000001",
+    sourceType: "approved_record",
+    citationLabel: "REC-160D9654",
+    metadata: {
+      recordId: "160d9654-0000-4000-8000-000000000001",
+      recordReference: "FV-20260807-160D9654",
+      sourceKind: "field_visit",
+      occurredAt: "2026-08-07T12:00:00.000Z",
+      snapshotMode: "live",
+    },
+  };
+  const html = renderToStaticMarkup(createElement(AskMarkdownMessage, {
+    content: `Evidence [${source.sourceId}]`,
+    locale: "zh",
+    sources: [source],
+  }));
+
+  assert.match(html, /现场访视/);
+  assert.match(html, /FV-20260807-160D9654/);
+  assert.match(html, /href="\/records\/160d9654-0000-4000-8000-000000000001"/);
+  assert.doesNotMatch(html, new RegExp(source.sourceId));
 });
