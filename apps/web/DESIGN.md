@@ -2,11 +2,13 @@
 name: CNPAF Community Adaptive Evidence System
 description: One trusted CNPAF identity adapted to field collection, evidence review, and administration.
 colors:
-  institutional-blue: "#3366FF"
-  institutional-blue-deep: "#2448B8"
-  action-blue: "#3366FF"
-  action-blue-dark: "#264FD5"
+  institutional-blue: "#036EB7"
+  institutional-blue-deep: "#025389"
+  action-blue: "#036EB7"
+  action-blue-dark: "#035E9C"
   human-orange: "#e86f19"
+  human-orange-on-blue: "#ffead8"
+  navigation-on-blue: "#e5f1f7"
   archival-canvas: "#edf2f3"
   paper: "#fbfcfc"
   paper-soft: "#f3f6f6"
@@ -122,7 +124,7 @@ components:
     padding: "4px 10px"
     height: "24px"
   navigation-item:
-    textColor: "#c8dce8"
+    textColor: "#e5f1f7"
     typography: "{typography.label}"
     rounded: "{rounded.compact}"
     padding: "0 13px"

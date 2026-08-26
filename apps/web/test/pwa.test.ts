@@ -12,12 +12,14 @@ test("PWA manifest exposes installable standalone assets", () => {
     display: string;
     start_url: string;
     scope: string;
+    theme_color: string;
     icons: Array<{ src: string; sizes: string; purpose: string }>;
   };
 
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.start_url, "/dashboard");
   assert.equal(manifest.scope, "/");
+  assert.equal(manifest.theme_color, "#036EB7");
   assert.ok(
     manifest.icons.some(
       (icon) => icon.sizes === "192x192" && icon.purpose === "any",

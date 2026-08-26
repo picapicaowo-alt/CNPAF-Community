@@ -3,7 +3,7 @@
   --canvas: #edf2f3;
   --surface: #fbfcfc;
   --surface-soft: #f3f6f6;
-  --surface-blue: #edf1ff;
+  --surface-blue: #eaf5fb;
   --surface-green: #e7f5ef;
   --surface-amber: #fff1df;
   --surface-red: #fbe9e9;
@@ -13,10 +13,10 @@
   --muted-strong: #405964;
   --line: #cad7db;
   --line-strong: #aebfc5;
-  --navy: #3366ff;
-  --navy-deep: #2448b8;
-  --blue: #3366ff;
-  --blue-dark: #264fd5;
+  --navy: #036eb7;
+  --navy-deep: #025389;
+  --blue: #036eb7;
+  --blue-dark: #035e9c;
   --brand-orange: #e86f19;
   --green: #116b4e;
   --amber: #9a500f;
@@ -319,7 +319,7 @@ svg {
 .sidebar-user-email {
   display: block;
   overflow: hidden;
-  color: #a9c4dd;
+  color: #e5f1f7;
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -328,7 +328,7 @@ svg {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
-  color: #a9c4dd;
+  color: #e5f1f7;
 }
 .sidebar-utilities {
   display: flex;
@@ -344,7 +344,7 @@ svg {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #c9d9e8;
+  color: #e5f1f7;
   cursor: pointer;
   font-size: 11px;
 }
