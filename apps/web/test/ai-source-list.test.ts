@@ -83,3 +83,57 @@ test("every Ask surface can render a friendly linked record citation", () => {
   assert.match(html, /href="\/records\/160d9654-0000-4000-8000-000000000001"/);
   assert.doesNotMatch(html, new RegExp(source.sourceId));
 });
+
+test("compound record citations become separate friendly record links", () => {
+  const sources = [
+    {
+      id: "source-pi",
+      sourceId: "00000000-0000-4000-8000-000000000011",
+      sourceType: "approved_record",
+      citationLabel: "PI-20260808-9CE8E551",
+      metadata: {
+        recordId: "9ce8e551-0000-4000-8000-000000000011",
+        recordReference: "PI-20260808-9CE8E551",
+        sourceKind: "professor_interview",
+        occurredAt: "2026-08-08T12:00:00.000Z",
+        snapshotMode: "live",
+      },
+    },
+    {
+      id: "source-fv-1",
+      sourceId: "00000000-0000-4000-8000-000000000012",
+      sourceType: "approved_record",
+      citationLabel: "FV-20260813-FDE14E58",
+      metadata: {
+        recordId: "fde14e58-0000-4000-8000-000000000012",
+        recordReference: "FV-20260813-FDE14E58",
+        sourceKind: "field_visit",
+        occurredAt: "2026-08-13T12:00:00.000Z",
+        snapshotMode: "live",
+      },
+    },
+    {
+      id: "source-fv-2",
+      sourceId: "00000000-0000-4000-8000-000000000013",
+      sourceType: "approved_record",
+      citationLabel: "FV-20260817-C83D4DD7",
+      metadata: {
+        recordId: "c83d4dd7-0000-4000-8000-000000000013",
+        recordReference: "FV-20260817-C83D4DD7",
+        sourceKind: "field_visit",
+        occurredAt: "2026-08-17T12:00:00.000Z",
+        snapshotMode: "live",
+      },
+    },
+  ];
+  const html = renderToStaticMarkup(createElement(AskMarkdownMessage, {
+    content: "证据 [PI-20260808-9CE8E551；FV-20260813-FDE14E58；FV-20260817-C83D4DD7]",
+    locale: "zh",
+    sources,
+  }));
+
+  assert.match(html, />专家访谈 · 2026年8月8日 · PI-20260808-9CE8E551<\/a>/);
+  assert.match(html, />现场访视 · 2026年8月13日 · FV-20260813-FDE14E58<\/a>/);
+  assert.match(html, />现场访视 · 2026年8月17日 · FV-20260817-C83D4DD7<\/a>/);
+  assert.doesNotMatch(html, /\[PI-20260808/);
+});

@@ -13,11 +13,23 @@ export function displayAskCitationLabels(
   content: string,
   sources: AskCitationDisplaySource[],
 ) {
-  return sources.reduce((answer, source) => {
+  const aliases = new Map<string, string>();
+  for (const source of sources) {
     const label = source.displayLabel ?? source.label;
     const display = source.href ? `[${label}](${source.href})` : `[${label}]`;
-    return answer
-      .replaceAll(`[${source.id}]`, display)
-      .replaceAll(`[${source.label}]`, display);
-  }, content);
+    aliases.set(source.id.trim().toLocaleLowerCase(), display);
+    aliases.set(source.label.trim().toLocaleLowerCase(), display);
+  }
+
+  return content.replace(
+    /[\[〔【]([^\]〕】]+)[\]〕】]/g,
+    (original, body: string) => {
+      const tokens = body.split(/[;；]/).map((token) => token.trim()).filter(Boolean);
+      if (!tokens.length) return original;
+      const displays = tokens.map((token) => aliases.get(token.toLocaleLowerCase()));
+      return displays.every((display): display is string => Boolean(display))
+        ? displays.join("；")
+        : original;
+    },
+  );
 }
