@@ -78,6 +78,7 @@ test("OpenAI web search can be disabled by typed runtime configuration", () => {
 
   assert.equal("tools" in request, false);
   assert.equal(request.instructions, "Return JSON.");
+  assert.deepEqual(request.text, { format: { type: "json_object" } });
 });
 
 test("OpenAI requests include conversation documents as Responses API file inputs", () => {

@@ -155,6 +155,7 @@ function delay(milliseconds) {
 async function ensureLocation(admin, organizationId, input) {
   const nameEn = input.nameEn ?? input.name;
   const nameZh = input.nameZh ?? input.name;
+  const { name: _legacyName, ...locationInput } = input;
   const result = await admin.request(
     `/api/v1/locations?q=${encodeURIComponent(nameEn)}`,
   );
@@ -164,7 +165,7 @@ async function ensureLocation(admin, organizationId, input) {
   if (existing) return existing;
   const created = await admin.request("/api/v1/locations", {
     method: "POST",
-    body: { organizationId, ...input, nameEn, nameZh },
+    body: { organizationId, ...locationInput, nameEn, nameZh },
   });
   return created.location;
 }
