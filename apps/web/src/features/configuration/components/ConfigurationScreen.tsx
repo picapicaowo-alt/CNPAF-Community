@@ -132,8 +132,8 @@ export function ConfigurationScreen({
     if (
       !confirm(
         locale === "zh"
-          ? `停用“${item.labelZh}”？历史数据仍会保留。`
-          : `Archive “${item.labelEn}”? Historical data remains available.`,
+          ? `从可选项中移除“${item.labelZh}”？历史数据仍会保留。`
+          : `Remove “${item.labelEn}” from future choices? Historical data remains available.`,
       )
     )
       return;
@@ -209,7 +209,7 @@ export function ConfigurationScreen({
       ) : items.length ? (
         <div className="table-shell">
           <div className="table-scroll">
-            <table className="data-table">
+            <table className="data-table configuration-data-table">
               <thead>
                 <tr>
                   <th>{locale === "zh" ? "名称" : "Name"}</th>
@@ -222,7 +222,7 @@ export function ConfigurationScreen({
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id}>
-                    <td>
+                    <td data-label={locale === "zh" ? "名称" : "Name"}>
                       <strong>
                         {locale === "zh" ? item.labelZh : item.labelEn}
                       </strong>
@@ -230,16 +230,18 @@ export function ConfigurationScreen({
                         {locale === "zh" ? item.helpTextZh : item.helpTextEn}
                       </div>
                     </td>
-                    <td>{item.key}</td>
-                    <td>v{item.version}</td>
-                    <td>
+                    <td data-label="Key">{item.key}</td>
+                    <td data-label={locale === "zh" ? "版本" : "Version"}>
+                      v{item.version}
+                    </td>
+                    <td data-label={locale === "zh" ? "状态" : "Status"}>
                       <StatusPill
                         tone={item.status === "active" ? "green" : "neutral"}
                       >
                         {item.status}
                       </StatusPill>
                     </td>
-                    <td>
+                    <td data-label={locale === "zh" ? "操作" : "Actions"}>
                       {canManage && item.status === "active" ? (
                         <div className="row">
                           <button
@@ -255,7 +257,7 @@ export function ConfigurationScreen({
                             onClick={() => void archive(item)}
                             type="button"
                           >
-                            {locale === "zh" ? "停用" : "Archive"}
+                            {locale === "zh" ? "移除" : "Remove"}
                           </button>
                         </div>
                       ) : (

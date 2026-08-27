@@ -589,7 +589,12 @@ const taskBodyBaseSchema = z.object({
   taskTypeKey: z.string().min(1).max(120),
   title: z.string().min(1).max(500),
   instructions: z.string().max(20_000).nullable().optional(),
-  priority: z.number().int().min(-100).max(100).default(0),
+  priority: z
+    .string()
+    .regex(/^[a-z][a-z0-9_.-]*$/)
+    .max(160)
+    .nullable()
+    .optional(),
   dueAt: z.string().datetime().nullable().optional(),
   opensAt: z.string().datetime().nullable().optional(),
   closesAt: z.string().datetime().nullable().optional(),
@@ -678,6 +683,7 @@ export const manualAccountCreateBodySchema = z.object({
   locale: z.string().min(2).max(20).default("zh"),
   temporaryPassword: z.string().min(12).max(200).optional(),
   requirePasswordChange: z.boolean().default(true),
+  onboardingMessage: z.string().max(4000).nullable().optional(),
   roleAssignments: z.array(roleAssignmentInputSchema).min(1).max(20),
   // A role assignment does not exist until this account is created. Initial
   // scopes therefore apply to the new user as a whole and cannot reference an
@@ -692,6 +698,24 @@ export const manualAccountCreateBodySchema = z.object({
 export const resetPasswordBodySchema = z.object({
   temporaryPassword: z.string().min(12).max(200).optional(),
   reason: z.string().min(1).max(2000),
+}).strict();
+
+export const forgotPasswordBodySchema = z.object({
+  email: z.string().email().max(320),
+}).strict();
+
+export const completePasswordResetBodySchema = z.object({
+  token: z.string().min(32).max(256),
+  newPassword: z.string().min(12).max(200),
+}).strict();
+
+export const notificationTemplateBodySchema = z.object({
+  kindKey: z.string().regex(/^[a-z][a-z0-9_.-]*$/).max(120),
+  titleTemplate: z.string().min(1).max(500),
+  bodyTemplate: z.string().min(1).max(4000),
+  emailSubjectTemplate: z.string().min(1).max(500),
+  actionLabelTemplate: z.string().min(1).max(160),
+  status: z.enum(["active", "archived"]).default("active"),
 }).strict();
 
 export const reportSectionInputSchema = z.object({

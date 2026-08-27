@@ -69,6 +69,7 @@ export default function PeoplePage() {
     name: string;
     email: string;
     temporaryPassword: string;
+    emailQueued: boolean;
   } | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,7 +128,7 @@ export default function PeoplePage() {
     setResetting(true);
     setError("");
     try {
-      const result = await apiFetch<{ temporaryPassword: string }>(
+      const result = await apiFetch<{ temporaryPassword: string; emailQueued: boolean }>(
         `/api/v1/admin/users/${resetTarget.id}/reset-password`,
         {
           method: "POST",
@@ -138,6 +139,7 @@ export default function PeoplePage() {
         name: resetTarget.name,
         email: resetTarget.email,
         temporaryPassword: result.temporaryPassword,
+        emailQueued: result.emailQueued,
       });
       setResetTarget(null);
       setResetReason("");
@@ -205,8 +207,12 @@ export default function PeoplePage() {
             </strong>
             <span>
               {locale === "zh"
-                ? `请安全交给 ${resetCredential.email}。此密码只在这里显示一次；用户登录后必须立即修改。`
-                : `Share it securely with ${resetCredential.email}. It is shown only here; the user must change it after signing in.`}
+                ? resetCredential.emailQueued
+                  ? `重置链接邮件已发送给 ${resetCredential.email}。下方临时密码仅作为一次性备用。`
+                  : `邮件未进入队列，请安全地把一次性临时密码交给 ${resetCredential.email}。`
+                : resetCredential.emailQueued
+                  ? `A reset-link email was queued for ${resetCredential.email}. The temporary password below is a one-time fallback.`
+                  : `Email was not queued. Share the one-time temporary password securely with ${resetCredential.email}.`}
             </span>
           </span>
           <span className="reset-credential-value">

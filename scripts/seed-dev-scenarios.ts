@@ -295,7 +295,7 @@ async function main() {
     const siteId = stableUuid(`site:${workflow.key}`);
     const taskId = stableUuid(`task:${workflow.key}`);
     await db.insert(sites).values({ id: siteId, organizationId, name: workflow.location.name, siteType: workflow.location.siteType, region: "Los Angeles County", city: workflow.location.city, state: "CA", country: "United States", address: `${workflow.location.city}, CA`, canonicalStatus: "canonical", createdById: admin.id });
-    await db.insert(tasks).values({ id: taskId, programId, organizationId, templateVersionId, siteId, taskTypeKey: "data_collection", title: workflow.title, instructions: "Record the signal first, avoid diagnosis, identify alternative explanations, and define the next evidence to collect.", status: "open", priority: 8, opensAt: daysAgo(28), dueAt: daysAgo(-7), closesAt: daysAgo(-21), configuration: { fixture: SCENARIO_KEY, workflow: workflow.key }, createdById: admin.id });
+    await db.insert(tasks).values({ id: taskId, programId, organizationId, templateVersionId, siteId, taskTypeKey: "data_collection", title: workflow.title, instructions: "Record the signal first, avoid diagnosis, identify alternative explanations, and define the next evidence to collect.", status: "open", priority: "high", opensAt: daysAgo(28), dueAt: daysAgo(-7), closesAt: daysAgo(-21), configuration: { fixture: SCENARIO_KEY, workflow: workflow.key }, createdById: admin.id });
     for (const fixture of workflow.records) {
       const state = statusValues(fixture.status);
       const collector = accountByEmail.get(fixture.collector)!;

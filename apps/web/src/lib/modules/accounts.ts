@@ -25,6 +25,7 @@ import { authorize } from "../authorization";
 import { scopeAuthorizationResource } from "../access-admin";
 import { requireActiveRegistryItem } from "../registries";
 import { queueNotification } from "./notification-delivery";
+import { issueAccountActionToken } from "./account-recovery";
 
 type AccountCreate = z.infer<typeof manualAccountCreateBodySchema>;
 type ResetPassword = z.infer<typeof resetPasswordBodySchema>;
@@ -211,6 +212,30 @@ export async function createAccount(actorId: string, input: AccountCreate, reque
           assignedById: actorId,
         }))).returning()
       : [];
+    const onboardingToken = await issueAccountActionToken(tx, {
+      userId: user.id,
+      purpose: "onboarding",
+      requestedById: actorId,
+    });
+    const onboarding = await queueNotification(tx, {
+      userId: user.id,
+      kindKey: "account_onboarding",
+      title: "Welcome to CNPAF Community",
+      body: input.onboardingMessage?.trim()
+        ? `Your CNPAF Community account is ready. ${input.onboardingMessage.trim()}`
+        : "Your CNPAF Community account is ready. Use the secure link below to set your password and sign in.",
+      entityType: "user",
+      entityId: user.id,
+      metadata: {
+        actionPath: `/reset-password/${onboardingToken}`,
+        emailSubject: "Welcome to CNPAF Community",
+        actionLabel: "Set up my account",
+      },
+      templateVariables: {
+        message: input.onboardingMessage?.trim() ?? "",
+        entity_name: user.name,
+      },
+    });
     await audit({
       actorId,
       action: "account.created",
@@ -218,9 +243,9 @@ export async function createAccount(actorId: string, input: AccountCreate, reque
       entityId: user.id,
       targetUserId: user.id,
       afterState: publicUser,
-      metadata: { requestId, roleAssignmentIds: assignments.map((assignment) => assignment.id), affiliationIds: affiliations.map((affiliation) => affiliation.id), membershipIds: memberships.map((membership) => membership.id) },
+      metadata: { requestId, roleAssignmentIds: assignments.map((assignment) => assignment.id), affiliationIds: affiliations.map((affiliation) => affiliation.id), membershipIds: memberships.map((membership) => membership.id), onboardingEmailStatus: onboarding.emailStatus },
     }, (values) => tx.insert(auditEvents).values(values));
-    return { user: publicUser, roleAssignments: assignments, affiliations, programMemberships: memberships };
+    return { user: publicUser, roleAssignments: assignments, affiliations, programMemberships: memberships, onboardingEmailQueued: onboarding.emailStatus === "queued" };
   });
   return { ...account, temporaryPassword: generatedPassword };
 }
@@ -229,9 +254,27 @@ export async function resetUserPassword(actorId: string, targetUserId: string, i
   const target = await requireUserInScope(actorId, targetUserId, "people.reset_password");
   const generatedPassword = input.temporaryPassword ?? temporaryPassword();
   const passwordHash = await bcrypt.hash(generatedPassword, 12);
-  await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx.update(users).set({ passwordHash, mustChangePassword: true, passwordChangedAt: null, updatedAt: new Date() }).where(eq(users.id, targetUserId));
     await tx.delete(sessions).where(eq(sessions.userId, targetUserId));
+    const resetToken = await issueAccountActionToken(tx, {
+      userId: targetUserId,
+      purpose: "password_reset",
+      requestedById: actorId,
+    });
+    const resetNotification = await queueNotification(tx, {
+      userId: targetUserId,
+      kindKey: "password_reset_requested",
+      title: "Reset your CNPAF Community password",
+      body: "An administrator reset your password. Use the secure link below to choose a new password.",
+      entityType: "user",
+      entityId: targetUserId,
+      metadata: {
+        actionPath: `/reset-password/${resetToken}`,
+        emailSubject: "Reset your CNPAF Community password",
+        actionLabel: "Reset password",
+      },
+    });
     await audit({
       actorId,
       action: "account.password_reset",
@@ -241,10 +284,11 @@ export async function resetUserPassword(actorId: string, targetUserId: string, i
       reason: input.reason,
       beforeState: { mustChangePassword: target.mustChangePassword, passwordChangedAt: target.passwordChangedAt },
       afterState: { mustChangePassword: true, passwordChangedAt: null },
-      metadata: { requestId },
+      metadata: { requestId, notificationEmailStatus: resetNotification.emailStatus },
     }, (values) => tx.insert(auditEvents).values(values));
+    return { emailQueued: resetNotification.emailStatus === "queued" };
   });
-  return { temporaryPassword: generatedPassword, mustChangePassword: true };
+  return { temporaryPassword: generatedPassword, mustChangePassword: true, emailQueued: result.emailQueued };
 }
 
 export async function setAccountActive(actorId: string, targetUserId: string, active: boolean, requestId?: string) {

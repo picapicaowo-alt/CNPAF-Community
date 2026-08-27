@@ -101,6 +101,16 @@ const modules: Module[] = [
     permissions: ["services.manage"],
   },
   {
+    group: "administration",
+    href: "/settings/notifications",
+    icon: "template",
+    en: "Notification management",
+    zh: "通知管理",
+    detailEn: "Onboarding, password, task, activity, and access messages",
+    detailZh: "入职、密码、任务、活动与权限通知模板",
+    permissions: ["notifications.manage_templates"],
+  },
+  {
     group: "account",
     href: "/account",
     icon: "settings",

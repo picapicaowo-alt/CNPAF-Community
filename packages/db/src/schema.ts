@@ -522,7 +522,7 @@ export const tasks = pgTable(
     title: text("title").notNull(),
     instructions: text("instructions"),
     status: text("status").notNull().default("draft"),
-    priority: integer("priority").notNull().default(0),
+    priority: text("priority"),
     dueAt: timestamp("due_at", { withTimezone: true }),
     opensAt: timestamp("opens_at", { withTimezone: true }),
     closesAt: timestamp("closes_at", { withTimezone: true }),
@@ -631,6 +631,45 @@ export const notificationPreferences = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("notification_preferences_user_kind").on(t.userId, t.kindKey)],
+);
+
+export const notificationTemplates = pgTable(
+  "notification_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    kindKey: text("kind_key").notNull(),
+    titleTemplate: text("title_template").notNull(),
+    bodyTemplate: text("body_template").notNull(),
+    emailSubjectTemplate: text("email_subject_template").notNull(),
+    actionLabelTemplate: text("action_label_template").notNull(),
+    status: text("status").notNull().default("active"),
+    updatedById: uuid("updated_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("notification_templates_org_kind").on(t.organizationId, t.kindKey),
+    index("notification_templates_org_status").on(t.organizationId, t.status),
+  ],
+);
+
+export const accountActionTokens = pgTable(
+  "account_action_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    purpose: text("purpose").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    requestedById: uuid("requested_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("account_action_tokens_hash").on(t.tokenHash),
+    index("account_action_tokens_user_purpose_created").on(t.userId, t.purpose, t.createdAt),
+    index("account_action_tokens_expiry").on(t.expiresAt).where(sql`${t.usedAt} is null`),
+  ],
 );
 
 export const taskRecurrenceSeries = pgTable(
@@ -1714,6 +1753,8 @@ export const schema = {
   locationMergeHistory,
   notifications,
   notificationPreferences,
+  notificationTemplates,
+  accountActionTokens,
   taskRecurrenceSeries,
   taskRecurrenceOccurrences,
   notificationEmailDeliveries,

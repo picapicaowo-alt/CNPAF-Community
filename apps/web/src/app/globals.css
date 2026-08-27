@@ -3397,6 +3397,61 @@ input[type="radio"] {
   border-top: 1px solid var(--line);
   background: var(--surface-soft);
 }
+.notification-settings-page {
+  max-width: 1120px;
+  margin-inline: auto;
+}
+.notification-overview,
+.notification-template-card > summary > span:first-child,
+.notification-template-actions,
+.notification-variable-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.notification-overview {
+  justify-content: space-between;
+}
+.notification-overview p {
+  margin: 3px 0 0;
+}
+.notification-template-list {
+  display: grid;
+  gap: 10px;
+}
+.notification-template-card > summary .status-pill {
+  font-size: 11px;
+}
+.notification-template-card .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.notification-variable-row {
+  flex-wrap: wrap;
+}
+.notification-variable-row code {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 3px 8px;
+  color: var(--blue);
+  font-size: 11px;
+}
+.notification-template-actions {
+  justify-content: space-between;
+}
+.notification-wide-field {
+  grid-column: 1 / -1;
+}
+@media (max-width: 720px) {
+  .notification-template-card .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .notification-overview,
+  .notification-template-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
 .builder-settings-disclosure-copy {
   margin: 0;
   color: var(--muted);

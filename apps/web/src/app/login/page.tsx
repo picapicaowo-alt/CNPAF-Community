@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { BrandSlogan } from "@/components/BrandSlogan";
@@ -87,6 +88,11 @@ export default function LoginPage() {
               value={password}
             />
           </label>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px" }}>
+            <Link className="inline-link" href="/forgot-password">
+              {locale === "zh" ? "忘记密码？" : "Forgot password?"}
+            </Link>
+          </div>
           {error ? (
             <div className="feedback feedback-error" role="alert">
               <span>{error}</span>

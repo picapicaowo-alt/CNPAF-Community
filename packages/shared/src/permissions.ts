@@ -69,6 +69,7 @@ export const PERMISSION_KEYS = [
   "insights.view",
   "notifications.view",
   "notifications.manage",
+  "notifications.manage_templates",
   "datasets.create",
   "datasets.download",
   "datasets.share",

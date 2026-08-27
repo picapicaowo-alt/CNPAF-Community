@@ -238,7 +238,16 @@ export async function createTask(actorId: string, input: TaskCreate, requestId?:
       400,
     );
   if (form.template.organizationId && form.template.organizationId !== program.organizationId) throw new ApiError("BAD_REQUEST", "Task form belongs to another organization", 400);
-  await requireActiveRegistryItem("task_type", input.taskTypeKey, program.organizationId);
+  await Promise.all([
+    requireActiveRegistryItem("task_type", input.taskTypeKey, program.organizationId),
+    input.priority
+      ? requireActiveRegistryItem(
+          "priority_level",
+          input.priority,
+          program.organizationId,
+        )
+      : Promise.resolve(),
+  ]);
   await assertSiteInOrganization(input.siteId, program.organizationId);
   assertTaskWindow(input.opensAt ? new Date(input.opensAt) : null, input.closesAt ? new Date(input.closesAt) : null, input.dueAt ? new Date(input.dueAt) : null);
   if (!(await authorize({ userId: actorId, permission: "tasks.create", resource: { organizationId: program.organizationId, programId: program.id } })).allowed) {
@@ -346,6 +355,13 @@ export async function updateTask(actorId: string, taskId: string, input: TaskUpd
     input.taskTypeKey !== before.taskTypeKey
   )
     await requireActiveRegistryItem("task_type", input.taskTypeKey, before.organizationId);
+  if (input.priority !== undefined && input.priority !== before.priority && input.priority) {
+    await requireActiveRegistryItem(
+      "priority_level",
+      input.priority,
+      before.organizationId,
+    );
+  }
   if (
     input.templateVersionId !== undefined &&
     input.templateVersionId !== before.templateVersionId

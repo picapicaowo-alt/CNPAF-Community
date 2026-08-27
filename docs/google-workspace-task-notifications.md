@@ -49,6 +49,33 @@ System-generated email subjects and bodies are English by default, regardless
 of the recipient's interface language. The delegated sender is the dedicated
 CNPAF mailbox `notifications@cnpaf.org`.
 
+## Notification events and customization
+
+Email and in-app delivery use the same organization-scoped template for these
+events:
+
+- account onboarding and password reset;
+- task/activity assignment, reassignment, and reminder;
+- people-group and program membership changes;
+- role/access-scope changes; and
+- school or institution affiliation changes.
+
+Administrators with `notifications.manage_templates` can edit the in-app title,
+email subject, message body, and action-button label under **More → Notification
+management**. Each event exposes a bounded variable list such as
+`{{recipient_name}}`, `{{organization_name}}`, `{{entity_name}}`, and
+`{{action_url}}`; unknown variables are rejected at the API boundary. Account
+creation also accepts a one-person welcome note, while task detail keeps its
+editable manual reminder message.
+
+Onboarding and forgot-password verification tokens are random, validated
+against SHA-256 hashes, single-use, and expire after 24 hours. The retryable
+notification outbox retains the delivery link with the same restricted access
+as other email payloads. The public forgot-password endpoint
+returns the same accepted response for matching and non-matching addresses and
+applies a five-minute per-account issuance cooldown. A successful password
+reset invalidates existing sessions.
+
 ## Recurrence runner
 
 The authenticated `POST /api/v1/automation/tasks` endpoint creates task

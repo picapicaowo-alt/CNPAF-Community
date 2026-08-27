@@ -31,6 +31,10 @@ paths:
     get: { tags: [Session], operationId: getLegacyAuthMe, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '401': { $ref: '#/components/responses/Unauthorized' } } }
   /auth/password:
     post: { tags: [Session], operationId: changePassword, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' } } }
+  /auth/forgot-password:
+    post: { tags: [Session], operationId: requestPasswordReset, security: [], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '202': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' } } }
+  /auth/reset-password:
+    post: { tags: [Session], operationId: completePasswordReset, security: [], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /account:
     get: { tags: [Session], operationId: getAccount, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     delete: { tags: [Session], operationId: deleteAccount, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
@@ -98,6 +102,9 @@ paths:
     get: { tags: [Access], operationId: listPermissions, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /admin/audit-events:
     get: { tags: [Access], operationId: listAuditEvents, parameters: [{ name: before, in: query, description: Opaque cursor returned as nextBefore; ISO date-time is accepted for legacy clients., schema: { type: string } }, { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 250, default: 100 } }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /admin/notification-templates:
+    get: { tags: [Notifications], operationId: listNotificationTemplates, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '403': { $ref: '#/components/responses/Forbidden' } } }
+    put: { tags: [Notifications], operationId: saveNotificationTemplate, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' } } }
   /people-groups:
     get: { tags: [Access], operationId: listPeopleGroups, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     post: { tags: [Access], operationId: createPeopleGroup, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }

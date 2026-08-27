@@ -125,6 +125,7 @@ test("the More directory keeps equal scrollable cards in independent columns", (
 test("standalone mobile workspaces keep navigation and forms inside the viewport", () => {
   const chrome = readFileSync(path.join(appRoot, "../components/AppChrome.tsx"), "utf8");
   const dashboard = readFileSync(path.join(appRoot, "dashboard/page.tsx"), "utf8");
+  const insights = readFileSync(path.join(appRoot, "insights/page.tsx"), "utf8");
   const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
 
   assert.match(chrome, /className="mobile-header-back"/);
@@ -135,7 +136,35 @@ test("standalone mobile workspaces keep navigation and forms inside the viewport
   assert.match(styles, /\.mobile-header-back\s*\{[\s\S]*?width: 44px;[\s\S]*?height: 44px/);
   assert.match(styles, /\.forms-manage-page\s*\{[\s\S]*?max-width: 100%;[\s\S]*?overflow-x: clip/);
   assert.match(styles, /grid-template-columns: repeat\(var\(--mobile-nav-count, 4\), minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.insight-real-dates input\[type="date"\][\s\S]*?min-width: 0;[\s\S]*?max-width: 100%/);
+  assert.match(styles, /\.app-main input:is\([\s\S]*?\[type="date"\][\s\S]*?\[type="datetime-local"\][\s\S]*?min-width: 0;[\s\S]*?max-width: 100%/);
+  assert.match(styles, /\.mobile-stack > \*[\s\S]*?min-width: 0;[\s\S]*?max-width: 100%/);
+  assert.match(styles, /\.insight-conversation-field\s*\{[\s\S]*?width: 100%;[\s\S]*?min-width: 0/);
+  assert.match(styles, /\.insight-conversation-field input::placeholder\s*\{[\s\S]*?font-size: 14px/);
+  assert.match(insights, /className="insight-conversation-field"/);
+  assert.match(insights, /问问一线记录告诉我们什么/);
+});
+
+test("task priority uses optional configured choices instead of a numeric stepper", () => {
+  const createTask = readFileSync(path.join(appRoot, "tasks/new/page.tsx"), "utf8");
+  const taskManager = readFileSync(
+    path.resolve(
+      process.cwd(),
+      "src/features/tasks/components/TaskManagementPanel.tsx",
+    ),
+    "utf8",
+  );
+  const configuration = readFileSync(
+    path.resolve(process.cwd(), "src/features/configuration/types.ts"),
+    "utf8",
+  );
+
+  for (const source of [createTask, taskManager]) {
+    assert.match(source, /config\/registries\/priority_level\?status=active/);
+    assert.match(source, /Priority \(optional\)/);
+    assert.match(source, /registry=priority_level/);
+    assert.doesNotMatch(source, /setPriority\(Number\(/);
+  }
+  assert.match(configuration, /key: "priority_level"/);
 });
 
 test("administrators can assign any role and scope from person management", () => {

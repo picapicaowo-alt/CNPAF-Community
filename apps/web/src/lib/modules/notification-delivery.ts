@@ -3,13 +3,16 @@ import {
   jobs,
   notificationEmailDeliveries,
   notificationPreferences,
+  notificationTemplates,
   notifications,
+  organizations,
   tasks,
   users,
 } from "@cnpaf/db/schema";
 import { getNotificationEmailRuntimeConfig } from "@/config/server";
 import { db } from "@/lib/db";
 import { sendGmailMessage } from "@/lib/gmail";
+import { renderNotificationTemplate } from "@/lib/notification-template-catalog";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -29,12 +32,15 @@ export type NotificationInput = {
     | "group_membership_changed"
     | "program_membership_changed"
     | "access_changed"
-    | "affiliation_changed";
+    | "affiliation_changed"
+    | "account_onboarding"
+    | "password_reset_requested";
   title: string;
   body: string;
   entityType?: string;
   entityId?: string;
   metadata?: Record<string, unknown>;
+  templateVariables?: Record<string, string | null | undefined>;
 };
 
 export async function queueTaskNotification(
@@ -52,12 +58,19 @@ export async function queueNotification(
   tx: DbTransaction,
   input: NotificationInput,
 ) {
-  const [recipient, preference] = await Promise.all([
-    tx.select({ email: users.email, status: users.status })
+  const recipient = await tx.select({
+    email: users.email,
+    name: users.name,
+    status: users.status,
+    organizationId: users.organizationId,
+    organizationName: organizations.name,
+  })
       .from(users)
+      .leftJoin(organizations, eq(users.organizationId, organizations.id))
       .where(eq(users.id, input.userId))
       .limit(1)
-      .then((rows) => rows[0]),
+      .then((rows) => rows[0]);
+  const [preference, template] = await Promise.all([
     tx.select()
       .from(notificationPreferences)
       .where(and(
@@ -66,25 +79,64 @@ export async function queueNotification(
       ))
       .limit(1)
       .then((rows) => rows[0]),
+    recipient?.organizationId
+      ? tx.select()
+        .from(notificationTemplates)
+        .where(and(
+          eq(notificationTemplates.organizationId, recipient.organizationId),
+          eq(notificationTemplates.kindKey, input.kindKey),
+          eq(notificationTemplates.status, "active"),
+        ))
+        .limit(1)
+        .then((rows) => rows[0])
+      : Promise.resolve(undefined),
   ]);
   if (!recipient || recipient.status !== "active") {
     return { notification: null, emailStatus: "recipient_inactive" as const };
   }
 
+  const config = getNotificationEmailRuntimeConfig();
+  const inputMetadata = input.metadata ?? {};
+  const actionPath = typeof inputMetadata.actionPath === "string" && inputMetadata.actionPath.startsWith("/")
+    ? inputMetadata.actionPath
+    : "/notifications";
+  const appBaseUrl = config.enabled ? config.appBaseUrl : "";
+  const values = {
+    recipient_name: recipient.name,
+    recipient_email: recipient.email,
+    organization_name: recipient.organizationName ?? "CNPAF Community",
+    app_url: appBaseUrl,
+    action_url: appBaseUrl ? `${appBaseUrl}${actionPath}` : actionPath,
+    message: input.body,
+    entity_name: input.title,
+    ...input.templateVariables,
+  };
+  const title = template
+    ? renderNotificationTemplate(template.titleTemplate, values)
+    : input.title;
+  const body = template
+    ? renderNotificationTemplate(template.bodyTemplate, values)
+    : input.body;
+  const metadata = template
+    ? {
+        ...inputMetadata,
+        emailSubject: renderNotificationTemplate(template.emailSubjectTemplate, values),
+        actionLabel: renderNotificationTemplate(template.actionLabelTemplate, values),
+      }
+    : inputMetadata;
   const inAppEnabled = preference?.inAppEnabled ?? true;
   const [notification] = await tx.insert(notifications).values({
     userId: input.userId,
     kindKey: input.kindKey,
-    title: input.title,
-    body: input.body,
+    title,
+    body,
     entityType: input.entityType ?? null,
     entityId: input.entityId ?? null,
     status: inAppEnabled ? "unread" : "read",
     readAt: inAppEnabled ? null : new Date(),
-    metadata: input.metadata ?? {},
+    metadata,
   }).returning();
 
-  const config = getNotificationEmailRuntimeConfig();
   if (!config.enabled) return { notification, emailStatus: "disabled" as const };
   const emailEnabled = preference?.emailEnabled ?? true;
   const recipientDomain = recipient.email.split("@").at(-1)?.toLowerCase();
@@ -149,6 +201,7 @@ export async function runNotificationEmailDelivery(deliveryId: string) {
       recipientEmail: row.delivery.recipientEmail,
       notificationKind: row.notification.kindKey,
       notificationBody: row.notification.body,
+      metadata: row.notification.metadata,
       task,
     }) : buildGeneralNotificationEmail({
       recipientName: row.recipientName,
@@ -179,12 +232,14 @@ function buildTaskEmail({
   recipientEmail,
   notificationKind,
   notificationBody,
+  metadata,
   task,
 }: {
   recipientName: string;
   recipientEmail: string;
   notificationKind: string;
   notificationBody: string;
+  metadata: unknown;
   task: typeof tasks.$inferSelect;
 }) {
   const config = getNotificationEmailRuntimeConfig();
@@ -197,9 +252,12 @@ function buildTaskEmail({
       }).format(task.dueAt)
     : "Not set";
   const isReminder = notificationKind === "task_reminder";
-  const subject = `${isReminder ? "Task reminder" : "New task assigned"}: ${task.title}`;
+  const record = metadata && typeof metadata === "object" ? metadata as Record<string, unknown> : {};
+  const subject = typeof record.emailSubject === "string"
+    ? record.emailSubject
+    : `${isReminder ? "Task reminder" : notificationKind === "task_reassigned" ? "Task reassigned" : "New task assigned"}: ${task.title}`;
   const greeting = `Hello ${recipientName},`;
-  const action = "View task";
+  const action = typeof record.actionLabel === "string" ? record.actionLabel : "View task";
   const dueLabel = "Due";
   const text = [
     greeting,
@@ -239,9 +297,12 @@ function buildGeneralNotificationEmail({
     ? record.actionPath
     : "/notifications";
   const actionUrl = `${config.appBaseUrl}${actionPath}`;
+  const actionLabel = typeof record.actionLabel === "string"
+    ? record.actionLabel
+    : "Review this update";
   const greeting = `Hello ${recipientName},`;
-  const text = [greeting, "", notificationBody, "", `Review this update: ${actionUrl}`].join("\n");
-  const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#17324d;line-height:1.55"><div style="max-width:620px;margin:0 auto;padding:24px"><p>${escapeHtml(greeting)}</p><h2 style="font-size:20px">${escapeHtml(notificationTitle)}</h2><p>${escapeHtml(notificationBody)}</p><p style="margin-top:22px"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#036eb7;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px">Review this update</a></p></div></body></html>`;
+  const text = [greeting, "", notificationBody, "", `${actionLabel}: ${actionUrl}`].join("\n");
+  const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#17324d;line-height:1.55"><div style="max-width:620px;margin:0 auto;padding:24px"><p>${escapeHtml(greeting)}</p><h2 style="font-size:20px">${escapeHtml(notificationTitle)}</h2><p>${escapeHtml(notificationBody)}</p><p style="margin-top:22px"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#036eb7;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px">${escapeHtml(actionLabel)}</a></p></div></body></html>`;
   return { to: recipientEmail, subject, text, html };
 }
 

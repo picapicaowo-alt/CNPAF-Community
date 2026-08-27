@@ -61,6 +61,7 @@ export function TaskManagementPanel({
   const [members, setMembers] = useState<ProgramMembership[]>([]);
   const [locations, setLocations] = useState<LocationChoice[]>([]);
   const [taskTypes, setTaskTypes] = useState<RegistryItem[]>([]);
+  const [priorityLevels, setPriorityLevels] = useState<RegistryItem[]>([]);
   const [forms, setForms] = useState<FormChoice[]>([]);
   const [editing, setEditing] = useState(false);
   const [notifying, setNotifying] = useState(false);
@@ -82,11 +83,20 @@ export function TaskManagementPanel({
         setCanManage(allowed);
         setCanManageTaskTypes(permissions.includes("services.manage"));
         if (!allowed) return;
-        const [program, locationResult, typeResult, templateResult] = await Promise.all([
+        const [
+          program,
+          locationResult,
+          typeResult,
+          priorityResult,
+          templateResult,
+        ] = await Promise.all([
           getProgram(task.programId),
           apiFetch<{ locations: LocationChoice[] }>("/api/v1/locations"),
           apiFetch<{ items: RegistryItem[] }>(
             "/api/v1/config/registries/task_type?status=active",
+          ),
+          apiFetch<{ items: RegistryItem[] }>(
+            "/api/v1/config/registries/priority_level?status=active",
           ),
           apiFetch<{ templates: Template[] }>("/api/v1/templates"),
         ]);
@@ -103,6 +113,7 @@ export function TaskManagementPanel({
           ),
         );
         setTaskTypes(typeResult.items ?? []);
+        setPriorityLevels(priorityResult.items ?? []);
         const formBundles = await Promise.all(
           (templateResult.templates ?? [])
             .filter(
@@ -190,7 +201,7 @@ export function TaskManagementPanel({
         taskTypeKey: draft.taskTypeKey,
         templateVersionId: draft.templateVersionId,
         siteId: draft.siteId || null,
-        priority: Number(draft.priority),
+        priority: draft.priority || null,
         dueAt: draft.dueAt ? new Date(draft.dueAt).toISOString() : null,
       }),
     );
@@ -469,14 +480,38 @@ export function TaskManagementPanel({
             />
           </label>
           <label>
-            {locale === "zh" ? "优先级" : "Priority"}
-            <input
-              max={100}
-              min={-100}
+            <span className="row-between">
+              <span>
+                {locale === "zh" ? "优先级（可选）" : "Priority (optional)"}
+              </span>
+              {canManageTaskTypes ? (
+                <Link
+                  className="inline-link"
+                  href="/settings/configuration?registry=priority_level"
+                >
+                  {locale === "zh" ? "管理选项" : "Manage options"}
+                </Link>
+              ) : null}
+            </span>
+            <select
               onChange={(event) => changeDraft("priority", event.target.value)}
-              type="number"
               value={draft.priority}
-            />
+            >
+              <option value="">
+                {locale === "zh" ? "未设置" : "Not set"}
+              </option>
+              {draft.priority &&
+              !priorityLevels.some((item) => item.key === draft.priority) ? (
+                <option value={draft.priority}>
+                  {draft.priority} · {locale === "zh" ? "已移除" : "Removed"}
+                </option>
+              ) : null}
+              {priorityLevels.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {locale === "zh" ? item.labelZh : item.labelEn}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="field-full">
             {locale === "zh" ? "说明" : "Instructions"}
@@ -606,7 +641,7 @@ function taskDraft(
     templateVersionId: task.templateVersionId,
     siteId: task.siteId ?? "",
     dueAt: toLocalDateTime(task.dueAt),
-    priority: String(task.priority),
+    priority: task.priority ?? "",
   };
 }
 

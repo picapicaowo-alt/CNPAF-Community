@@ -141,7 +141,7 @@ export default function InsightsPage() {
       {error ? <ErrorState message={error} retry={load} /> : null}
       {canAsk ? (
         <div className="card insight-conversation-entry row-between mobile-stack">
-          <label style={{ flex: 1 }}>
+          <label className="insight-conversation-field">
             {locale === "zh" ? "与洞察对话" : "Talk with your insights"}
             <input
               onChange={(event) => setQuestion(event.target.value)}
@@ -150,8 +150,8 @@ export default function InsightsPage() {
               }}
               placeholder={
                 locale === "zh"
-                  ? "问问这些一线记录正在告诉我们什么…"
-                  : "Ask what these field records may be telling us…"
+                  ? "问问一线记录告诉我们什么"
+                  : "Ask what the field records tell us"
               }
               value={question}
             />

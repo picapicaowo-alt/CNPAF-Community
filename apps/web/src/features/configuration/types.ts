@@ -14,6 +14,15 @@ export const CONFIGURATION_REGISTRIES = [
     descriptionZh: "创建任务时可选择的运营分类。",
   },
   {
+    key: "priority_level",
+    labelEn: "Priority levels",
+    labelZh: "优先级",
+    descriptionEn:
+      "Optional priority choices used across task creation and editing.",
+    descriptionZh:
+      "任务创建与编辑中共用的可选优先级；停用后不再出现在新选择中，历史任务仍保留原值。",
+  },
+  {
     key: "template_type",
     labelEn: "Form types",
     labelZh: "表单类型",

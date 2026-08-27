@@ -14,7 +14,10 @@ import {
   institutionCreateBodySchema,
   institutionUpdateBodySchema,
   locationCreateBodySchema,
+  forgotPasswordBodySchema,
+  completePasswordResetBodySchema,
   manualAccountCreateBodySchema,
+  notificationTemplateBodySchema,
   personGroupCreateBodySchema,
   personGroupUpdateBodySchema,
   programUpdateBodySchema,
@@ -51,6 +54,26 @@ const ids = {
   canonical: "00000000-0000-0000-0000-000000000008",
   record: "00000000-0000-0000-0000-000000000009",
 };
+
+test("account recovery and notification templates reject unsafe or ambiguous input", () => {
+  assert.equal(forgotPasswordBodySchema.safeParse({ email: "member@cnpaf.org" }).success, true);
+  assert.equal(forgotPasswordBodySchema.safeParse({ email: "not-an-email" }).success, false);
+  assert.equal(completePasswordResetBodySchema.safeParse({ token: "x".repeat(64), newPassword: "secure-pass-12" }).success, true);
+  assert.equal(notificationTemplateBodySchema.safeParse({
+    kindKey: "account_onboarding",
+    titleTemplate: "Welcome {{recipient_name}}",
+    bodyTemplate: "Open {{action_url}}",
+    emailSubjectTemplate: "Welcome",
+    actionLabelTemplate: "Set password",
+  }).success, true);
+  assert.equal(notificationTemplateBodySchema.safeParse({
+    kindKey: "Account Onboarding",
+    titleTemplate: "Welcome",
+    bodyTemplate: "Message",
+    emailSubjectTemplate: "Welcome",
+    actionLabelTemplate: "Set password",
+  }).success, false);
+});
 
 test("V4 evidence filters apply every declared scope dimension", () => {
   const filters = reportFiltersSchema.parse({
@@ -195,6 +218,34 @@ test("task creation requires at least one assignee in the atomic workflow", () =
       .success,
     true,
   );
+});
+
+test("task priority is an optional configurable key", () => {
+  const base = {
+    programId: ids.program,
+    templateVersionId: ids.form,
+    taskTypeKey: "configured_task_type",
+    title: "Collection task",
+    assigneeIds: [ids.collector],
+  };
+  assert.equal(taskCreateBodySchema.safeParse(base).success, true);
+  assert.equal(
+    taskCreateBodySchema.safeParse({ ...base, priority: "low" }).success,
+    true,
+  );
+  assert.equal(
+    taskCreateBodySchema.safeParse({ ...base, priority: null }).success,
+    true,
+  );
+  assert.equal(
+    taskCreateBodySchema.safeParse({ ...base, priority: 1 }).success,
+    false,
+  );
+  assert.equal(
+    taskUpdateBodySchema.safeParse({ priority: "custom_urgent" }).success,
+    true,
+  );
+  assert.equal(taskUpdateBodySchema.safeParse({ priority: null }).success, true);
 });
 
 test("recurring task creation requires a due date and a valid IANA timezone", () => {

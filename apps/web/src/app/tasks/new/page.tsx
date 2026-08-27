@@ -47,6 +47,7 @@ export default function NewTaskPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [forms, setForms] = useState<FormChoice[]>([]);
   const [taskTypes, setTaskTypes] = useState<RegistryItem[]>([]);
+  const [priorityLevels, setPriorityLevels] = useState<RegistryItem[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [programId, setProgramId] = useState("");
   const [siteId, setSiteId] = useState("");
@@ -55,7 +56,7 @@ export default function NewTaskPage() {
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [dueAt, setDueAt] = useState("");
-  const [priority, setPriority] = useState(0);
+  const [priority, setPriority] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [openNow, setOpenNow] = useState(true);
   const [recurring, setRecurring] = useState(false);
@@ -78,6 +79,9 @@ export default function NewTaskPage() {
       apiFetch<{ items: RegistryItem[] }>(
         "/api/v1/config/registries/task_type?status=active",
       ),
+      apiFetch<{ items: RegistryItem[] }>(
+        "/api/v1/config/registries/priority_level?status=active",
+      ),
       copyTaskId
         ? apiFetch<TaskDetailResponse>(`/api/v1/tasks/${copyTaskId}`)
         : Promise.resolve(null),
@@ -88,6 +92,7 @@ export default function NewTaskPage() {
           locationResult,
           templateResult,
           taskTypeResult,
+          priorityResult,
           copyResult,
         ]) => {
           const activePrograms = (programResult.programs ?? []).filter(
@@ -115,6 +120,7 @@ export default function NewTaskPage() {
           setLocations(locationResult.locations ?? []);
           setForms(published);
           setTaskTypes(taskTypeResult.items ?? []);
+          setPriorityLevels(priorityResult.items ?? []);
           const source = copyResult?.task;
           const copiedProgram = activePrograms.find(
             (program) => program.id === source?.programId,
@@ -124,6 +130,9 @@ export default function NewTaskPage() {
           );
           const copiedType = taskTypeResult.items?.find(
             (item) => item.key === source?.taskTypeKey,
+          );
+          const copiedPriority = priorityResult.items?.find(
+            (item) => item.key === source?.priority,
           );
           const copiedLocation = (locationResult.locations ?? []).find(
             (location) => location.id === source?.siteId,
@@ -135,7 +144,7 @@ export default function NewTaskPage() {
             setSiteId(copiedLocation?.id ?? "");
             setTitle(`${source.title}（副本）`);
             setInstructions(source.instructions ?? "");
-            setPriority(source.priority);
+            setPriority(copiedPriority?.key ?? "");
             setOpenNow(false);
           }
         },
@@ -195,7 +204,7 @@ export default function NewTaskPage() {
           taskTypeKey,
           title: title.trim(),
           instructions: instructions.trim() || null,
-          priority,
+          priority: priority || null,
           dueAt: dueAt ? new Date(dueAt).toISOString() : null,
           opensAt: openNow ? new Date().toISOString() : null,
           closesAt: null,
@@ -501,14 +510,30 @@ export default function NewTaskPage() {
               />
             </label>
             <label>
-              {locale === "zh" ? "优先级" : "Priority"}
-              <input
-                max={100}
-                min={-100}
-                onChange={(event) => setPriority(Number(event.target.value))}
-                type="number"
+              <span className="row-between">
+                <span>
+                  {locale === "zh" ? "优先级（可选）" : "Priority (optional)"}
+                </span>
+                <Link
+                  className="inline-link"
+                  href="/settings/configuration?registry=priority_level"
+                >
+                  {locale === "zh" ? "管理选项" : "Manage options"}
+                </Link>
+              </span>
+              <select
+                onChange={(event) => setPriority(event.target.value)}
                 value={priority}
-              />
+              >
+                <option value="">
+                  {locale === "zh" ? "未设置" : "Not set"}
+                </option>
+                {priorityLevels.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {locale === "zh" ? item.labelZh : item.labelEn}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field-full">
               {locale === "zh" ? "说明（可选）" : "Instructions (optional)"}

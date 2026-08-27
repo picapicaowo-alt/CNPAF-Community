@@ -2074,6 +2074,72 @@ time {
 }
 
 @media (max-width: 899px) {
+  .data-table.configuration-data-table {
+    min-width: 0;
+  }
+
+  .configuration-data-table thead {
+    display: none;
+  }
+
+  .configuration-data-table,
+  .configuration-data-table tbody,
+  .configuration-data-table tr,
+  .configuration-data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .configuration-data-table tbody {
+    padding: 0 16px;
+  }
+
+  .configuration-data-table tr {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .configuration-data-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .configuration-data-table td {
+    display: grid;
+    grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    padding: 5px 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .configuration-data-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .configuration-data-table td:first-child {
+    display: block;
+    padding-top: 0;
+    padding-bottom: 10px;
+  }
+
+  .configuration-data-table td:first-child::before {
+    display: none;
+  }
+
+  .configuration-data-table td:last-child {
+    align-items: center;
+    padding-top: 10px;
+  }
+
+  .configuration-data-table td:last-child .row {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
   html {
     scroll-padding-top: 72px;
   }
@@ -3696,11 +3762,17 @@ h3 {
   }
 }
 
+.insight-conversation-field {
+  min-width: 0;
+  flex: 1;
+}
+
 /* PWA/mobile containment: native date controls, dense workspaces, and fixed
    navigation must stay inside the visual viewport on iOS standalone mode. */
 @media (max-width: 899px) {
   .app-main,
   .app-main > *,
+  .app-main :where(form, fieldset, label, .field, .row, .row-between),
   .stack,
   .card,
   .list-panel,
@@ -3712,6 +3784,43 @@ h3 {
   .more-column,
   .more-group,
   .more-link-list {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* WebKit date/time controls keep an intrinsic width unless the control and
+     its form item are both explicitly allowed to shrink. Keep the native
+     picker while containing every date-like control, not only Insights. */
+  .app-main :is(input, textarea, select) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-main input:is(
+    [type="date"],
+    [type="datetime-local"],
+    [type="time"],
+    [type="month"],
+    [type="week"]
+  ) {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-main input:is(
+    [type="date"],
+    [type="datetime-local"],
+    [type="time"],
+    [type="month"],
+    [type="week"]
+  )::-webkit-date-and-time-value {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .mobile-stack > * {
     min-width: 0;
     max-width: 100%;
   }
@@ -3742,10 +3851,21 @@ h3 {
     border-radius: 0;
   }
 
-  .insight-real-dates input[type="date"] {
+  .insight-conversation-entry {
+    align-items: stretch;
+  }
+
+  .insight-conversation-field {
     width: 100%;
     min-width: 0;
-    max-width: 100%;
+  }
+
+  .insight-conversation-field input {
+    width: 100%;
+  }
+
+  .insight-conversation-field input::placeholder {
+    font-size: 14px;
   }
 
   .forms-manage-page .form-quick-add-items {
@@ -3766,6 +3886,10 @@ h3 {
 
   .bottom-nav-link {
     font-size: 10.5px;
+  }
+
+  .insight-conversation-entry > .button {
+    width: 100%;
   }
 }
 
