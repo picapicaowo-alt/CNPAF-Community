@@ -136,6 +136,36 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
       "avatar_mime_type",
       "avatar_storage_key",
     ]);
+    const priorityLevels = await db.query<{
+      key: string;
+      label_en: string;
+      sort_order: number;
+    }>(`
+      SELECT item.key, item.label_en, item.sort_order
+      FROM config_registry_items item
+      JOIN config_registries registry ON registry.id = item.registry_id
+      WHERE registry.key = 'priority_level' AND item.status = 'active'
+      ORDER BY item.sort_order
+    `);
+    assert.deepEqual(priorityLevels.rows, [
+      { key: "low", label_en: "Low", sort_order: 10 },
+      { key: "medium", label_en: "Medium", sort_order: 20 },
+      { key: "high", label_en: "High", sort_order: 30 },
+    ]);
+    const taskPriorityColumn = await db.query<{
+      data_type: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>(`
+      SELECT data_type, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_name = 'tasks' AND column_name = 'priority'
+    `);
+    assert.deepEqual(taskPriorityColumn.rows[0], {
+      data_type: "text",
+      is_nullable: "YES",
+      column_default: null,
+    });
     const session = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM sessions WHERE token_hash = 'session-hash'`);
     assert.equal(session.rows[0]?.n, 1);
 

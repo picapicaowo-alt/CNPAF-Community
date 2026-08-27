@@ -35,7 +35,9 @@ export default function NewAccountPage() {
   const [institutionId, setInstitutionId] = useState("");
   const [departmentName, setDepartmentName] = useState("");
   const [title, setTitle] = useState("");
+  const [onboardingMessage, setOnboardingMessage] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [onboardingEmailQueued, setOnboardingEmailQueued] = useState(false);
   const [created, setCreated] = useState<{
     name: string;
     email: string;
@@ -72,6 +74,7 @@ export default function NewAccountPage() {
       const result = await apiFetch<{
         user: { name: string; email: string };
         temporaryPassword: string;
+        onboardingEmailQueued: boolean;
       }>("/api/v1/admin/users", {
         method: "POST",
         body: JSON.stringify({
@@ -80,6 +83,7 @@ export default function NewAccountPage() {
           organizationId,
           locale: accountLocale,
           requirePasswordChange: true,
+          onboardingMessage: onboardingMessage.trim() || null,
           roleAssignments: [{ roleKey, organizationId }],
           scopeAssignments: [],
           affiliations: institutionId
@@ -100,6 +104,7 @@ export default function NewAccountPage() {
         }),
       });
       setTemporaryPassword(result.temporaryPassword);
+      setOnboardingEmailQueued(result.onboardingEmailQueued);
       setCreated(result.user);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -134,6 +139,11 @@ export default function NewAccountPage() {
               </strong>
               <p>
                 {created.name} · {created.email}
+              </p>
+              <p>
+                {onboardingEmailQueued
+                  ? locale === "zh" ? "欢迎邮件已进入发送队列。" : "The welcome email is queued for delivery."
+                  : locale === "zh" ? "邮件未进入队列，请安全地发送下方临时密码。" : "Email was not queued; share the temporary password securely."}
               </p>
             </div>
           </div>
@@ -238,6 +248,15 @@ export default function NewAccountPage() {
                   value={title}
                 />
               </label>
+              <label className="notification-wide-field">
+                {locale === "zh" ? "本次欢迎消息（可选）" : "Welcome message for this person (optional)"}
+                <textarea
+                  onChange={(event) => setOnboardingMessage(event.target.value)}
+                  placeholder={locale === "zh" ? "会添加到 organization 的通用 onboarding 模板中。" : "Added to the organization-wide onboarding template."}
+                  rows={3}
+                  value={onboardingMessage}
+                />
+              </label>
             </div>
             <button
               className="button"
@@ -265,8 +284,8 @@ export default function NewAccountPage() {
             <div className="feedback feedback-warning">
               <span>
                 {locale === "zh"
-                  ? "临时密码只显示一次。"
-                  : "The temporary password is shown once."}
+                  ? "系统会从 notifications@cnpaf.org 发送欢迎邮件；临时密码仍只显示一次，作为安全备用。"
+                  : "A welcome email is sent from notifications@cnpaf.org. The temporary password remains a one-time fallback."}
               </span>
             </div>
           </aside>

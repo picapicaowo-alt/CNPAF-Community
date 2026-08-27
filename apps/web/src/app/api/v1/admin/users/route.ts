@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { permissionScopeAssignments, personGroupMemberships, personGroups, programMemberships, programs, roles, userAffiliations, userRoleAssignments, users } from "@cnpaf/db/schema";
 import { db } from "@/lib/db";
@@ -7,6 +7,7 @@ import { evaluateAuthorization, getAccessContext } from "@/lib/authorization";
 import { manualAccountCreateBodySchema } from "@cnpaf/shared";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { createAccount } from "@/lib/modules/accounts";
+import { processNotificationEmailJobs } from "@/lib/jobs";
 import { getAiAccessStates } from "@/lib/access-admin";
 
 export async function GET(req: Request) {
@@ -112,6 +113,7 @@ export async function POST(req: Request) {
     const { user, error } = await requirePermission("people.create_account");
     if (error || !user) return error;
     const account = await createAccount(user.id, manualAccountCreateBodySchema.parse(await req.json()), traceId);
+    after(() => processNotificationEmailJobs());
     return NextResponse.json(account, { status: 201 });
   } catch (error) {
     return apiErrorResponse(error, traceId);

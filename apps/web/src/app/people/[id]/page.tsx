@@ -558,7 +558,7 @@ export default function PersonManagementPage() {
     setError("");
     setTemporaryPassword("");
     try {
-      const result = await apiFetch<{ temporaryPassword: string }>(
+      const result = await apiFetch<{ temporaryPassword: string; emailQueued: boolean }>(
         `/api/v1/admin/users/${id}/reset-password`,
         {
           method: "POST",
@@ -566,6 +566,9 @@ export default function PersonManagementPage() {
         },
       );
       setTemporaryPassword(result.temporaryPassword);
+      setNotice(result.emailQueued
+        ? locale === "zh" ? "密码重置邮件已进入发送队列。" : "The password reset email is queued."
+        : locale === "zh" ? "邮件未进入队列；请安全发送一次性临时密码。" : "Email was not queued; share the one-time temporary password securely.");
       setResetReason("");
       await load();
     } catch (caught) {

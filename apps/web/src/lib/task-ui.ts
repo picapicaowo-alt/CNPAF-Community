@@ -27,7 +27,7 @@ export type TaskSummary = {
   dueAt?: string | null;
   opensAt?: string | null;
   closesAt?: string | null;
-  priority: number;
+  priority?: string | null;
   configuration: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
