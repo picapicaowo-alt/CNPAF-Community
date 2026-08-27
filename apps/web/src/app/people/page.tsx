@@ -333,7 +333,7 @@ export default function PeoplePage() {
           ) : null}
         </div>
       ) : null}
-      <div className="card card-compact form-grid">
+      <div className="card card-compact form-grid people-filter-card">
         <label>
           {locale === "zh" ? "搜索人员" : "Search people"}
           <span className="search-control">
@@ -349,7 +349,7 @@ export default function PeoplePage() {
             />
           </span>
         </label>
-        <label>
+        <label className="people-filter-status">
           {locale === "zh" ? "账号状态" : "Account status"}
           <select
             onChange={(event) => setStatus(event.target.value)}
@@ -370,9 +370,17 @@ export default function PeoplePage() {
       ) : error ? (
         <ErrorState message={error} retry={load} />
       ) : visible.length ? (
-        <div className="table-shell">
-          <div className="table-scroll">
-            <table className="data-table">
+        <div className="table-shell people-data-table-shell">
+          <div className="table-scroll people-data-table-scroll">
+            <table className="data-table people-data-table">
+              <colgroup>
+                <col className="people-column-person" />
+                <col className="people-column-role" />
+                <col className="people-column-scope" />
+                <col className="people-column-account" />
+                <col className="people-column-password" />
+                <col className="people-column-manage" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>{locale === "zh" ? "人员" : "Person"}</th>
@@ -392,11 +400,15 @@ export default function PeoplePage() {
               <tbody>
                 {visible.map((user) => (
                   <tr key={user.id}>
-                    <td>
+                    <td data-label={locale === "zh" ? "人员" : "Person"}>
                       <strong>{user.name}</strong>
                       <div className="caption">{user.email}</div>
                     </td>
-                    <td>
+                    <td
+                      data-label={
+                        locale === "zh" ? "角色与归属" : "Role & affiliation"
+                      }
+                    >
                       <div className="stack-sm">
                         <div className="row people-role-pills">
                           {user.roleAssignments.length
@@ -418,16 +430,20 @@ export default function PeoplePage() {
                         </span>
                       </div>
                     </td>
-                    <td>
+                    <td
+                      data-label={
+                        locale === "zh" ? "项目与分组" : "Programs & groups"
+                      }
+                    >
                       <div className="stack-sm people-scope-cell">
                         <span>
-                      {user.programMemberships
-                        .map((program) =>
-                          locale === "zh"
-                            ? program.programNameZh
-                            : program.programNameEn,
-                        )
-                        .join(", ") ||
+                          {user.programMemberships
+                            .map((program) =>
+                              locale === "zh"
+                                ? program.programNameZh
+                                : program.programNameEn,
+                            )
+                            .join(", ") ||
                             (locale === "zh"
                               ? "组织范围"
                               : "Organization scope")}
@@ -445,34 +461,40 @@ export default function PeoplePage() {
                         </span>
                       </div>
                     </td>
-                    <td>
+                    <td
+                      data-label={
+                        locale === "zh" ? "账号与 AI" : "Account & AI"
+                      }
+                    >
                       <div className="stack-sm people-account-cell">
-                      <StatusPill
-                        tone={user.status === "active" ? "green" : "neutral"}
-                      >
-                        {user.status === "active"
+                        <StatusPill
+                          tone={
+                            user.status === "active" ? "green" : "neutral"
+                          }
+                        >
+                          {user.status === "active"
                             ? locale === "zh"
                               ? "启用"
                               : "Active"
                             : locale === "zh"
                               ? "已归档"
                               : "Archived"}
-                      </StatusPill>
-                      {permissions.includes("permissions.assign") ? (
-                        <button
-                          aria-checked={user.aiEnabled}
-                          className={`ai-access-toggle${user.aiEnabled ? " active" : ""}`}
+                        </StatusPill>
+                        {permissions.includes("permissions.assign") ? (
+                          <button
+                            aria-checked={user.aiEnabled}
+                            className={`ai-access-toggle${user.aiEnabled ? " active" : ""}`}
                             disabled={
                               aiUpdating === user.id || user.status !== "active"
                             }
-                          onClick={() => void toggleAiAccess(user)}
-                          role="switch"
-                          type="button"
-                        >
+                            onClick={() => void toggleAiAccess(user)}
+                            role="switch"
+                            type="button"
+                          >
                             <span aria-hidden="true">
                               <i />
                             </span>
-                          {aiUpdating === user.id
+                            {aiUpdating === user.id
                               ? locale === "zh"
                                 ? "更新中…"
                                 : "Updating…"
@@ -483,11 +505,15 @@ export default function PeoplePage() {
                                 : locale === "zh"
                                   ? "AI 未分配"
                                   : "AI not assigned"}
-                        </button>
+                          </button>
                         ) : null}
                       </div>
                     </td>
-                    <td>
+                    <td
+                      data-label={
+                        locale === "zh" ? "密码安全" : "Password security"
+                      }
+                    >
                       <div className="stack-sm password-admin-cell">
                         <StatusPill
                           tone={user.mustChangePassword ? "amber" : "green"}
@@ -525,7 +551,10 @@ export default function PeoplePage() {
                         ) : null}
                       </div>
                     </td>
-                    <td className="people-manage-cell">
+                    <td
+                      className="people-manage-cell"
+                      data-label={locale === "zh" ? "管理" : "Manage"}
+                    >
                       <Link
                         className="button button-secondary button-small"
                         href={`/people/${user.id}`}
