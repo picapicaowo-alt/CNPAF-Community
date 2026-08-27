@@ -7,6 +7,7 @@ import { compareFormVersions } from "./api";
 import {
   releaseNotesFromVersion,
   type FormVersionComparison,
+  type FormVersionDetails,
   type FormVersionSummary,
   type ReleaseNotes,
 } from "./types";
@@ -16,7 +17,10 @@ type Props = {
   currentVersion: FormVersionSummary;
   editable: boolean;
   locale: "zh" | "en";
-  onSaveReleaseNotes: (notes: ReleaseNotes) => Promise<void>;
+  onSaveDetails: (
+    details: FormVersionDetails,
+    notes: ReleaseNotes,
+  ) => Promise<void>;
   templateId: string;
   versions: FormVersionSummary[];
 };
@@ -26,13 +30,19 @@ export function FormVersionPanel({
   currentVersion,
   editable,
   locale,
-  onSaveReleaseNotes,
+  onSaveDetails,
   templateId,
   versions,
 }: Props) {
   const [notes, setNotes] = useState(() =>
     releaseNotesFromVersion(currentVersion),
   );
+  const [details, setDetails] = useState<FormVersionDetails>(() => ({
+    nameEn: currentVersion.nameEn,
+    nameZh: currentVersion.nameZh,
+    descriptionEn: currentVersion.descriptionEn ?? "",
+    descriptionZh: currentVersion.descriptionZh ?? "",
+  }));
   const [fromVersionId, setFromVersionId] = useState("");
   const [toVersionId, setToVersionId] = useState(currentVersion.id);
   const [comparison, setComparison] = useState<FormVersionComparison | null>(
@@ -43,6 +53,12 @@ export function FormVersionPanel({
 
   useEffect(() => {
     setNotes(releaseNotesFromVersion(currentVersion));
+    setDetails({
+      nameEn: currentVersion.nameEn,
+      nameZh: currentVersion.nameZh,
+      descriptionEn: currentVersion.descriptionEn ?? "",
+      descriptionZh: currentVersion.descriptionZh ?? "",
+    });
     setToVersionId(currentVersion.id);
     setFromVersionId(
       versions.find((version) => version.version < currentVersion.version)?.id ??
@@ -74,7 +90,7 @@ export function FormVersionPanel({
     <details className="card stack-sm">
       <summary className="row-between">
         <span>
-          <strong>{locale === "zh" ? "版本记录" : "Version history"}</strong>
+          <strong>{locale === "zh" ? "模板信息与版本" : "Template details & versions"}</strong>
           <span className="caption" style={{ display: "block" }}>
             {locale === "zh"
               ? `v${currentVersion.version} · ${currentVersion.sectionCount ?? 0} 个 Section · ${currentVersion.fieldCount ?? 0} 道题 · ${currentVersion.usageCount ?? 0} 个任务使用`
@@ -86,6 +102,62 @@ export function FormVersionPanel({
         </StatusPill>
       </summary>
       <div className="form-grid form-fieldset">
+        <label>
+          {locale === "zh" ? "中文名称" : "Chinese name"}
+          <input
+            disabled={!editable || busy}
+            maxLength={240}
+            onChange={(event) =>
+              setDetails((current) => ({
+                ...current,
+                nameZh: event.target.value,
+              }))
+            }
+            value={details.nameZh}
+          />
+        </label>
+        <label>
+          {locale === "zh" ? "英文名称" : "English name"}
+          <input
+            disabled={!editable || busy}
+            maxLength={240}
+            onChange={(event) =>
+              setDetails((current) => ({
+                ...current,
+                nameEn: event.target.value,
+              }))
+            }
+            value={details.nameEn}
+          />
+        </label>
+        <label>
+          {locale === "zh" ? "中文说明" : "Chinese description"}
+          <textarea
+            disabled={!editable || busy}
+            maxLength={4000}
+            onChange={(event) =>
+              setDetails((current) => ({
+                ...current,
+                descriptionZh: event.target.value,
+              }))
+            }
+            value={details.descriptionZh}
+          />
+        </label>
+        <label>
+          {locale === "zh" ? "英文说明" : "English description"}
+          <textarea
+            disabled={!editable || busy}
+            maxLength={4000}
+            onChange={(event) =>
+              setDetails((current) => ({
+                ...current,
+                descriptionEn: event.target.value,
+              }))
+            }
+            value={details.descriptionEn}
+          />
+        </label>
         <label>
           中文发布说明
           <textarea
@@ -112,11 +184,11 @@ export function FormVersionPanel({
           <div className="field-full row" style={{ justifyContent: "flex-end" }}>
             <button
               className="button button-secondary button-small"
-              disabled={busy}
-              onClick={() => void onSaveReleaseNotes(notes)}
+              disabled={busy || !details.nameEn.trim() || !details.nameZh.trim()}
+              onClick={() => void onSaveDetails(details, notes)}
               type="button"
             >
-              {locale === "zh" ? "保存发布说明" : "Save release notes"}
+              {locale === "zh" ? "保存模板信息" : "Save template details"}
             </button>
           </div>
         ) : null}

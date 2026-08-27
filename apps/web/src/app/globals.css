@@ -5316,6 +5316,15 @@ input[type="radio"] {
   color: var(--muted);
   font-size: 12px;
 }
+.template-launch-heading-actions,
+.template-choice-manage-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.template-launch-heading-actions {
+  flex: 0 0 auto;
+}
 .template-launch-search {
   width: 100%;
 }
@@ -5435,6 +5444,9 @@ input[type="radio"] {
   cursor: pointer;
   font-size: 9px;
   font-weight: 700;
+}
+.template-choice-manage-actions {
+  margin-left: auto;
 }
 .template-choice-actions button:hover,
 .template-choice-actions button.active {
