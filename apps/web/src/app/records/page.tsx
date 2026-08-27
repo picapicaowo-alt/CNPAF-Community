@@ -545,7 +545,7 @@ function RecordsContent() {
                       {canCreateDataset ? (
                         <td className="selection-cell">
                           <input
-                            aria-label={`${locale === "zh" ? "选择记录" : "Select record"} ${row.id.slice(0, 8)}`}
+                            aria-label={`${locale === "zh" ? "选择记录" : "Select record"} ${recordReference(row)}`}
                             checked={selected.has(row.id)}
                             disabled={!row.approvedDatasetEligible}
                             onChange={() => toggleRecord(row.id)}

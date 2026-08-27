@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { recordReference } from "@/features/records/display";
-import { sourceKindLabel } from "@/lib/display-labels";
+import { recordCitationLabel, recordReference } from "@/features/records/display";
 
 export type AiDisplaySource = {
   id: string;
@@ -42,9 +41,9 @@ function internalRecordSource(source: AiDisplaySource, locale: "zh" | "en") {
   if (!source.metadata || typeof source.metadata !== "object" || Array.isArray(source.metadata)) return null;
   const metadata = source.metadata as {
     recordId?: unknown;
-    recordReference?: unknown;
     sourceKind?: unknown;
     occurredAt?: unknown;
+    updatedAt?: unknown;
     snapshotMode?: unknown;
   };
   if (
@@ -53,25 +52,18 @@ function internalRecordSource(source: AiDisplaySource, locale: "zh" | "en") {
     typeof metadata.sourceKind !== "string"
   ) return null;
   const occurredAt = typeof metadata.occurredAt === "string" ? metadata.occurredAt : null;
-  const occurredDate = occurredAt ? new Date(occurredAt) : null;
-  const dateLabel = occurredDate && !Number.isNaN(occurredDate.getTime())
-    ? occurredDate.toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : null;
-  const reference = typeof metadata.recordReference === "string" && metadata.recordReference.trim()
-    ? metadata.recordReference.trim()
-    : recordReference({
-        id: metadata.recordId,
-        sourceKind: metadata.sourceKind,
-        occurredAt,
-      });
+  const updatedAt = typeof metadata.updatedAt === "string" ? metadata.updatedAt : null;
+  const identity = {
+    id: metadata.recordId,
+    sourceKind: metadata.sourceKind,
+    occurredAt,
+    updatedAt,
+  };
+  const reference = recordReference(identity);
   return {
     href: `/records/${metadata.recordId}`,
     reference,
-    label: [sourceKindLabel(metadata.sourceKind, locale), dateLabel, reference].filter(Boolean).join(" · "),
+    label: recordCitationLabel(identity, locale),
     snapshotMode: metadata.snapshotMode === "dataset" ? "dataset" as const : "live" as const,
   };
 }

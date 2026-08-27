@@ -34,6 +34,7 @@ import { audit } from "../audit";
 import { ApiError } from "../api-error";
 import { authorize, evaluateAuthorization, getAccessContext } from "../authorization";
 import { executeConfiguredWorkflow, externalWebSourceId, externalWebSourcesFromMetadata } from "../ai";
+import { recordReference } from "@/features/records/display";
 import {
   getDatasetEvidenceForAi,
   getDatasetVersionForReport,
@@ -159,23 +160,33 @@ export async function createEditableReport(actorId: string, input: ReportCreate,
     }).allowed)) throw new ApiError("FORBIDDEN", "Source report includes evidence outside the current access scope", 403);
   }
   const sourceLinks = source ? await db.select().from(reportEvidenceLinks).where(eq(reportEvidenceLinks.reportArtifactId, source.artifact.id)) : [];
-  const datasetFindingLinks = datasetSource ? datasetSource.findings.map(({ finding, frozen }) => ({
-    evidenceType: "approved_finding",
-    evidenceId: finding.id,
-    citationLabel: `Dataset v${datasetSource.version.versionNumber} / Record ${frozen.recordId.slice(0, 8)}`,
-    metadata: {
-      datasetId: datasetSource.dataset.id,
-      datasetVersionId: datasetSource.version.id,
-      datasetContentHash: datasetSource.version.contentHash,
-      recordId: frozen.recordId,
-      recordVersionId: frozen.recordVersionId,
-      ordinal: frozen.ordinal,
-    },
-  })) : [];
+  const datasetIdentityByVersionId = new Map(datasetSource?.recordIdentities.map((identity) => [identity.recordVersionId, identity]) ?? []);
+  const datasetFindingLinks = datasetSource ? datasetSource.findings.flatMap(({ finding, frozen }) => {
+    const identity = datasetIdentityByVersionId.get(frozen.recordVersionId);
+    if (!identity) return [];
+    return [{
+      evidenceType: "approved_finding",
+      evidenceId: finding.id,
+      citationLabel: recordReference({ id: identity.recordId, sourceKind: identity.sourceKind, occurredAt: identity.occurredAt, updatedAt: identity.updatedAt }),
+      metadata: {
+        datasetId: datasetSource.dataset.id,
+        datasetVersionId: datasetSource.version.id,
+        datasetContentHash: datasetSource.version.contentHash,
+        recordId: identity.recordId,
+        recordVersionId: identity.recordVersionId,
+        sourceKind: identity.sourceKind,
+        occurredAt: identity.occurredAt?.toISOString() ?? null,
+        updatedAt: identity.updatedAt.toISOString(),
+        snapshotMode: "dataset",
+        ordinal: identity.ordinal,
+      },
+    }];
+  }) : [];
   const frozenByVersionId = new Map(datasetSource?.frozenRows.map((row) => [row.recordVersionId, row]) ?? []);
   const datasetMediaLinks = datasetSource ? datasetSource.mediaAttachments.flatMap((attachment) => {
     const frozen = frozenByVersionId.get(attachment.recordVersionId);
-    if (!frozen) return [];
+    const identity = datasetIdentityByVersionId.get(attachment.recordVersionId);
+    if (!frozen || !identity) return [];
     const summary = toFrozenAttachmentManifest(attachment);
     return [{
       evidenceType: "attachment",
@@ -185,8 +196,12 @@ export async function createEditableReport(actorId: string, input: ReportCreate,
         datasetId: datasetSource.dataset.id,
         datasetVersionId: datasetSource.version.id,
         datasetContentHash: datasetSource.version.contentHash,
-        recordId: frozen.recordId,
-        recordVersionId: frozen.recordVersionId,
+        recordId: identity.recordId,
+        recordVersionId: identity.recordVersionId,
+        sourceKind: identity.sourceKind,
+        occurredAt: identity.occurredAt?.toISOString() ?? null,
+        updatedAt: identity.updatedAt.toISOString(),
+        snapshotMode: "dataset",
         attachment: summary,
         ordinal: frozen.ordinal,
       },
@@ -457,12 +472,12 @@ export async function getReportSectionSources(actorId: string, sectionId: string
   const applicable = links.filter((link) => !link.reportSectionId || link.reportSectionId === sectionId);
   const findingIds = applicable.filter((link) => link.evidenceType === "approved_finding").map((link) => link.evidenceId);
   const attachmentIds = applicable.filter((link) => link.evidenceType === "attachment").map((link) => link.evidenceId);
-  const rows = findingIds.length ? await db.select({ approved: approvedFindings, record: records })
+  const rows = findingIds.length ? await db.select({ approved: approvedFindings, record: records, version: recordVersions })
     .from(approvedFindings)
     .innerJoin(recordVersions, eq(approvedFindings.recordVersionId, recordVersions.id))
     .innerJoin(records, eq(recordVersions.recordId, records.id))
     .where(inArray(approvedFindings.id, findingIds)) : [];
-  const mediaRows = attachmentIds.length ? await db.select({ attachment: attachments, record: records })
+  const mediaRows = attachmentIds.length ? await db.select({ attachment: attachments, record: records, version: recordVersions })
     .from(attachments)
     .innerJoin(recordVersions, eq(attachments.recordVersionId, recordVersions.id))
     .innerJoin(records, eq(recordVersions.recordId, records.id))
@@ -497,11 +512,15 @@ export async function getReportSectionSources(actorId: string, sectionId: string
   for (const link of applicable) {
     const row = byId.get(link.evidenceId);
     if (row) {
-      visibleSources.push({ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: link.metadata, finding: row.approved.approvedValue, attachment: null, record: { id: row.record.id, programId: row.record.programId, locationId: row.record.siteId, sourceKind: row.record.sourceKind } });
+      const savedMetadata = link.metadata && typeof link.metadata === "object" && !Array.isArray(link.metadata) ? link.metadata : {};
+      visibleSources.push({ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: { ...savedMetadata, recordId: row.record.id, sourceKind: row.record.sourceKind, occurredAt: row.version.occurredAt?.toISOString() ?? null, updatedAt: row.record.updatedAt.toISOString(), snapshotMode: "dataset" }, finding: row.approved.approvedValue, attachment: null, record: { id: row.record.id, programId: row.record.programId, locationId: row.record.siteId, sourceKind: row.record.sourceKind } });
       continue;
     }
     const media = mediaById.get(link.evidenceId);
-    if (media) visibleSources.push({ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: link.metadata, finding: null, attachment: toAttachmentSummary(media.attachment), record: { id: media.record.id, programId: media.record.programId, locationId: media.record.siteId, sourceKind: media.record.sourceKind } });
+    if (media) {
+      const savedMetadata = link.metadata && typeof link.metadata === "object" && !Array.isArray(link.metadata) ? link.metadata : {};
+      visibleSources.push({ id: link.id, evidenceType: link.evidenceType, evidenceId: link.evidenceId, citationLabel: link.citationLabel, metadata: { ...savedMetadata, recordId: media.record.id, sourceKind: media.record.sourceKind, occurredAt: media.version.occurredAt?.toISOString() ?? null, updatedAt: media.record.updatedAt.toISOString(), snapshotMode: "dataset" }, finding: null, attachment: toAttachmentSummary(media.attachment), record: { id: media.record.id, programId: media.record.programId, locationId: media.record.siteId, sourceKind: media.record.sourceKind } });
+    }
   }
   const suggestionRun = section.aiSuggestionRunId
     ? (await db.select({ costMetadata: aiRuns.costMetadata }).from(aiRuns).where(eq(aiRuns.id, section.aiSuggestionRunId)).limit(1))[0]

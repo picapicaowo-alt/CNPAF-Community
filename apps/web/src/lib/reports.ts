@@ -17,6 +17,7 @@ import { evaluateAuthorization, getAccessContext } from "./authorization";
 import { audit } from "./audit";
 import { executeConfiguredWorkflow } from "./ai";
 import { matchesEvidenceFilters } from "./evidence-filters";
+import { recordReference } from "@/features/records/display";
 
 type ReportRunInput = z.infer<typeof reportRunBodySchema>;
 
@@ -217,11 +218,18 @@ export async function runReportJob(reportRunId: string) {
       },
     }).returning();
     if (evidence.length) {
-      await db.insert(reportEvidenceLinks).values(evidence.map(({ approved }) => ({
+      await db.insert(reportEvidenceLinks).values(evidence.map(({ approved, record, version }) => ({
         reportArtifactId: artifact.id,
         evidenceType: "approved_finding",
         evidenceId: approved.id,
-        citationLabel: `AF-${approved.id.slice(0, 8)}`,
+        citationLabel: recordReference({ id: record.id, sourceKind: record.sourceKind, occurredAt: version.occurredAt, updatedAt: record.updatedAt }),
+        metadata: {
+          recordId: record.id,
+          sourceKind: record.sourceKind,
+          occurredAt: version.occurredAt?.toISOString() ?? null,
+          updatedAt: record.updatedAt.toISOString(),
+          snapshotMode: "live",
+        },
       })));
     }
     await db.update(reportRuns).set({ status: "succeeded", workflowVersionId: generation.run.workflowVersionId, finishedAt: new Date(), updatedAt: new Date() }).where(eq(reportRuns.id, reportRunId));
@@ -306,8 +314,34 @@ export async function getReportArtifact(id: string) {
   if (!artifact) return null;
   const run = (await db.select().from(reportRuns).where(eq(reportRuns.id, artifact.reportRunId)).limit(1))[0];
   const sources = await db.select().from(reportEvidenceLinks).where(eq(reportEvidenceLinks.reportArtifactId, id));
+  const findingIds = sources.filter((source) => source.evidenceType === "approved_finding").map((source) => source.evidenceId);
+  const recordsByEvidenceId = findingIds.length
+    ? new Map((await db.select({ evidenceId: approvedFindings.id, record: records, version: recordVersions })
+        .from(approvedFindings)
+        .innerJoin(recordVersions, eq(approvedFindings.recordVersionId, recordVersions.id))
+        .innerJoin(records, eq(recordVersions.recordId, records.id))
+        .where(inArray(approvedFindings.id, findingIds)))
+      .map((row) => [row.evidenceId, row]))
+    : new Map();
+  const hydratedSources = sources.map((source) => {
+    const row = recordsByEvidenceId.get(source.evidenceId);
+    if (!row) return source;
+    const savedMetadata = source.metadata && typeof source.metadata === "object" && !Array.isArray(source.metadata) ? source.metadata : {};
+    return {
+      ...source,
+      citationLabel: recordReference({ id: row.record.id, sourceKind: row.record.sourceKind, occurredAt: row.version.occurredAt, updatedAt: row.record.updatedAt }),
+      metadata: {
+        ...savedMetadata,
+        recordId: row.record.id,
+        sourceKind: row.record.sourceKind,
+        occurredAt: row.version.occurredAt?.toISOString() ?? null,
+        updatedAt: row.record.updatedAt.toISOString(),
+        snapshotMode: "live",
+      },
+    };
+  });
   const generationRuns = run ? await db.select().from(aiRuns).where(eq(aiRuns.reportRunId, run.id)).orderBy(desc(aiRuns.createdAt)) : [];
-  return { artifact, run, sources, generationRuns };
+  return { artifact, run, sources: hydratedSources, generationRuns };
 }
 
 export async function approveReportArtifact(id: string, actorId: string, decision: "approve" | "archive", notes?: string | null) {

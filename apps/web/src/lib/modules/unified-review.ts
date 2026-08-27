@@ -54,6 +54,22 @@ export async function getUnifiedReviewInbox(userId: string) {
     && evaluateAuthorization(access, permission, resource(record)).allowed;
   const canReviewFinding = (record: typeof records.$inferSelect) => can("ai.review_findings", record)
     || can("findings.review", record);
+  const recordsById = new Map([
+    ...recordRows,
+    ...privacyRows.map(({ record }) => record),
+    ...safetyRows.map(({ record }) => record),
+    ...customRows.map(({ record }) => record),
+    ...findingRows.map(({ record }) => record),
+  ].map((record) => [record.id, record]));
+  const headVersionIds = [...new Set(
+    [...recordsById.values()].flatMap((record) => record.headVersionId ? [record.headVersionId] : []),
+  )];
+  const headVersions = headVersionIds.length
+    ? await db.select({ id: recordVersions.id, occurredAt: recordVersions.occurredAt })
+        .from(recordVersions)
+        .where(inArray(recordVersions.id, headVersionIds))
+    : [];
+  const occurredAtByVersionId = new Map(headVersions.map((version) => [version.id, version.occurredAt]));
   const items = [
     ...recordRows.filter((record) => can("records.review", record)).map((record) => ({ id: record.id, itemType: "record" as const, recordId: record.id, sourceKind: record.sourceKind, status: record.reviewStatus, priority: 20, summary: `${record.sourceKind} record`, createdAt: record.updatedAt, scope: resource(record) })),
     ...privacyRows.filter(({ record }) => can("privacy.view", record)).map(({ flag, record }) => ({ id: flag.id, itemType: "privacy_flag" as const, recordId: record.id, sourceKind: record.sourceKind, status: flag.status, priority: 100, summary: "Privacy review required", createdAt: flag.createdAt, scope: resource(record) })),
@@ -61,7 +77,16 @@ export async function getUnifiedReviewInbox(userId: string) {
     ...customRows.filter(({ record }) => can("taxonomy.approve_mapping", record)).map(({ entry, record }) => ({ id: entry.id, itemType: "custom_entry" as const, recordId: record.id, sourceKind: record.sourceKind, status: entry.mappingStatus, priority: 10, summary: entry.customText, createdAt: entry.createdAt, scope: resource(record) })),
     ...findingRows.filter(({ record }) => canReviewFinding(record)).map(({ finding, record }) => ({ id: finding.id, itemType: "ai_finding" as const, recordId: record.id, sourceKind: record.sourceKind, status: "pending", priority: finding.safetySuspect ? 90 : 15, summary: finding.statement, createdAt: finding.createdAt, scope: resource(record) })),
   ];
-  return items.sort((left, right) => right.priority - left.priority || right.createdAt.getTime() - left.createdAt.getTime());
+  return items
+    .map((item) => {
+      const record = recordsById.get(item.recordId);
+      return {
+        ...item,
+        recordOccurredAt: record?.headVersionId ? occurredAtByVersionId.get(record.headVersionId) ?? null : null,
+        recordUpdatedAt: record?.updatedAt ?? null,
+      };
+    })
+    .sort((left, right) => right.priority - left.priority || right.createdAt.getTime() - left.createdAt.getTime());
 }
 
 export async function getUnifiedReviewItem(userId: string, itemId: string) {

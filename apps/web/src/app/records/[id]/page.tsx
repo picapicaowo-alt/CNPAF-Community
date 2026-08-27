@@ -19,7 +19,7 @@ import {
   StructuredEvidencePanel,
 } from "@/features/records/StructuredEvidencePanel";
 import { RecordRevisionForm } from "@/features/records/components/RecordRevisionForm";
-import { recordDisplayName, recordReference } from "@/features/records/display";
+import { recordCitationLabel, recordDisplayName, recordReference } from "@/features/records/display";
 import type { RecordFieldAnswer } from "@/features/records/types";
 import { downloadRecord } from "@/features/records/api";
 import { apiFetch, errorMessage } from "@/lib/api-client";
@@ -516,7 +516,7 @@ export default function RecordDetail() {
       </div>
       {canAsk ? (
         <AiCopilotPanel
-          conversationTitle={`${locale === "zh" ? "记录" : "Record"} ${record.id.slice(0, 8).toUpperCase()}`}
+          conversationTitle={recordCitationLabel({ id: record.id, sourceKind: record.sourceKind, occurredAt: head?.occurredAt, updatedAt: record.updatedAt }, locale)}
           description={locale === "zh" ? "围绕这条记录的已批准证据进行总结、质疑和共同梳理；未批准内容不会进入回答，外部公开视角会单独标示并附链接。" : "Summarize, challenge, and co-develop findings from this record's approved evidence. Unapproved content is excluded, while any public outside perspective is labeled and linked separately."}
           locale={locale}
           scope={{ recordIds: [record.id] }}

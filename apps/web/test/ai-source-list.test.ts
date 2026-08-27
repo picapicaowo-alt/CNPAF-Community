@@ -16,7 +16,7 @@ test("AI source lists distinguish internal evidence and link external references
         excerpt: "Approved internal evidence",
         metadata: {
           recordId: "160d9654-0000-4000-8000-000000000001",
-          recordReference: "FV-20260807-160D9654",
+          recordReference: "STALE-LEGACY-LABEL",
           sourceKind: "field_visit",
           occurredAt: "2026-08-07T12:00:00.000Z",
           snapshotMode: "live",
@@ -84,7 +84,7 @@ test("every Ask surface can render a friendly linked record citation", () => {
   assert.doesNotMatch(html, new RegExp(source.sourceId));
 });
 
-test("compound record citations become separate friendly record links", () => {
+test("arbitrary compound record citations become separate friendly record links", () => {
   const sources = [
     {
       id: "source-pi",

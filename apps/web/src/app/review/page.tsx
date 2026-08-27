@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { reviewItemLabel, reviewItemSummary } from "@/lib/display-labels";
+import { recordCitationLabel } from "@/features/records/display";
 import { taskDate } from "@/lib/task-ui";
 
 type ReviewItem = {
@@ -24,6 +25,8 @@ type ReviewItem = {
   priority: number;
   summary: string;
   createdAt: string;
+  recordOccurredAt?: string | null;
+  recordUpdatedAt?: string | null;
 };
 
 const itemTone: Record<
@@ -128,8 +131,12 @@ export default function ReviewInboxPage() {
                   {reviewItemSummary(item, locale)}
                 </div>
                 <div className="list-row-subtitle">
-                  {locale === "zh" ? "记录" : "Record"} ·{" "}
-                  {item.recordId.slice(0, 8)}
+                  {recordCitationLabel({
+                    id: item.recordId,
+                    sourceKind: item.sourceKind ?? "other",
+                    occurredAt: item.recordOccurredAt,
+                    updatedAt: item.recordUpdatedAt,
+                  }, locale)}
                 </div>
               </div>
               <div className="muted">{taskDate(item.createdAt, locale)}</div>

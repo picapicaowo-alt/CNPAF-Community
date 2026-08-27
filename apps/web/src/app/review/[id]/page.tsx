@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/components/LocaleProvider";
@@ -15,6 +16,7 @@ import {
   StructuredEvidencePanel,
 } from "@/features/records/StructuredEvidencePanel";
 import type { RecordFieldAnswer } from "@/features/records/types";
+import { recordCitationLabel } from "@/features/records/display";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import {
   reviewItemLabel,
@@ -78,6 +80,12 @@ export default function ReviewDetailPage() {
   const record = item?.detail.record ?? {};
   const version = item?.detail.recordVersion ?? {};
   const finding = item?.detail.finding ?? {};
+  const recordLabel = item ? recordCitationLabel({
+    id: item.recordId,
+    sourceKind: String(record.sourceKind ?? item.sourceKind ?? "other"),
+    occurredAt: typeof version.occurredAt === "string" ? version.occurredAt : null,
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : null,
+  }, locale) : "";
   const primaryText = useMemo(
     () =>
       [version.qualitative, finding.statement, item?.summary].find(
@@ -172,6 +180,7 @@ export default function ReviewDetailPage() {
   return (
     <div className="stack">
       <PageHeader
+        eyebrow={recordLabel}
         title={reviewItemSummary(item, locale)}
         description={
           locale === "zh"
@@ -179,9 +188,14 @@ export default function ReviewDetailPage() {
             : "Review the evidence before making a human decision."
         }
         actions={
-          <StatusPill tone={item.priority >= 90 ? "red" : "blue"}>
-            {reviewItemLabel(item.itemType, locale)}
-          </StatusPill>
+          <>
+            <StatusPill tone={item.priority >= 90 ? "red" : "blue"}>
+              {reviewItemLabel(item.itemType, locale)}
+            </StatusPill>
+            <Link className="button button-secondary" href={`/records/${item.recordId}`}>
+              {locale === "zh" ? "打开原记录" : "Open record"}
+            </Link>
+          </>
         }
       />
       {error ? <ErrorState message={error} /> : null}

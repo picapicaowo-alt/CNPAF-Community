@@ -6,14 +6,18 @@ import { useParams } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState, PageHeader, StatusPill } from "@/components/ui";
+import { recordCitationLabel } from "@/features/records/display";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { sourceKindLabel } from "@/lib/display-labels";
 
 type SharedDataset = {
   dataset: { id: string; name: string; description: string | null; dataClassification: string };
   version: { id: string; versionNumber: number; recordCount: number; contentHash: string; createdAt: string };
   rows: Array<{
-    record: { id: string; sourceKind: string; reviewStatus: string; researchUseStatus: string };
+    record: { id: string; sourceKind: string; reviewStatus: string; researchUseStatus: string; updatedAt: string };
     recordVersionId: string;
+    recordVersionNumber: number;
+    occurredAt: string | null;
   }>;
 };
 
@@ -49,7 +53,7 @@ export default function SharedDatasetPage() {
       </div>
       <section className="card stack">
         <h2>{locale === "zh" ? "冻结的记录版本" : "Frozen Record Versions"}</h2>
-        <div className="table-shell"><div className="table-scroll"><table className="data-table"><thead><tr><th>{locale === "zh" ? "记录" : "Record"}</th><th>{locale === "zh" ? "Record Version" : "Record Version"}</th><th>{locale === "zh" ? "来源" : "Source"}</th><th>{locale === "zh" ? "状态" : "Status"}</th><th>{locale === "zh" ? "研究使用" : "Research use"}</th></tr></thead><tbody>{data.rows.map((row) => <tr key={row.recordVersionId}><td><strong>{row.record.id.slice(0, 8).toUpperCase()}</strong></td><td className="mono-small">{row.recordVersionId}</td><td>{row.record.sourceKind}</td><td><StatusPill tone={row.record.reviewStatus === "approved" ? "green" : "neutral"}>{row.record.reviewStatus}</StatusPill></td><td>{row.record.researchUseStatus}</td></tr>)}</tbody></table></div></div>
+        <div className="table-shell"><div className="table-scroll"><table className="data-table"><thead><tr><th>{locale === "zh" ? "记录" : "Record"}</th><th>{locale === "zh" ? "版本" : "Version"}</th><th>{locale === "zh" ? "来源" : "Source"}</th><th>{locale === "zh" ? "状态" : "Status"}</th><th>{locale === "zh" ? "研究使用" : "Research use"}</th></tr></thead><tbody>{data.rows.map((row) => <tr key={row.recordVersionId}><td><Link className="table-link" href={`/records/${row.record.id}`}>{recordCitationLabel({ ...row.record, occurredAt: row.occurredAt }, locale)}</Link></td><td>v{row.recordVersionNumber}</td><td>{sourceKindLabel(row.record.sourceKind, locale)}</td><td><StatusPill tone={row.record.reviewStatus === "approved" ? "green" : "neutral"}>{row.record.reviewStatus}</StatusPill></td><td>{row.record.researchUseStatus}</td></tr>)}</tbody></table></div></div>
       </section>
     </div>
   );

@@ -649,9 +649,13 @@ export async function getDatasetVersionForReport(actorId: string, datasetVersion
   if (source.dataset.status !== "active") throw new ApiError("CONFLICT", "Archived datasets cannot start new reports", 409);
   if (source.version.status !== "ready") throw new ApiError("CONFLICT", "Only ready Dataset Versions can start a report", 409);
   await requireFrozenRecordAccess(actorId, source.version.id, source.dataset.dataClassification);
-  const frozenRows = await db.select().from(datasetRecords)
+  const frozenIdentityRows = await db.select({ frozen: datasetRecords, record: records, version: recordVersions })
+    .from(datasetRecords)
+    .innerJoin(records, eq(datasetRecords.recordId, records.id))
+    .innerJoin(recordVersions, eq(datasetRecords.recordVersionId, recordVersions.id))
     .where(eq(datasetRecords.datasetVersionId, source.version.id))
     .orderBy(asc(datasetRecords.ordinal));
+  const frozenRows = frozenIdentityRows.map(({ frozen }) => frozen);
   const recordVersionIds = frozenRows.map((row) => row.recordVersionId);
   const mediaIncluded = includedFields(source.version.fieldPolicy as FieldPolicy)
     .has("media_attachments");
@@ -670,6 +674,14 @@ export async function getDatasetVersionForReport(actorId: string, datasetVersion
   return {
     ...source,
     frozenRows,
+    recordIdentities: frozenIdentityRows.map(({ frozen, record, version }) => ({
+      recordId: record.id,
+      recordVersionId: version.id,
+      sourceKind: record.sourceKind,
+      occurredAt: version.occurredAt,
+      updatedAt: record.updatedAt,
+      ordinal: frozen.ordinal,
+    })),
     findings: findings.map((finding) => ({ finding, frozen: frozenByVersionId.get(finding.recordVersionId!)! })),
     mediaAttachments,
     mediaIncluded,
@@ -815,8 +827,10 @@ async function loadDatasetRows(datasetVersionId: string, fieldPolicy?: FieldPoli
     const privacy = resolvedPrivacy.find((flag) => flag.recordVersionId === version.id);
     const safeText = record.privacyStatus === "redacted" ? privacy?.redactedText ?? null : record.privacyStatus === "clear" ? version.qualitative : null;
     return {
-      record: { id: record.id, sourceKind: record.sourceKind, programId: record.programId, siteId: record.siteId, reviewStatus: record.reviewStatus, researchUseStatus: record.researchUseStatus },
+      record: { id: record.id, sourceKind: record.sourceKind, programId: record.programId, siteId: record.siteId, reviewStatus: record.reviewStatus, researchUseStatus: record.researchUseStatus, updatedAt: record.updatedAt },
       recordVersionId: version.id,
+      recordVersionNumber: version.versionNumber,
+      occurredAt: version.occurredAt,
       ...(include.has("form_version_information") ? { form: { templateVersionId: version.templateVersionId, versionNumber: version.versionNumber, occurredAt: version.occurredAt, submittedAt: version.submittedAt } } : {}),
       ...(include.has("structured_answers") ? { structuredAnswers: selections.filter((selection) => selection.recordVersionId === version.id), quantitative: version.quantitative } : {}),
       ...(include.has("approved_findings") ? { approvedFindings: findings.filter((finding) => finding.recordVersionId === version.id).map((finding) => finding.approvedValue) } : {}),

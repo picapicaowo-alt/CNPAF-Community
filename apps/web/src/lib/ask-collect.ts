@@ -189,6 +189,7 @@ function recordSourceMetadata(input: {
   recordReference: string;
   sourceKind: string;
   occurredAt?: Date | null;
+  updatedAt?: Date | null;
   snapshotMode: "live" | "dataset";
 }) {
   return {
@@ -196,6 +197,7 @@ function recordSourceMetadata(input: {
     recordReference: input.recordReference,
     sourceKind: input.sourceKind,
     occurredAt: input.occurredAt?.toISOString() ?? null,
+    updatedAt: input.updatedAt?.toISOString() ?? null,
     snapshotMode: input.snapshotMode,
   } satisfies AskSourceMetadata;
 }
@@ -354,6 +356,7 @@ export async function addAskMessage(
         recordReference: reference,
         sourceKind: record.sourceKind,
         occurredAt: version.occurredAt,
+        updatedAt: record.updatedAt,
         snapshotMode: datasetVersionId ? "dataset" : "live",
       }),
     };
@@ -426,6 +429,7 @@ export async function addAskMessage(
           recordReference: reference,
           sourceKind: record.sourceKind,
           occurredAt: version.occurredAt,
+          updatedAt: record.updatedAt,
           snapshotMode: "live",
         }),
       };
@@ -675,6 +679,7 @@ export async function getAskConversation(id: string, actorId: string) {
       recordReference: reference,
       sourceKind: record.sourceKind,
       occurredAt: version.occurredAt,
+      updatedAt: record.updatedAt,
       snapshotMode: datasetRecordVersionIds.has(version.id) ? "dataset" : "live",
     }));
   }
@@ -690,6 +695,7 @@ export async function getAskConversation(id: string, actorId: string) {
       recordReference: reference,
       sourceKind: record.sourceKind,
       occurredAt: version.occurredAt,
+      updatedAt: record.updatedAt,
       snapshotMode: datasetRecordVersionIds.has(version.id) ? "dataset" : "live",
     }));
   }
@@ -701,7 +707,7 @@ export async function getAskConversation(id: string, actorId: string) {
       const saved = source.metadata && typeof source.metadata === "object" && !Array.isArray(source.metadata)
         ? source.metadata as AskSourceMetadata
         : {};
-      return { ...source, metadata: { ...hydrated, ...saved } };
+      return { ...source, metadata: { ...saved, ...hydrated } };
     });
   const restrictedMessageIds = new Set(sources.filter((source) => !allowedIds.has(source.sourceId)).map((source) => source.messageId));
   return {

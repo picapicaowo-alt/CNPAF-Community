@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recordDisplayName, recordReference } from "../src/features/records/display";
+import { recordCitationLabel, recordDisplayName, recordReference } from "../src/features/records/display";
 
 test("records use a stable structured reference instead of a bare UUID fragment", () => {
   const record = {
@@ -9,8 +9,13 @@ test("records use a stable structured reference instead of a bare UUID fragment"
     occurredAt: "2026-08-25T17:00:00.000Z",
   };
   assert.equal(recordReference(record), "FV-20260825-01080F63");
+  assert.equal(recordCitationLabel(record, "zh"), "现场访视 · 2026年8月25日 · FV-20260825-01080F63");
   assert.equal(
     recordDisplayName(record, "en", { locationName: "Harmony Adult Day Health Care", formName: "Community Access Visit" }),
     "Harmony Adult Day Health Care · Community Access Visit · Aug 25, 2026",
   );
+});
+
+test("record references without a valid date are stable and never depend on the current clock", () => {
+  assert.equal(recordReference({ id: "01080f63-f4a7-498a-81bf-d771773cf151", sourceKind: "new_source_kind" }), "REC-UNDATED-01080F63");
 });
