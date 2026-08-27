@@ -231,6 +231,20 @@ export default function FormsPage() {
     }
   }
 
+  function addReusableTemplate() {
+    setShowTemplateLauncher(false);
+    router.push("/forms/new?purpose=template");
+  }
+
+  function editReusableTemplate(choice: TemplateChoice) {
+    const card = reusableForms.find(
+      (item) => item.template.id === choice.sourceId,
+    );
+    if (!card) return;
+    setShowTemplateLauncher(false);
+    void editForm(card);
+  }
+
   async function editForm(card: FormCard) {
     const draft = card.versions.find((version) => version.status === "draft");
     if (draft) {
@@ -621,11 +635,16 @@ export default function FormsPage() {
       )}
       {showTemplateLauncher ? (
         <TemplateLaunchModal
+          canAdd={canCreate}
+          canDelete={canArchive}
+          canEdit={canEdit}
           choices={templateChoices}
           locale={locale}
+          onAdd={addReusableTemplate}
           onChoose={chooseTemplate}
           onClose={() => setShowTemplateLauncher(false)}
           onDelete={deleteReusableTemplate}
+          onEdit={editReusableTemplate}
           onStartBlank={() => router.push("/forms/new?blank=1")}
           onToggleQuick={toggleQuick}
           quickIds={quickIds}

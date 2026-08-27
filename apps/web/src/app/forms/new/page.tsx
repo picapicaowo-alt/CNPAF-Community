@@ -19,6 +19,20 @@ type LibraryTemplate = {
   fieldCount?: number;
   sectionCount?: number;
 };
+type CreationPurpose = "form" | "template";
+type TemplateCard = {
+  template: { id: string };
+  versions: Array<{
+    id: string;
+    nameEn: string;
+    nameZh: string;
+    descriptionEn?: string | null;
+    descriptionZh?: string | null;
+    configuration?: Record<string, unknown>;
+    fieldCount?: number;
+    sectionCount?: number;
+  }>;
+};
 
 function keyFrom(value: string) {
   return value
@@ -35,9 +49,12 @@ export default function NewFormPage() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [types, setTypes] = useState<RegistryItem[]>([]);
   const [libraryTemplates, setLibraryTemplates] = useState<LibraryTemplate[]>([]);
+  const [creationPurpose, setCreationPurpose] =
+    useState<CreationPurpose>("form");
   const [step, setStep] = useState<"choose" | "name">("choose");
   const [presetKey, setPresetKey] = useState<string | null>(null);
   const [key, setKey] = useState("");
+  const [keyManuallyEdited, setKeyManuallyEdited] = useState(false);
   const [type, setType] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [nameZh, setNameZh] = useState("");
@@ -53,32 +70,14 @@ export default function NewFormPage() {
       apiFetch<{ items: RegistryItem[] }>(
         "/api/v1/config/registries/template_type?status=active",
       ),
-      apiFetch<{ templates: { id: string }[] }>("/api/v1/templates"),
+      apiFetch<{ templates: TemplateCard[] }>("/api/v1/templates?view=cards"),
     ])
-      .then(async ([me, result, templateResult]) => {
+      .then(([me, result, templateResult]) => {
         setOrganizationId(me.user.organizationId ?? null);
         setTypes(result.items ?? []);
         setType(result.items?.[0]?.key ?? "");
-        const bundles = await Promise.all(
-          (templateResult.templates ?? []).map((template) =>
-            apiFetch<{
-              versions: Array<{
-                id: string;
-                nameEn: string;
-                nameZh: string;
-                descriptionEn?: string | null;
-                descriptionZh?: string | null;
-                configuration?: Record<string, unknown>;
-                fieldCount?: number;
-                sectionCount?: number;
-              }>;
-            }>(`/api/v1/templates/${template.id}`)
-              .then((bundle) => ({ templateId: template.id, ...bundle }))
-              .catch(() => ({ templateId: template.id, versions: [] })),
-          ),
-        );
         setLibraryTemplates(
-          bundles.flatMap(({ templateId, versions }) =>
+          (templateResult.templates ?? []).flatMap(({ template, versions }) =>
             versions
               .filter(
                 (version) =>
@@ -86,7 +85,7 @@ export default function NewFormPage() {
               )
               .slice(0, 1)
               .map((version) => ({
-                templateId,
+                templateId: template.id,
                 versionId: version.id,
                 nameEn: version.nameEn,
                 nameZh: version.nameZh,
@@ -98,6 +97,9 @@ export default function NewFormPage() {
           ),
         );
         const search = new URLSearchParams(window.location.search);
+        const purpose =
+          search.get("purpose") === "template" ? "template" : "form";
+        setCreationPurpose(purpose);
         const initialPreset = getFormPreset(search.get("preset"));
         if (initialPreset) {
           setPresetKey(initialPreset.key);
@@ -107,6 +109,7 @@ export default function NewFormPage() {
           setDescriptionZh(initialPreset.descriptionZh);
           setType(initialPreset.templateTypeKey);
           setKey(`${initialPreset.key}-${Date.now().toString(36)}`);
+          setKeyManuallyEdited(false);
           setStep("name");
         } else if (search.get("blank") === "1") {
           setStep("name");
@@ -127,12 +130,14 @@ export default function NewFormPage() {
       setDescriptionZh(preset.descriptionZh);
       setType(preset.templateTypeKey);
       setKey(`${preset.key}-${Date.now().toString(36)}`);
+      setKeyManuallyEdited(false);
     } else {
       setNameEn("");
       setNameZh("");
       setDescriptionEn("");
       setDescriptionZh("");
       setKey("");
+      setKeyManuallyEdited(false);
       setType(types[0]?.key ?? "");
     }
     setStep("name");
@@ -156,7 +161,12 @@ export default function NewFormPage() {
             descriptionEn: descriptionEn.trim() || null,
             descriptionZh: descriptionZh.trim() || null,
             presetKey,
-            configuration: { allowQuickCapture },
+            configuration: {
+              allowQuickCapture,
+              ...(creationPurpose === "template"
+                ? { savedAsReusableTemplate: true }
+                : {}),
+            },
           }),
         },
       );
@@ -175,7 +185,7 @@ export default function NewFormPage() {
         `/api/v1/templates/${templateId}/duplicate`,
         {
           method: "POST",
-          body: JSON.stringify({ purpose: "form" }),
+          body: JSON.stringify({ purpose: creationPurpose }),
         },
       );
       router.replace(`/forms/${result.template.id}`);
@@ -188,12 +198,32 @@ export default function NewFormPage() {
   return (
     <div className="stack form-create-page">
       <PageHeader
-        eyebrow={locale === "zh" ? "表单" : "Forms"}
-        title={locale === "zh" ? "新建表单" : "New form"}
+        eyebrow={
+          creationPurpose === "template"
+            ? locale === "zh"
+              ? "模板库"
+              : "Template library"
+            : locale === "zh"
+              ? "表单"
+              : "Forms"
+        }
+        title={
+          creationPurpose === "template"
+            ? locale === "zh"
+              ? "添加模板"
+              : "Add template"
+            : locale === "zh"
+              ? "新建表单"
+              : "New form"
+        }
         description={
-          locale === "zh"
-            ? "先选一个贴近业务的起点，几分钟内即可得到可编辑草稿。"
-            : "Start from a common workflow and get an editable draft in minutes."
+          creationPurpose === "template"
+            ? locale === "zh"
+              ? "从业务起点或空白结构创建团队模板，保存后可继续编辑。"
+              : "Create a team template from a workflow or blank structure, then refine it in the editor."
+            : locale === "zh"
+              ? "先选一个贴近业务的起点，几分钟内即可得到可编辑草稿。"
+              : "Start from a common workflow and get an editable draft in minutes."
         }
       />
       {error ? <ErrorState message={error} /> : null}
@@ -215,9 +245,13 @@ export default function NewFormPage() {
                 <div>
                   <h2>{locale === "zh" ? "我的模板" : "My templates"}</h2>
                   <p className="muted">
-                    {locale === "zh"
-                      ? "从团队保存的表单结构创建独立草稿。"
-                      : "Create an independent draft from a form your team saved."}
+                    {creationPurpose === "template"
+                      ? locale === "zh"
+                        ? "复制现有团队模板，再独立调整名称、问题与逻辑。"
+                        : "Copy an existing team template, then independently refine its details and structure."
+                      : locale === "zh"
+                        ? "从团队保存的表单结构创建独立草稿。"
+                        : "Create an independent draft from a form your team saved."}
                   </p>
                 </div>
               </div>
@@ -250,7 +284,13 @@ export default function NewFormPage() {
                       {locale === "zh" ? "个问题" : "questions"}
                     </span>
                     <span className="inline-link">
-                      {locale === "zh" ? "使用这个模板" : "Use this template"}
+                      {creationPurpose === "template"
+                        ? locale === "zh"
+                          ? "复制并编辑"
+                          : "Copy and edit"
+                        : locale === "zh"
+                          ? "使用这个模板"
+                          : "Use this template"}
                       <AppIcon name="arrow" />
                     </span>
                   </button>
@@ -301,7 +341,13 @@ export default function NewFormPage() {
                       : `About ${preset.estimatedMinutes} min · ${fieldCount} questions`}
                   </span>
                   <span className="inline-link">
-                    {locale === "zh" ? "使用这个模板" : "Use this workflow"}
+                    {creationPurpose === "template"
+                      ? locale === "zh"
+                        ? "以此添加模板"
+                        : "Use as template base"
+                      : locale === "zh"
+                        ? "使用这个模板"
+                        : "Use this workflow"}
                     <AppIcon name="arrow" />
                   </span>
                 </button>
@@ -334,8 +380,12 @@ export default function NewFormPage() {
                     ? "已选择业务模板"
                     : "Selected workflow"
                   : locale === "zh"
-                    ? "空白表单"
-                    : "Blank form"}
+                    ? creationPurpose === "template"
+                      ? "空白模板"
+                      : "空白表单"
+                    : creationPurpose === "template"
+                      ? "Blank template"
+                      : "Blank form"}
               </div>
               <h2>
                 {selectedPreset
@@ -348,8 +398,12 @@ export default function NewFormPage() {
               </h2>
               <p className="muted">
                 {locale === "zh"
-                  ? "确认名称后进入编辑器，继续设置问题、逻辑与发布内容。"
-                  : "Confirm the names to continue into the editor for questions, logic, and publishing."}
+                  ? creationPurpose === "template"
+                    ? "确认名称后进入模板编辑器，继续设置问题与逻辑。"
+                    : "确认名称后进入编辑器，继续设置问题、逻辑与发布内容。"
+                  : creationPurpose === "template"
+                    ? "Confirm the names to continue into the template editor for questions and logic."
+                    : "Confirm the names to continue into the editor for questions, logic, and publishing."}
               </p>
             </div>
             <button
@@ -367,7 +421,10 @@ export default function NewFormPage() {
                 autoFocus
                 onChange={(event) => {
                   setNameZh(event.target.value);
-                  if (!key) setKey(keyFrom(event.target.value));
+                  const candidate = keyFrom(event.target.value);
+                  if (!keyManuallyEdited && /^[a-z]/.test(candidate)) {
+                    setKey(candidate);
+                  }
                 }}
                 value={nameZh}
               />
@@ -377,7 +434,7 @@ export default function NewFormPage() {
               <input
                 onChange={(event) => {
                   setNameEn(event.target.value);
-                  if (!key) setKey(keyFrom(event.target.value));
+                  if (!keyManuallyEdited) setKey(keyFrom(event.target.value));
                 }}
                 value={nameEn}
               />
@@ -405,7 +462,10 @@ export default function NewFormPage() {
               <label>
                 {locale === "zh" ? "系统标识" : "System key"}
                 <input
-                  onChange={(event) => setKey(keyFrom(event.target.value))}
+                  onChange={(event) => {
+                    setKeyManuallyEdited(true);
+                    setKey(keyFrom(event.target.value));
+                  }}
                   value={key}
                 />
               </label>
@@ -440,8 +500,12 @@ export default function NewFormPage() {
           <div className="form-create-submit">
             <p className="caption">
               {locale === "zh"
-                ? "创建后会进入草稿编辑器；发布前不会影响采集员。"
-                : "This opens a draft editor and will not affect collectors until published."}
+                ? creationPurpose === "template"
+                  ? "创建后会进入草稿编辑器，并加入团队模板库。"
+                  : "创建后会进入草稿编辑器；发布前不会影响采集员。"
+                : creationPurpose === "template"
+                  ? "This opens a draft editor and adds the result to the team template library."
+                  : "This opens a draft editor and will not affect collectors until published."}
             </p>
             <button
               className="button"
@@ -454,8 +518,12 @@ export default function NewFormPage() {
                   ? "正在创建…"
                   : "Creating…"
                 : locale === "zh"
-                  ? "创建草稿并继续"
-                  : "Create draft and continue"}
+                  ? creationPurpose === "template"
+                    ? "添加模板并继续"
+                    : "创建草稿并继续"
+                  : creationPurpose === "template"
+                    ? "Add template and continue"
+                    : "Create draft and continue"}
               {!saving ? <AppIcon name="arrow" /> : null}
             </button>
           </div>

@@ -17,6 +17,13 @@ export type FormVersionSummary = {
 
 export type ReleaseNotes = { en: string; zh: string };
 
+export type FormVersionDetails = {
+  nameEn: string;
+  nameZh: string;
+  descriptionEn: string;
+  descriptionZh: string;
+};
+
 export type { FormVersionComparison };
 
 export function releaseNotesFromVersion(

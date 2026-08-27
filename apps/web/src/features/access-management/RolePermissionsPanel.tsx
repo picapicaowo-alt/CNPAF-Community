@@ -56,6 +56,14 @@ const MODULE_LABELS: Record<string, { zh: string; en: string }> = {
   audit: { zh: "审计", en: "Audit" },
 };
 
+const PERMISSION_HINTS_ZH: Record<string, string> = {
+  "templates.view": "查看表单与团队模板。",
+  "templates.create": "添加表单，或从业务起点添加团队模板。",
+  "templates.edit": "修改草稿模板的名称、说明、问题与逻辑。",
+  "templates.publish": "发布或撤回不可变的表单版本。",
+  "templates.archive": "从可用列表删除表单或团队模板；历史数据保留。",
+};
+
 export function RolePermissionsPanel({
   canManage,
   locale,
@@ -248,7 +256,11 @@ export function RolePermissionsPanel({
                     <strong>
                       {locale === "zh" ? permission.nameZh : permission.nameEn}
                     </strong>
-                    {locale === "en" ? <small>{permission.key}</small> : null}
+                    <small>
+                      {locale === "zh"
+                        ? PERMISSION_HINTS_ZH[permission.key] ?? permission.key
+                        : permission.description || permission.key}
+                    </small>
                   </span>
                 </label>
               ))}

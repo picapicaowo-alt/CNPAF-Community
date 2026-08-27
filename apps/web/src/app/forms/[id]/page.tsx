@@ -41,6 +41,7 @@ import { FormBuilderOutline } from "@/features/forms/editor/FormBuilderOutline";
 import { FormBuilderPreview } from "@/features/forms/editor/FormBuilderPreview";
 import { FormVersionPanel } from "@/features/forms/versioning/FormVersionPanel";
 import type {
+  FormVersionDetails,
   FormVersionSummary,
   ReleaseNotes,
 } from "@/features/forms/versioning/types";
@@ -686,7 +687,10 @@ export default function FormEditorPage() {
       setBusy(false);
     }
   }
-  async function saveReleaseNotes(notes: ReleaseNotes) {
+  async function saveVersionDetails(
+    details: FormVersionDetails,
+    notes: ReleaseNotes,
+  ) {
     if (!currentVersion) return;
     setBusy(true);
     setError("");
@@ -694,6 +698,10 @@ export default function FormEditorPage() {
       await apiFetch(`/api/v1/template-versions/${currentVersion.id}`, {
         method: "PATCH",
         body: JSON.stringify({
+          nameEn: details.nameEn.trim(),
+          nameZh: details.nameZh.trim(),
+          descriptionEn: details.descriptionEn.trim() || null,
+          descriptionZh: details.descriptionZh.trim() || null,
           configuration: {
             ...currentVersion.configuration,
             releaseNotes: notes,
@@ -805,7 +813,7 @@ export default function FormEditorPage() {
           currentVersion={currentVersion}
           editable={editable}
           locale={locale}
-          onSaveReleaseNotes={saveReleaseNotes}
+          onSaveDetails={saveVersionDetails}
           templateId={template.id}
           versions={versions}
         />

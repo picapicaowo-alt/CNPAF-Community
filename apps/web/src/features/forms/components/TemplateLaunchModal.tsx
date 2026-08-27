@@ -15,21 +15,31 @@ export type TemplateChoice = {
 };
 
 export function TemplateLaunchModal({
+  canAdd,
+  canDelete,
+  canEdit,
   choices,
   locale,
+  onAdd,
   onChoose,
   onClose,
   onDelete,
+  onEdit,
   onStartBlank,
   onToggleQuick,
   quickIds,
   workingId,
 }: {
+  canAdd: boolean;
+  canDelete: boolean;
+  canEdit: boolean;
   choices: TemplateChoice[];
   locale: "zh" | "en";
+  onAdd: () => void;
   onChoose: (choice: TemplateChoice) => void;
   onClose: () => void;
   onDelete: (choice: TemplateChoice) => void;
+  onEdit: (choice: TemplateChoice) => void;
   onStartBlank: () => void;
   onToggleQuick: (choiceId: string) => void;
   quickIds: string[];
@@ -85,14 +95,26 @@ export function TemplateLaunchModal({
                 : "Start with three common templates, then search or expand when needed."}
             </p>
           </div>
-          <button
-            aria-label={locale === "zh" ? "关闭" : "Close"}
-            className="icon-button"
-            onClick={onClose}
-            type="button"
-          >
-            <AppIcon name="close" />
-          </button>
+          <div className="template-launch-heading-actions">
+            {canAdd ? (
+              <button
+                className="button button-secondary button-small"
+                onClick={onAdd}
+                type="button"
+              >
+                <AppIcon name="plus" />
+                {locale === "zh" ? "添加模板" : "Add template"}
+              </button>
+            ) : null}
+            <button
+              aria-label={locale === "zh" ? "关闭" : "Close"}
+              className="icon-button"
+              onClick={onClose}
+              type="button"
+            >
+              <AppIcon name="close" />
+            </button>
+          </div>
         </header>
 
         <label className="search-control template-launch-search">
@@ -151,16 +173,30 @@ export function TemplateLaunchModal({
                         ? locale === "zh" ? "已加入 Quick Add" : "In Quick Add"
                         : "Quick Add"}
                     </button>
-                    {choice.kind === "library" ? (
-                      <button
-                        className="danger"
-                        disabled={working}
-                        onClick={() => onDelete(choice)}
-                        type="button"
-                      >
-                        <AppIcon name="trash" />
-                        {locale === "zh" ? "删除模板" : "Delete"}
-                      </button>
+                    {choice.kind === "library" && (canEdit || canDelete) ? (
+                      <span className="template-choice-manage-actions">
+                        {canEdit ? (
+                          <button
+                            disabled={working}
+                            onClick={() => onEdit(choice)}
+                            type="button"
+                          >
+                            <AppIcon name="edit" />
+                            {locale === "zh" ? "编辑" : "Edit"}
+                          </button>
+                        ) : null}
+                        {canDelete ? (
+                          <button
+                            className="danger"
+                            disabled={working}
+                            onClick={() => onDelete(choice)}
+                            type="button"
+                          >
+                            <AppIcon name="trash" />
+                            {locale === "zh" ? "删除" : "Delete"}
+                          </button>
+                        ) : null}
+                      </span>
                     ) : null}
                   </div>
                 </article>
