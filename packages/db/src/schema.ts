@@ -427,6 +427,23 @@ export const programMemberships = pgTable(
   ],
 );
 
+export const institutions = pgTable(
+  "institutions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    name: text("name").notNull(),
+    institutionTypeKey: text("institution_type_key").notNull().default("organization"),
+    status: text("status").notNull().default("active"),
+    createdById: uuid("created_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("institutions_org_name").on(t.organizationId, t.name),
+    index("institutions_org_status_name").on(t.organizationId, t.status, t.name),
+  ],
+);
+
 export const userAffiliations = pgTable(
   "user_affiliations",
   {
@@ -434,6 +451,7 @@ export const userAffiliations = pgTable(
     userId: uuid("user_id").notNull().references(() => users.id),
     organizationId: uuid("organization_id").references(() => organizations.id),
     programId: uuid("program_id").references(() => programs.id),
+    institutionId: uuid("institution_id").references(() => institutions.id),
     affiliationTypeKey: text("affiliation_type_key").notNull(),
     institutionName: text("institution_name").notNull(),
     institutionTypeKey: text("institution_type_key"),
@@ -451,6 +469,7 @@ export const userAffiliations = pgTable(
     index("user_affiliations_user_status").on(t.userId, t.status),
     index("user_affiliations_organization").on(t.organizationId),
     index("user_affiliations_program").on(t.programId),
+    index("user_affiliations_institution").on(t.institutionId),
   ],
 );
 
@@ -612,6 +631,62 @@ export const notificationPreferences = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("notification_preferences_user_kind").on(t.userId, t.kindKey)],
+);
+
+export const taskRecurrenceSeries = pgTable(
+  "task_recurrence_series",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateTaskId: uuid("template_task_id").notNull().references(() => tasks.id),
+    frequency: text("frequency").notNull(),
+    interval: integer("interval").notNull().default(1),
+    timezone: text("timezone").notNull(),
+    nextOccurrenceAt: timestamp("next_occurrence_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    status: text("status").notNull().default("active"),
+    generatedCount: integer("generated_count").notNull().default(1),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    index("task_recurrence_series_status_next").on(t.status, t.nextOccurrenceAt),
+    uniqueIndex("task_recurrence_series_template").on(t.templateTaskId),
+  ],
+);
+
+export const taskRecurrenceOccurrences = pgTable(
+  "task_recurrence_occurrences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    seriesId: uuid("series_id").notNull().references(() => taskRecurrenceSeries.id),
+    taskId: uuid("task_id").notNull().references(() => tasks.id),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("task_recurrence_occurrences_series_time").on(t.seriesId, t.scheduledFor),
+    uniqueIndex("task_recurrence_occurrences_task").on(t.taskId),
+  ],
+);
+
+export const notificationEmailDeliveries = pgTable(
+  "notification_email_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    notificationId: uuid("notification_id").notNull().references(() => notifications.id),
+    provider: text("provider").notNull(),
+    recipientEmail: text("recipient_email").notNull(),
+    status: text("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    providerMessageId: text("provider_message_id"),
+    lastError: text("last_error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("notification_email_deliveries_notification").on(t.notificationId),
+    index("notification_email_deliveries_status_created").on(t.status, t.createdAt),
+  ],
 );
 
 export const activityDefinitions = pgTable(
@@ -1631,6 +1706,7 @@ export const schema = {
   templateFieldOptions,
   programs,
   programMemberships,
+  institutions,
   userAffiliations,
   tasks,
   taskAssignments,
@@ -1638,6 +1714,9 @@ export const schema = {
   locationMergeHistory,
   notifications,
   notificationPreferences,
+  taskRecurrenceSeries,
+  taskRecurrenceOccurrences,
+  notificationEmailDeliveries,
   activityDefinitions,
   promptVersions,
   canonicalThemes,

@@ -1,9 +1,8 @@
-import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import {
   auditEvents,
   configRegistries,
   configRegistryItems,
-  notifications,
   programMemberships,
   programs,
   records,
@@ -12,13 +11,15 @@ import {
   reviewDecisions,
   sites,
   taskAssignments,
+  taskRecurrenceOccurrences,
+  taskRecurrenceSeries,
   tasks,
   templates,
   templateVersions,
   users,
 } from "@cnpaf/db/schema";
 import type { z } from "zod";
-import type { taskAssignmentBodySchema, taskAssignmentTransitionBodySchema, taskBulkActionBodySchema, taskCreateBodySchema, taskUpdateBodySchema } from "@cnpaf/shared";
+import type { taskAssignmentBodySchema, taskAssignmentTransitionBodySchema, taskBulkActionBodySchema, taskCreateBodySchema, taskNotificationBodySchema, taskRecurrenceStatusBodySchema, taskUpdateBodySchema } from "@cnpaf/shared";
 import { db } from "../db";
 import { audit } from "../audit";
 import { ApiError } from "../api-error";
@@ -26,12 +27,16 @@ import { authorize, evaluateAuthorization, getAccessContext } from "../authoriza
 import { getTemplateVersionBundle } from "../templates";
 import { contentHash } from "../crypto";
 import { requireActiveRegistryItem } from "../registries";
+import { nextTaskOccurrence } from "../task-recurrence";
+import { queueTaskNotification } from "./notification-delivery";
 
 type TaskCreate = z.infer<typeof taskCreateBodySchema>;
 type TaskUpdate = z.infer<typeof taskUpdateBodySchema>;
 type AssignInput = z.infer<typeof taskAssignmentBodySchema>;
 type AssignmentTransition = z.infer<typeof taskAssignmentTransitionBodySchema>;
 type TaskBulkAction = z.infer<typeof taskBulkActionBodySchema>;
+type TaskNotificationInput = z.infer<typeof taskNotificationBodySchema>;
+type TaskRecurrenceStatusInput = z.infer<typeof taskRecurrenceStatusBodySchema>;
 
 const TASK_TRANSITIONS: Record<string, readonly string[]> = {
   draft: ["open", "cancelled", "archived"],
@@ -174,7 +179,7 @@ export async function getTask(actorId: string, taskId: string) {
   if (!myAssignment && !canViewAllAssignments) {
     throw new ApiError("FORBIDDEN", "Task is outside the assigned scope", 403);
   }
-  const assignments = await db.select({
+  const [assignments, recurrence] = await Promise.all([db.select({
     id: taskAssignments.id,
     assigneeId: taskAssignments.assigneeId,
     assigneeName: users.name,
@@ -193,8 +198,25 @@ export async function getTask(actorId: string, taskId: string) {
     .leftJoin(records, eq(taskAssignments.recordId, records.id))
     .where(canViewAllAssignments
     ? eq(taskAssignments.taskId, taskId)
-    : and(eq(taskAssignments.taskId, taskId), eq(taskAssignments.assigneeId, actorId)));
-  return { task: describedTask(row), myAssignment: myAssignment ?? null, assignments };
+    : and(eq(taskAssignments.taskId, taskId), eq(taskAssignments.assigneeId, actorId))),
+  db.select({
+    id: taskRecurrenceSeries.id,
+    frequency: taskRecurrenceSeries.frequency,
+    interval: taskRecurrenceSeries.interval,
+    timezone: taskRecurrenceSeries.timezone,
+    status: taskRecurrenceSeries.status,
+    nextOccurrenceAt: taskRecurrenceSeries.nextOccurrenceAt,
+    endsAt: taskRecurrenceSeries.endsAt,
+    generatedCount: taskRecurrenceSeries.generatedCount,
+    scheduledFor: taskRecurrenceOccurrences.scheduledFor,
+    templateTaskId: taskRecurrenceSeries.templateTaskId,
+  }).from(taskRecurrenceOccurrences)
+    .innerJoin(taskRecurrenceSeries, eq(taskRecurrenceOccurrences.seriesId, taskRecurrenceSeries.id))
+    .where(eq(taskRecurrenceOccurrences.taskId, taskId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null),
+  ]);
+  return { task: describedTask(row), myAssignment: myAssignment ?? null, assignments, recurrence };
 }
 
 export async function createTask(actorId: string, input: TaskCreate, requestId?: string) {
@@ -239,7 +261,7 @@ export async function createTask(actorId: string, input: TaskCreate, requestId?:
   if (invalidIds.length)
     throw new ApiError("BAD_REQUEST", "Every assignee must be an active program member", 400, { invalidIds });
   return db.transaction(async (tx) => {
-    const { assigneeIds, status, ...taskInput } = input;
+    const { assigneeIds, status, recurrence, ...taskInput } = input;
     const [task] = await tx.insert(tasks).values({
       ...taskInput,
       organizationId: program.organizationId,
@@ -255,15 +277,16 @@ export async function createTask(actorId: string, input: TaskCreate, requestId?:
         assigneeId,
         assignedById: actorId,
       }).returning();
-      await tx.insert(notifications).values({
-        userId: assigneeId,
-        kindKey: "task_assigned",
-        title: task.title,
-        body: task.instructions ?? "A task was assigned to you.",
-        entityType: "task",
-        entityId: task.id,
-        metadata: { assignmentId: assignment.id, dueAt: task.dueAt },
-      });
+      if (status === "open") {
+        await queueTaskNotification(tx, {
+          userId: assigneeId,
+          kindKey: "task_assigned",
+          title: task.title,
+          body: task.instructions ?? "A task was assigned to you.",
+          taskId: task.id,
+          metadata: { assignmentId: assignment.id, dueAt: task.dueAt },
+        });
+      }
       await audit({
         actorId,
         action: "task.assigned",
@@ -271,6 +294,40 @@ export async function createTask(actorId: string, input: TaskCreate, requestId?:
         entityId: assignment.id,
         targetUserId: assigneeId,
         afterState: assignment,
+        metadata: { requestId, taskId: task.id },
+      }, (values) => tx.insert(auditEvents).values(values));
+    }
+    if (recurrence && task.dueAt) {
+      const nextOccurrenceAt = nextTaskOccurrence(
+        task.dueAt,
+        recurrence.frequency,
+        recurrence.interval,
+        recurrence.timezone,
+      );
+      const endsAt = recurrence.endsAt ? new Date(recurrence.endsAt) : null;
+      const [series] = await tx.insert(taskRecurrenceSeries).values({
+        templateTaskId: task.id,
+        frequency: recurrence.frequency,
+        interval: recurrence.interval,
+        timezone: recurrence.timezone,
+        nextOccurrenceAt,
+        endsAt,
+        status: endsAt && nextOccurrenceAt > endsAt
+          ? "ended"
+          : status === "open" ? "active" : "paused",
+        createdById: actorId,
+      }).returning();
+      await tx.insert(taskRecurrenceOccurrences).values({
+        seriesId: series.id,
+        taskId: task.id,
+        scheduledFor: task.dueAt,
+      });
+      await audit({
+        actorId,
+        action: "task.recurrence_created",
+        entityType: "task_recurrence_series",
+        entityId: series.id,
+        afterState: series,
         metadata: { requestId, taskId: task.id },
       }, (values) => tx.insert(auditEvents).values(values));
     }
@@ -359,6 +416,32 @@ export async function updateTask(actorId: string, taskId: string, input: TaskUpd
       updatedAt: new Date(),
     }).where(and(eq(tasks.id, taskId), eq(tasks.status, before.status))).returning();
     if (!after) throw new ApiError("CONFLICT", "Task changed concurrently", 409);
+    if (before.status === "draft" && after.status === "open") {
+      await tx.update(taskRecurrenceSeries).set({
+        status: "active",
+        updatedAt: new Date(),
+      }).where(and(
+        eq(taskRecurrenceSeries.templateTaskId, taskId),
+        eq(taskRecurrenceSeries.status, "paused"),
+        or(isNull(taskRecurrenceSeries.endsAt), lte(taskRecurrenceSeries.nextOccurrenceAt, taskRecurrenceSeries.endsAt)),
+      ));
+      const assignments = await tx.select().from(taskAssignments).where(
+        and(
+          eq(taskAssignments.taskId, taskId),
+          inArray(taskAssignments.status, ["assigned", "in_progress"]),
+        ),
+      );
+      for (const assignment of assignments) {
+        await queueTaskNotification(tx, {
+          userId: assignment.assigneeId,
+          kindKey: "task_assigned",
+          title: after.title,
+          body: after.instructions ?? "A task was assigned to you.",
+          taskId: after.id,
+          metadata: { assignmentId: assignment.id, dueAt: after.dueAt },
+        });
+      }
+    }
     await audit({ actorId, action: "task.updated", entityType: "task", entityId: taskId, beforeState: before, afterState: after, metadata: { requestId } }, (values) => tx.insert(auditEvents).values(values));
     return after;
   });
@@ -391,15 +474,16 @@ export async function assignTask(actorId: string, taskId: string, input: AssignI
       }).onConflictDoNothing().returning();
       if (!assignment) continue;
       inserted.push(assignment);
-      await tx.insert(notifications).values({
-        userId: assigneeId,
-        kindKey: "task_assigned",
-        title: task.title,
-        body: task.instructions ?? "A task was assigned to you.",
-        entityType: "task",
-        entityId: task.id,
-        metadata: { assignmentId: assignment.id, dueAt: task.dueAt },
-      });
+      if (task.status === "open") {
+        await queueTaskNotification(tx, {
+          userId: assigneeId,
+          kindKey: "task_assigned",
+          title: task.title,
+          body: task.instructions ?? "A task was assigned to you.",
+          taskId: task.id,
+          metadata: { assignmentId: assignment.id, dueAt: task.dueAt },
+        });
+      }
       await audit({ actorId, action: "task.assigned", entityType: "task_assignment", entityId: assignment.id, targetUserId: assigneeId, afterState: assignment, metadata: { requestId, taskId } }, (values) => tx.insert(auditEvents).values(values));
     }
     return inserted;
@@ -493,15 +577,16 @@ export async function bulkMutateTasks(
             .returning();
           if (!assignment) continue;
           assignmentsCreated += 1;
-          await tx.insert(notifications).values({
-            userId: assigneeId,
-            kindKey: "task_assigned",
-            title: task.title,
-            body: task.instructions ?? "A task was assigned to you.",
-            entityType: "task",
-            entityId: task.id,
-            metadata: { assignmentId: assignment.id, dueAt: task.dueAt },
-          });
+          if (task.status === "open") {
+            await queueTaskNotification(tx, {
+              userId: assigneeId,
+              kindKey: "task_assigned",
+              title: task.title,
+              body: task.instructions ?? "A task was assigned to you.",
+              taskId: task.id,
+              metadata: { assignmentId: assignment.id, dueAt: task.dueAt },
+            });
+          }
           await audit(
             {
               actorId,
@@ -541,15 +626,14 @@ export async function bulkMutateTasks(
     return db.transaction(async (tx) => {
       for (const assignment of assignments) {
         const task = taskById.get(assignment.taskId)!;
-        await tx.insert(notifications).values({
+        await queueTaskNotification(tx, {
           userId: assignment.assigneeId,
           kindKey: "task_reminder",
           title: task.title,
           body: task.dueAt
             ? `Task due ${task.dueAt.toISOString()}`
             : "This task is still waiting for completion.",
-          entityType: "task",
-          entityId: task.id,
+          taskId: task.id,
           metadata: { assignmentId: assignment.id, dueAt: task.dueAt },
         });
       }
@@ -595,6 +679,32 @@ export async function bulkMutateTasks(
         .returning();
       if (!after)
         throw new ApiError("CONFLICT", "Task changed concurrently", 409);
+      if (task.status === "draft" && after.status === "open") {
+        await tx.update(taskRecurrenceSeries).set({
+          status: "active",
+          updatedAt: new Date(),
+        }).where(and(
+          eq(taskRecurrenceSeries.templateTaskId, task.id),
+          eq(taskRecurrenceSeries.status, "paused"),
+          or(isNull(taskRecurrenceSeries.endsAt), lte(taskRecurrenceSeries.nextOccurrenceAt, taskRecurrenceSeries.endsAt)),
+        ));
+        const assignments = await tx.select().from(taskAssignments).where(
+          and(
+            eq(taskAssignments.taskId, task.id),
+            inArray(taskAssignments.status, ["assigned", "in_progress"]),
+          ),
+        );
+        for (const assignment of assignments) {
+          await queueTaskNotification(tx, {
+            userId: assignment.assigneeId,
+            kindKey: "task_assigned",
+            title: after.title,
+            body: after.instructions ?? "A task was assigned to you.",
+            taskId: after.id,
+            metadata: { assignmentId: assignment.id, dueAt: after.dueAt },
+          });
+        }
+      }
       await audit(
         {
           actorId,
@@ -609,6 +719,118 @@ export async function bulkMutateTasks(
       );
     }
     return { action: input.action, taskCount: selectedTasks.length };
+  });
+}
+
+export async function sendTaskNotification(
+  actorId: string,
+  taskId: string,
+  input: TaskNotificationInput,
+  requestId?: string,
+) {
+  const task = await requireTask(actorId, taskId, "tasks.assign");
+  if (task.status !== "open") {
+    throw new ApiError("INVALID_TRANSITION", "Only open tasks can send notifications", 409);
+  }
+  const assignments = await db.select().from(taskAssignments).where(
+    and(
+      eq(taskAssignments.taskId, taskId),
+      inArray(taskAssignments.status, ["assigned", "in_progress"]),
+      input.assigneeIds?.length
+        ? inArray(taskAssignments.assigneeId, [...new Set(input.assigneeIds)])
+        : undefined,
+    ),
+  );
+  if (!assignments.length) {
+    throw new ApiError("BAD_REQUEST", "No active assignees were selected", 400);
+  }
+  if (input.assigneeIds?.length) {
+    const selected = new Set(assignments.map((assignment) => assignment.assigneeId));
+    const invalidIds = [...new Set(input.assigneeIds)].filter((id) => !selected.has(id));
+    if (invalidIds.length) {
+      throw new ApiError("BAD_REQUEST", "Every selected recipient must have an active assignment", 400, { invalidIds });
+    }
+  }
+
+  return db.transaction(async (tx) => {
+    let emailQueued = 0;
+    let emailSkipped = 0;
+    for (const assignment of assignments) {
+      const queued = await queueTaskNotification(tx, {
+        userId: assignment.assigneeId,
+        kindKey: "task_reminder",
+        title: task.title,
+        body: input.message?.trim() || (task.dueAt
+          ? `Task due ${task.dueAt.toISOString()}`
+          : "This task is still waiting for completion."),
+        taskId: task.id,
+        metadata: {
+          assignmentId: assignment.id,
+          dueAt: task.dueAt,
+          manual: true,
+          sentById: actorId,
+        },
+      });
+      if (queued.emailStatus === "queued") emailQueued += 1;
+      if (queued.emailStatus === "skipped") emailSkipped += 1;
+    }
+    await audit({
+      actorId,
+      action: "task.notification_sent",
+      entityType: "task",
+      entityId: task.id,
+      metadata: {
+        requestId,
+        recipientCount: assignments.length,
+        emailQueued,
+        emailSkipped,
+      },
+    }, (values) => tx.insert(auditEvents).values(values));
+    return {
+      notificationsCreated: assignments.length,
+      emailQueued,
+      emailSkipped,
+      emailConfigured: emailQueued + emailSkipped > 0,
+    };
+  });
+}
+
+export async function updateTaskRecurrenceStatus(
+  actorId: string,
+  taskId: string,
+  input: TaskRecurrenceStatusInput,
+  requestId?: string,
+) {
+  await requireTask(actorId, taskId, "tasks.edit");
+  const before = await db.select({ series: taskRecurrenceSeries })
+    .from(taskRecurrenceOccurrences)
+    .innerJoin(taskRecurrenceSeries, eq(taskRecurrenceOccurrences.seriesId, taskRecurrenceSeries.id))
+    .where(eq(taskRecurrenceOccurrences.taskId, taskId))
+    .limit(1)
+    .then((rows) => rows[0]?.series);
+  if (!before) throw new ApiError("NOT_FOUND", "Recurring task series not found", 404);
+  if (input.status === "active" && before.endsAt && before.nextOccurrenceAt > before.endsAt) {
+    throw new ApiError("INVALID_TRANSITION", "This recurring task series has already ended", 409);
+  }
+  return db.transaction(async (tx) => {
+    const [after] = await tx.update(taskRecurrenceSeries).set({
+      status: input.status,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(taskRecurrenceSeries.id, before.id),
+      eq(taskRecurrenceSeries.status, before.status),
+    )).returning();
+    if (!after) throw new ApiError("CONFLICT", "Recurring task series changed concurrently", 409);
+    await audit({
+      actorId,
+      action: `task.recurrence_${input.status}`,
+      entityType: "task_recurrence_series",
+      entityId: after.id,
+      beforeState: before,
+      afterState: after,
+      metadata: { requestId, taskId },
+    }, (values) => tx.insert(auditEvents).values(values));
+    return after;
   });
 }
 
@@ -656,14 +878,13 @@ export async function transitionAssignment(actorId: string, taskId: string, assi
       updatedAt: now,
     }).where(and(eq(taskAssignments.id, assignmentId), eq(taskAssignments.status, before.status))).returning();
     if (!after) throw new ApiError("CONFLICT", "Assignment changed concurrently", 409);
-    if (input.status === "assigned") {
-      await tx.insert(notifications).values({
+    if (input.status === "assigned" && task.status === "open") {
+      await queueTaskNotification(tx, {
         userId: before.assigneeId,
         kindKey: "task_reassigned",
         title: task.title,
         body: task.instructions ?? "A task was reassigned to you.",
-        entityType: "task",
-        entityId: task.id,
+        taskId: task.id,
         metadata: { assignmentId: after.id, dueAt: task.dueAt },
       });
     }

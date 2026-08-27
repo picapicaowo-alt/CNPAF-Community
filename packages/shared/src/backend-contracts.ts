@@ -527,8 +527,9 @@ export const programMembershipRequestBodySchema = z.union([
 export const affiliationBodySchema = z.object({
   organizationId: uuidSchema.nullable().optional(),
   programId: uuidSchema.nullable().optional(),
+  institutionId: uuidSchema.nullable().optional(),
   affiliationTypeKey: z.string().min(1).max(120),
-  institutionName: z.string().min(1).max(500),
+  institutionName: z.string().min(1).max(500).optional(),
   institutionTypeKey: z.string().max(120).nullable().optional(),
   departmentName: z.string().max(500).nullable().optional(),
   title: z.string().max(240).nullable().optional(),
@@ -536,7 +537,23 @@ export const affiliationBodySchema = z.object({
   isPrimary: z.boolean().default(false),
   startsAt: z.string().datetime().nullable().optional(),
   endsAt: z.string().datetime().nullable().optional(),
+}).strict().refine(
+  (value) => Boolean(value.institutionId || value.institutionName?.trim()),
+  { message: "institutionId or institutionName is required", path: ["institutionId"] },
+);
+
+export const institutionCreateBodySchema = z.object({
+  name: z.string().trim().min(1).max(500),
+  institutionTypeKey: z.enum(["school", "organization"]),
 }).strict();
+
+export const institutionUpdateBodySchema = z.object({
+  name: z.string().trim().min(1).max(500).optional(),
+  institutionTypeKey: z.enum(["school", "organization"]).optional(),
+  status: z.enum(["active", "archived"]).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: "At least one field is required",
+});
 
 const personGroupUserIdsSchema = z
   .array(uuidSchema)
@@ -578,13 +595,36 @@ const taskBodyBaseSchema = z.object({
   closesAt: z.string().datetime().nullable().optional(),
   configuration: z.record(z.unknown()).default({}),
 }).strict();
+
+export const taskRecurrenceSchema = z.object({
+  frequency: z.enum(["daily", "weekly", "monthly"]),
+  interval: z.number().int().min(1).max(52).default(1),
+  timezone: z.string().min(1).max(100).refine((value) => {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Invalid IANA timezone"),
+  endsAt: z.string().datetime().nullable().optional(),
+}).strict();
+
 export const taskCreateBodySchema = taskBodyBaseSchema.extend({
   assigneeIds: z.array(uuidSchema).min(1).max(500),
   status: z.enum(["draft", "open"]).default("draft"),
-}).refine(
-  (value) => !value.opensAt || !value.closesAt || Date.parse(value.opensAt) < Date.parse(value.closesAt),
-  { message: "closesAt must be after opensAt", path: ["closesAt"] },
-);
+  recurrence: taskRecurrenceSchema.nullable().optional(),
+}).superRefine((value, context) => {
+  if (value.opensAt && value.closesAt && Date.parse(value.opensAt) >= Date.parse(value.closesAt)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "closesAt must be after opensAt", path: ["closesAt"] });
+  }
+  if (value.recurrence && !value.dueAt) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "dueAt is required for recurring tasks", path: ["dueAt"] });
+  }
+  if (value.recurrence?.endsAt && value.dueAt && Date.parse(value.recurrence.endsAt) < Date.parse(value.dueAt)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "recurrence endsAt must not be before dueAt", path: ["recurrence", "endsAt"] });
+  }
+});
 export const taskUpdateBodySchema = taskBodyBaseSchema.omit({ programId: true }).partial().extend({
   status: z.enum(["draft", "open", "closed", "cancelled", "archived"]).optional(),
 }).strict();
@@ -614,6 +654,15 @@ export const taskAssignmentTransitionBodySchema = z.object({
   message: "declineReason is required when declining an assignment",
   path: ["declineReason"],
 });
+
+export const taskNotificationBodySchema = z.object({
+  assigneeIds: z.array(uuidSchema).min(1).max(500).optional(),
+  message: z.string().min(1).max(4000).nullable().optional(),
+}).strict();
+
+export const taskRecurrenceStatusBodySchema = z.object({
+  status: z.enum(["active", "paused"]),
+}).strict();
 
 export const notificationPreferenceBodySchema = z.object({
   kindKey: z.string().min(1).max(120),

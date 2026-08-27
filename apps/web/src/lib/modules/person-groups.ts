@@ -15,6 +15,7 @@ import { db } from "../db";
 import { audit } from "../audit";
 import { ApiError } from "../api-error";
 import { authorize } from "../authorization";
+import { queueNotification } from "./notification-delivery";
 
 type PersonGroupCreate = z.infer<typeof personGroupCreateBodySchema>;
 type PersonGroupUpdate = z.infer<typeof personGroupUpdateBodySchema>;
@@ -178,6 +179,20 @@ export async function createPersonGroup(
           addedById: actorId,
         })),
       );
+      for (const userId of input.userIds) {
+        await queueNotification(tx, {
+          userId,
+          kindKey: "group_membership_changed",
+          title: "You were assigned to a people group",
+          body: `You were added to the people group “${input.nameEn}”.`,
+          entityType: "person_group",
+          entityId: group.id,
+          metadata: {
+            actionPath: `/people/${userId}`,
+            emailSubject: `[CNPAF] Added to people group: ${input.nameEn}`,
+          },
+        });
+      }
     }
     const result = { ...group, memberIds: input.userIds };
     await audit(
@@ -260,6 +275,28 @@ export async function updatePersonGroup(
     }
     const memberIds =
       input.userIds ?? beforeMemberships.map((membership) => membership.userId);
+    if (input.userIds) {
+      const beforeIds = new Set(beforeMemberships.map((membership) => membership.userId));
+      const afterIds = new Set(input.userIds);
+      for (const userId of new Set([...beforeIds, ...afterIds])) {
+        if (beforeIds.has(userId) === afterIds.has(userId)) continue;
+        const added = afterIds.has(userId);
+        await queueNotification(tx, {
+          userId,
+          kindKey: "group_membership_changed",
+          title: "Your people group assignment changed",
+          body: added
+            ? `You were added to the people group “${after.nameEn}”.`
+            : `You were removed from the people group “${after.nameEn}”.`,
+          entityType: "person_group",
+          entityId: groupId,
+          metadata: {
+            actionPath: `/people/${userId}`,
+            emailSubject: `[CNPAF] People group assignment changed: ${after.nameEn}`,
+          },
+        });
+      }
+    }
     const result = { ...after, memberIds };
     await audit(
       {

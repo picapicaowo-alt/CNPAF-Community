@@ -10,6 +10,9 @@ import {
   editableReportCreateBodySchema,
   formFieldValidationError,
   formRatingValues,
+  affiliationBodySchema,
+  institutionCreateBodySchema,
+  institutionUpdateBodySchema,
   locationCreateBodySchema,
   manualAccountCreateBodySchema,
   personGroupCreateBodySchema,
@@ -192,6 +195,30 @@ test("task creation requires at least one assignee in the atomic workflow", () =
       .success,
     true,
   );
+});
+
+test("recurring task creation requires a due date and a valid IANA timezone", () => {
+  const base = {
+    programId: ids.program,
+    templateVersionId: ids.form,
+    taskTypeKey: "configured_task_type",
+    title: "Thursday ADHC activity",
+    assigneeIds: [ids.collector],
+  };
+  assert.equal(taskCreateBodySchema.safeParse({
+    ...base,
+    recurrence: { frequency: "weekly", interval: 1, timezone: "America/Los_Angeles" },
+  }).success, false);
+  assert.equal(taskCreateBodySchema.safeParse({
+    ...base,
+    dueAt: "2026-09-03T17:00:00.000Z",
+    recurrence: { frequency: "weekly", interval: 1, timezone: "Not/A_Timezone" },
+  }).success, false);
+  assert.equal(taskCreateBodySchema.safeParse({
+    ...base,
+    dueAt: "2026-09-03T17:00:00.000Z",
+    recurrence: { frequency: "weekly", interval: 1, timezone: "America/Los_Angeles" },
+  }).success, true);
 });
 
 test("task edits can select another published form version", () => {
@@ -546,6 +573,22 @@ test("manual account provisioning cannot reference an unrelated role assignment"
     }],
   });
   assert.equal(parsed.success, false);
+});
+
+test("affiliations accept a managed institution id and institution directory inputs stay bounded", () => {
+  assert.equal(affiliationBodySchema.safeParse({
+    affiliationTypeKey: "staff",
+    institutionId: ids.location,
+  }).success, true);
+  assert.equal(affiliationBodySchema.safeParse({
+    affiliationTypeKey: "staff",
+  }).success, false);
+  assert.equal(institutionCreateBodySchema.safeParse({
+    name: "University of Southern California",
+    institutionTypeKey: "school",
+  }).success, true);
+  assert.equal(institutionUpdateBodySchema.safeParse({}).success, false);
+  assert.equal(institutionUpdateBodySchema.safeParse({ status: "archived" }).success, true);
 });
 
 test("permanent identity removal requires an explicit confirmation and reason", () => {

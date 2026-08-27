@@ -7,6 +7,7 @@ import { audit } from "../audit";
 import { ApiError } from "../api-error";
 import { authorize, evaluateAuthorization, getAccessContext } from "../authorization";
 import { requireActiveRegistryItem } from "../registries";
+import { queueNotification } from "./notification-delivery";
 
 type ProgramCreate = z.infer<typeof programCreateBodySchema>;
 type ProgramUpdate = z.infer<typeof programUpdateBodySchema>;
@@ -183,6 +184,20 @@ export async function addProgramMemberships(
         afterState: membership,
         metadata: { requestId, programId, batchSize: input.userIds.length },
       }, (auditValues) => tx.insert(auditEvents).values(auditValues));
+      await queueNotification(tx, {
+        userId,
+        kindKey: "program_membership_changed",
+        title: "Your program assignment changed",
+        body: existing
+          ? `Your membership in “${program.nameEn}” was updated.`
+          : `You were assigned to the program “${program.nameEn}”.`,
+        entityType: "program",
+        entityId: program.id,
+        metadata: {
+          actionPath: `/people/${userId}`,
+          emailSubject: `[CNPAF] Program assignment changed: ${program.nameEn}`,
+        },
+      });
       memberships.push(membership);
     }
     return memberships;
@@ -190,7 +205,7 @@ export async function addProgramMemberships(
 }
 
 export async function removeProgramMembership(actorId: string, programId: string, membershipId: string, requestId?: string) {
-  await requireProgram(actorId, programId, "programs.manage_membership");
+  const program = await requireProgram(actorId, programId, "programs.manage_membership");
   const before = (await db.select().from(programMemberships).where(and(
     eq(programMemberships.id, membershipId),
     eq(programMemberships.programId, programId),
@@ -208,6 +223,18 @@ export async function removeProgramMembership(actorId: string, programId: string
       afterState: after,
       metadata: { requestId, programId },
     }, (values) => tx.insert(auditEvents).values(values));
+    await queueNotification(tx, {
+      userId: before.userId,
+      kindKey: "program_membership_changed",
+      title: "Your program assignment changed",
+      body: `You were removed from the program “${program.nameEn}”.`,
+      entityType: "program",
+      entityId: programId,
+      metadata: {
+        actionPath: `/people/${before.userId}`,
+        emailSubject: "[CNPAF] Program assignment changed",
+      },
+    });
     return after;
   });
 }

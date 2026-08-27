@@ -45,6 +45,7 @@ type Override = {
 };
 type Affiliation = {
   id: string;
+  institutionId?: string | null;
   organizationId?: string | null;
   programId?: string | null;
   affiliationTypeKey: string;
@@ -98,6 +99,12 @@ type Group = {
   descriptionZh?: string | null;
 };
 type Program = { id: string; nameEn: string; nameZh: string; status: string };
+type Institution = {
+  id: string;
+  name: string;
+  institutionTypeKey: "school" | "organization";
+  status: string;
+};
 type RegistryItem = {
   id: string;
   key: string;
@@ -108,7 +115,7 @@ type RegistryItem = {
 
 const blankAffiliation = {
   affiliationTypeKey: "",
-  institutionName: "",
+  institutionId: "",
   departmentName: "",
   title: "",
   isPrimary: true,
@@ -134,6 +141,7 @@ export default function PersonManagementPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [affiliationTypes, setAffiliationTypes] = useState<RegistryItem[]>([]);
   const [membershipRoles, setMembershipRoles] = useState<RegistryItem[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -165,6 +173,7 @@ export default function PersonManagementPage() {
         programResult,
         affiliationRegistry,
         membershipRegistry,
+        institutionResult,
       ] = await Promise.all([
         apiFetch<Access>(`/api/v1/admin/users/${id}`),
         actorPermissions.includes("roles.view")
@@ -180,6 +189,7 @@ export default function PersonManagementPage() {
         apiFetch<{ items: RegistryItem[] }>(
           "/api/v1/config/registries/program_membership_role?status=active",
         ),
+        apiFetch<{ institutions: Institution[] }>("/api/v1/institutions"),
       ]);
       setPermissions(actorPermissions);
       setAccess(userAccess);
@@ -194,6 +204,9 @@ export default function PersonManagementPage() {
       );
       setAffiliationTypes(affiliationRegistry.items ?? []);
       setMembershipRoles(membershipRegistry.items ?? []);
+      setInstitutions(
+        (institutionResult.institutions ?? []).filter((item) => item.status === "active"),
+      );
       setSelectedRoleIds(userAccess.roles.map((role) => role.id));
       setSelectedGroupIds(
         (groupResult.groups ?? [])
@@ -417,7 +430,7 @@ export default function PersonManagementPage() {
     if (
       !access ||
       !affiliation.affiliationTypeKey ||
-      !affiliation.institutionName.trim()
+      !affiliation.institutionId
     )
       return;
     setSaving("affiliation");
@@ -428,8 +441,7 @@ export default function PersonManagementPage() {
         body: JSON.stringify({
           organizationId: access.user.organizationId,
           affiliationTypeKey: affiliation.affiliationTypeKey,
-          institutionName: affiliation.institutionName.trim(),
-          institutionTypeKey: null,
+          institutionId: affiliation.institutionId,
           departmentName: affiliation.departmentName.trim() || null,
           title: affiliation.title.trim() || null,
           metadata: {},
@@ -928,16 +940,28 @@ export default function PersonManagementPage() {
                 </label>
                 <label>
                   {locale === "zh" ? "学校 / 机构" : "School / institution"}
-                  <input
+                  <select
                     required
-                    value={affiliation.institutionName}
+                    value={affiliation.institutionId}
                     onChange={(event) =>
                       setAffiliation((current) => ({
                         ...current,
-                        institutionName: event.target.value,
+                        institutionId: event.target.value,
                       }))
                     }
-                  />
+                  >
+                    <option value="">{locale === "zh" ? "选择学校或机构…" : "Select a school or institution…"}</option>
+                    {institutions.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} · {item.institutionTypeKey === "school" ? (locale === "zh" ? "学校" : "School") : (locale === "zh" ? "机构" : "Organization")}
+                      </option>
+                    ))}
+                  </select>
+                  {!institutions.length ? (
+                    <span className="caption">
+                      {locale === "zh" ? "请先在人员页的“学校与机构”中添加目录项。" : "Add an item under Schools & institutions on the people page first."}
+                    </span>
+                  ) : null}
                 </label>
                 <label>
                   {locale === "zh" ? "学院 / 系" : "School / department"}
@@ -980,7 +1004,7 @@ export default function PersonManagementPage() {
                   className="button button-secondary button-small align-self-end"
                   disabled={
                     saving === "affiliation" ||
-                    !affiliation.institutionName.trim()
+                    !affiliation.institutionId
                   }
                   type="submit"
                 >

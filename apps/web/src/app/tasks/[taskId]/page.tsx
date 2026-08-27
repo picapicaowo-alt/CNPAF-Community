@@ -15,6 +15,7 @@ import { TaskManagementPanel } from "@/features/tasks/components/TaskManagementP
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import {
   taskDate,
+  taskRecurrenceLabel,
   taskStatusLabel,
   taskTone,
   type TaskDetailResponse,
@@ -97,7 +98,7 @@ export default function TaskDetailPage() {
         <ErrorState message={error} retry={load} />
       </>
     );
-  const { task, myAssignment, assignments } = data;
+  const { task, myAssignment, assignments, recurrence } = data;
   const assignedNames = assignments
     .map((assignment) => assignment.assigneeName)
     .filter(Boolean)
@@ -128,6 +129,24 @@ export default function TaskDetailPage() {
               <div className="caption">{locale === "zh" ? "时间" : "When"}</div>
               <strong>{taskDate(task.dueAt ?? task.opensAt, locale)}</strong>
             </div>
+            {recurrence ? (
+              <div className="field-full recurrence-summary">
+                <div>
+                  <div className="caption">{locale === "zh" ? "重复规则" : "Recurrence"}</div>
+                  <strong>{taskRecurrenceLabel(recurrence, locale)}</strong>
+                  <span className="caption">
+                    {locale === "zh" ? "下一期" : "Next"}: {taskDate(recurrence.nextOccurrenceAt, locale)}
+                  </span>
+                </div>
+                <StatusPill tone={recurrence.status === "active" ? "blue" : recurrence.status === "paused" ? "amber" : "neutral"}>
+                  {{
+                    active: locale === "zh" ? "进行中" : "Active",
+                    paused: locale === "zh" ? "已暂停" : "Paused",
+                    ended: locale === "zh" ? "已结束" : "Ended",
+                  }[recurrence.status]}
+                </StatusPill>
+              </div>
+            ) : null}
             <div>
               <div className="caption">
                 {locale === "zh" ? "地点" : "Where"}
@@ -182,6 +201,7 @@ export default function TaskDetailPage() {
             assignments={assignments}
             locale={locale}
             onChanged={load}
+            recurrence={recurrence}
             task={task}
           />
         </div>

@@ -20,6 +20,7 @@ import { db } from "./db";
 import { audit } from "./audit";
 import { evaluateAuthorization, getAccessContext, serializeAccessContext } from "./authorization";
 import { ApiError } from "./api-error";
+import { queueNotification } from "./modules/notification-delivery";
 
 const AI_ACCESS_PERMISSION_KEYS = ["chat.ask_collect", "ask_collect.use"] as const;
 
@@ -334,6 +335,19 @@ export async function replaceUserAccess(input: {
       },
       reason: input.body.reason ?? null,
     }, (values) => tx.insert(auditEvents).values(values));
+    const roleNames = resolvedRoles.map((role) => role!.nameEn).join(", ");
+    await queueNotification(tx, {
+      userId: input.targetUserId,
+      kindKey: "access_changed",
+      title: "Your role or access changed",
+      body: `Your CNPAF roles or access scope were updated. Current roles: ${roleNames}.`,
+      entityType: "user",
+      entityId: input.targetUserId,
+      metadata: {
+        actionPath: `/people/${input.targetUserId}`,
+        emailSubject: "[CNPAF] Your role or access changed",
+      },
+    });
   });
 
   const after = await getUserAccess(input.targetUserId);

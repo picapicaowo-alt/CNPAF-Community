@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { and, eq, inArray, or } from "drizzle-orm";
 import {
   auditEvents,
+  institutions,
   permissions,
   permissionScopeAssignments,
   personGroupMemberships,
@@ -23,6 +24,7 @@ import { ApiError } from "../api-error";
 import { authorize } from "../authorization";
 import { scopeAuthorizationResource } from "../access-admin";
 import { requireActiveRegistryItem } from "../registries";
+import { queueNotification } from "./notification-delivery";
 
 type AccountCreate = z.infer<typeof manualAccountCreateBodySchema>;
 type ResetPassword = z.infer<typeof resetPasswordBodySchema>;
@@ -114,6 +116,17 @@ export async function createAccount(actorId: string, input: AccountCreate, reque
   }
   await Promise.all([...new Set(input.affiliations.map((affiliation) => affiliation.affiliationTypeKey))]
     .map((key) => requireActiveRegistryItem("affiliation_type", key, input.organizationId)));
+  const institutionIds = [...new Set(input.affiliations.map((affiliation) => affiliation.institutionId).filter(Boolean))] as string[];
+  const institutionRows = institutionIds.length
+    ? await db.select().from(institutions).where(inArray(institutions.id, institutionIds))
+    : [];
+  if (
+    institutionRows.length !== institutionIds.length ||
+    institutionRows.some((institution) => institution.organizationId !== input.organizationId || institution.status !== "active")
+  ) {
+    throw new ApiError("BAD_REQUEST", "One or more schools or institutions are invalid or archived", 400);
+  }
+  const institutionById = new Map(institutionRows.map((institution) => [institution.id, institution]));
 
   const generatedPassword = input.temporaryPassword ?? temporaryPassword();
   const passwordHash = await bcrypt.hash(generatedPassword, 12);
@@ -176,13 +189,20 @@ export async function createAccount(actorId: string, input: AccountCreate, reque
       });
     }
     const affiliations = input.affiliations.length
-      ? await tx.insert(userAffiliations).values(input.affiliations.map((affiliation) => ({
-          ...affiliation,
-          userId: user.id,
-          startsAt: affiliation.startsAt ? new Date(affiliation.startsAt) : null,
-          endsAt: affiliation.endsAt ? new Date(affiliation.endsAt) : null,
-          createdById: actorId,
-        }))).returning()
+      ? await tx.insert(userAffiliations).values(input.affiliations.map((affiliation) => {
+          const institution = affiliation.institutionId
+            ? institutionById.get(affiliation.institutionId)
+            : undefined;
+          return {
+            ...affiliation,
+            institutionName: institution?.name ?? affiliation.institutionName!,
+            institutionTypeKey: institution?.institutionTypeKey ?? affiliation.institutionTypeKey ?? null,
+            userId: user.id,
+            startsAt: affiliation.startsAt ? new Date(affiliation.startsAt) : null,
+            endsAt: affiliation.endsAt ? new Date(affiliation.endsAt) : null,
+            createdById: actorId,
+          };
+        })).returning()
       : [];
     const memberships = input.programMemberships.length
       ? await tx.insert(programMemberships).values(input.programMemberships.map((membership) => ({
@@ -382,6 +402,15 @@ export async function addUserAffiliation(actorId: string, targetUserId: string, 
   if (input.organizationId && input.organizationId !== target.organizationId) {
     throw new ApiError("BAD_REQUEST", "Affiliation organization must match the target account", 400);
   }
+  const institution = input.institutionId
+    ? await db.select().from(institutions).where(eq(institutions.id, input.institutionId)).limit(1).then((rows) => rows[0])
+    : undefined;
+  if (
+    input.institutionId &&
+    (!institution || institution.status !== "active" || institution.organizationId !== target.organizationId)
+  ) {
+    throw new ApiError("BAD_REQUEST", "School or institution is invalid, archived, or belongs to another organization", 400);
+  }
   if (input.programId) {
     const program = (await db.select().from(programs).where(eq(programs.id, input.programId)).limit(1))[0];
     if (!program || program.organizationId !== target.organizationId || (input.organizationId && input.organizationId !== program.organizationId)) {
@@ -395,12 +424,26 @@ export async function addUserAffiliation(actorId: string, targetUserId: string, 
     if (input.isPrimary) await tx.update(userAffiliations).set({ isPrimary: false, updatedAt: new Date() }).where(and(eq(userAffiliations.userId, targetUserId), eq(userAffiliations.isPrimary, true)));
     const [affiliation] = await tx.insert(userAffiliations).values({
       ...input,
+      institutionName: institution?.name ?? input.institutionName!,
+      institutionTypeKey: institution?.institutionTypeKey ?? input.institutionTypeKey ?? null,
       userId: targetUserId,
       startsAt: input.startsAt ? new Date(input.startsAt) : null,
       endsAt: input.endsAt ? new Date(input.endsAt) : null,
       createdById: actorId,
     }).returning();
     await audit({ actorId, action: "person.affiliation_added", entityType: "user_affiliation", entityId: affiliation.id, targetUserId, afterState: affiliation, metadata: { requestId } }, (values) => tx.insert(auditEvents).values(values));
+    await queueNotification(tx, {
+      userId: targetUserId,
+      kindKey: "affiliation_changed",
+      title: "Your school or institution affiliation changed",
+      body: `You were assigned to “${affiliation.institutionName}” in CNPAF Community.`,
+      entityType: "user_affiliation",
+      entityId: affiliation.id,
+      metadata: {
+        actionPath: `/people/${targetUserId}`,
+        emailSubject: "[CNPAF] Your school or institution affiliation changed",
+      },
+    });
     return affiliation;
   });
 }
@@ -412,6 +455,18 @@ export async function removeUserAffiliation(actorId: string, targetUserId: strin
   return db.transaction(async (tx) => {
     const [after] = await tx.update(userAffiliations).set({ status: "inactive", endsAt: new Date(), isPrimary: false, updatedAt: new Date() }).where(eq(userAffiliations.id, affiliationId)).returning();
     await audit({ actorId, action: "person.affiliation_removed", entityType: "user_affiliation", entityId: affiliationId, targetUserId, beforeState: before, afterState: after, metadata: { requestId } }, (values) => tx.insert(auditEvents).values(values));
+    await queueNotification(tx, {
+      userId: targetUserId,
+      kindKey: "affiliation_changed",
+      title: "Your school or institution affiliation changed",
+      body: `Your affiliation with “${before.institutionName}” was removed in CNPAF Community.`,
+      entityType: "user_affiliation",
+      entityId: affiliationId,
+      metadata: {
+        actionPath: `/people/${targetUserId}`,
+        emailSubject: "[CNPAF] Your school or institution affiliation changed",
+      },
+    });
     return after;
   });
 }

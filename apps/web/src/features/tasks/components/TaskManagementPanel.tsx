@@ -11,12 +11,15 @@ import {
   taskStatusLabel,
   taskTone,
   type TaskAssignment,
+  type TaskRecurrence,
   type TaskSummary,
 } from "@/lib/task-ui";
 import {
   addTaskAssignees,
+  sendTaskNotification,
   transitionTaskAssignment,
   updateTask,
+  updateTaskRecurrenceStatus,
 } from "../api";
 
 type LocationChoice = {
@@ -42,6 +45,7 @@ type FormChoice = {
 type Props = {
   task: Omit<TaskSummary, "myAssignment" | "assignments">;
   assignments: TaskAssignment[];
+  recurrence: TaskRecurrence | null;
   locale: "zh" | "en";
   onChanged: () => Promise<void>;
 };
@@ -49,6 +53,7 @@ type Props = {
 export function TaskManagementPanel({
   task,
   assignments,
+  recurrence,
   locale,
   onChanged,
 }: Props) {
@@ -58,6 +63,9 @@ export function TaskManagementPanel({
   const [taskTypes, setTaskTypes] = useState<RegistryItem[]>([]);
   const [forms, setForms] = useState<FormChoice[]>([]);
   const [editing, setEditing] = useState(false);
+  const [notifying, setNotifying] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationResult, setNotificationResult] = useState("");
   const [canManageTaskTypes, setCanManageTaskTypes] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -210,6 +218,32 @@ export function TaskManagementPanel({
     setSelectedAssigneeIds([]);
   }
 
+  async function notifyAssignees() {
+    setBusy(true);
+    setError("");
+    setNotificationResult("");
+    try {
+      const { result } = await sendTaskNotification(task.id, {
+        message: notificationMessage.trim() || null,
+      });
+      setNotificationResult(
+        locale === "zh"
+          ? result.emailConfigured
+            ? `已向 ${result.notificationsCreated} 位负责人发送站内通知，${result.emailQueued} 封邮件已进入发送队列。`
+            : `已向 ${result.notificationsCreated} 位负责人发送站内通知；Gmail 尚未启用。`
+          : result.emailConfigured
+            ? `In-app notifications sent to ${result.notificationsCreated} assignee(s); ${result.emailQueued} email(s) queued.`
+            : `In-app notifications sent to ${result.notificationsCreated} assignee(s); Gmail is not enabled.`,
+      );
+      setNotificationMessage("");
+      setNotifying(false);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="card stack">
       <div className="row-between mobile-stack">
@@ -220,6 +254,32 @@ export function TaskManagementPanel({
           <h2>{locale === "zh" ? "管理任务" : "Manage task"}</h2>
         </div>
         <div className="row">
+          {task.status === "open" ? (
+            <button
+              aria-expanded={notifying}
+              className="button button-secondary button-small"
+              disabled={busy || !activeAssignments.length}
+              onClick={() => setNotifying((value) => !value)}
+              type="button"
+            >
+              {locale === "zh" ? "发送通知" : "Send notification"}
+            </button>
+          ) : null}
+          {recurrence && recurrence.status !== "ended" ? (
+            <button
+              className="button button-secondary button-small"
+              disabled={busy}
+              onClick={() => void run(() => updateTaskRecurrenceStatus(
+                task.id,
+                recurrence.status === "active" ? "paused" : "active",
+              ))}
+              type="button"
+            >
+              {recurrence.status === "active"
+                ? locale === "zh" ? "暂停重复" : "Pause recurrence"
+                : locale === "zh" ? "恢复重复" : "Resume recurrence"}
+            </button>
+          ) : null}
           <Link
             className="button button-secondary button-small"
             href={`/tasks/new?copy=${task.id}`}
@@ -283,6 +343,48 @@ export function TaskManagementPanel({
         </div>
       </div>
       {error ? <div className="feedback feedback-error">{error}</div> : null}
+      {notificationResult ? <div className="feedback feedback-info">{notificationResult}</div> : null}
+      {notifying ? (
+        <div className="notification-compose form-fieldset stack-sm">
+          <div>
+            <strong>{locale === "zh" ? "提醒所有未完成的负责人" : "Notify all unfinished assignees"}</strong>
+            <p className="caption">
+              {locale === "zh"
+                ? "系统会发送站内通知；如已启用 Gmail，同一内容也会发到成员邮箱。"
+                : "The same reminder is sent in-app and, when enabled, through Gmail."}
+            </p>
+          </div>
+          <label>
+            {locale === "zh" ? "附加说明（可选）" : "Additional message (optional)"}
+            <textarea
+              maxLength={4000}
+              onChange={(event) => setNotificationMessage(event.target.value)}
+              placeholder={locale === "zh" ? "例如：请在活动开始前完成确认。" : "For example: Please confirm before the activity starts."}
+              value={notificationMessage}
+            />
+          </label>
+          <div className="row">
+            <button
+              className="button button-small"
+              disabled={busy}
+              onClick={() => void notifyAssignees()}
+              type="button"
+            >
+              {busy
+                ? locale === "zh" ? "正在发送…" : "Sending…"
+                : locale === "zh" ? "发送提醒" : "Send reminder"}
+            </button>
+            <button
+              className="button button-ghost button-small"
+              disabled={busy}
+              onClick={() => setNotifying(false)}
+              type="button"
+            >
+              {locale === "zh" ? "取消" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {editing ? (
         <div className="form-grid form-fieldset">
           <label className="field-full">

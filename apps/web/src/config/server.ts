@@ -1,7 +1,22 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 export type StorageBackend = "local" | "s3";
 export type OpenAiWebSearchContextSize = "low" | "medium" | "high";
+export type NotificationEmailRuntimeConfig =
+  | { enabled: false; provider: "disabled" }
+  | {
+      enabled: true;
+      provider: "gmail";
+      appBaseUrl: string;
+      apiBaseUrl: string;
+      oauthScope: string;
+      delegatedSender: string;
+      fromName: string;
+      serviceAccountEmail: string;
+      serviceAccountPrivateKey: string;
+      allowedRecipientDomains: ReadonlySet<string>;
+    };
 
 function optional(name: string) {
   const value = process.env[name]?.trim();
@@ -87,6 +102,92 @@ export function getOpenAiRuntimeConfig() {
 export function getInsightRuntimeConfig() {
   return {
     liveRefreshMs: integer("INSIGHT_LIVE_REFRESH_MS", 30_000, 5_000, 300_000),
+  };
+}
+
+export function getNotificationEmailRuntimeConfig(): NotificationEmailRuntimeConfig {
+  const provider = optional("NOTIFICATION_EMAIL_PROVIDER")?.toLowerCase() ?? "disabled";
+  if (provider === "disabled") return { enabled: false, provider };
+  if (provider !== "gmail") {
+    throw new Error("NOTIFICATION_EMAIL_PROVIDER must be disabled or gmail");
+  }
+  const delegatedSender = required("GMAIL_DELEGATED_SENDER").toLowerCase();
+  const { email: serviceAccountEmail, privateKey: serviceAccountPrivateKey } =
+    gmailServiceAccountCredentials();
+  const allowedRecipientDomains = new Set(
+    required("NOTIFICATION_EMAIL_ALLOWED_DOMAINS")
+      .split(",")
+      .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
+      .filter(Boolean),
+  );
+  if (!allowedRecipientDomains.size) {
+    throw new Error("NOTIFICATION_EMAIL_ALLOWED_DOMAINS must contain at least one domain");
+  }
+  return {
+    enabled: true,
+    provider,
+    appBaseUrl: httpUrl("APP_BASE_URL").replace(/\/$/, ""),
+    apiBaseUrl: httpUrl("GMAIL_API_BASE_URL").replace(/\/$/, ""),
+    oauthScope: httpUrl("GMAIL_OAUTH_SCOPE"),
+    delegatedSender,
+    fromName: optional("GMAIL_FROM_NAME") ?? "CNPAF Community",
+    serviceAccountEmail,
+    serviceAccountPrivateKey,
+    allowedRecipientDomains,
+  };
+}
+
+function gmailServiceAccountCredentials() {
+  const credentialsFile = optional("GMAIL_SERVICE_ACCOUNT_CREDENTIALS_FILE");
+  const inlineEmail = optional("GMAIL_SERVICE_ACCOUNT_CLIENT_EMAIL");
+  const inlinePrivateKey = optional("GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY");
+
+  if (credentialsFile) {
+    if (inlineEmail || inlinePrivateKey) {
+      throw new Error(
+        "GMAIL_SERVICE_ACCOUNT_CREDENTIALS_FILE cannot be combined with inline Gmail service account credentials",
+      );
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(path.resolve(credentialsFile), "utf8"));
+    } catch {
+      throw new Error("GMAIL_SERVICE_ACCOUNT_CREDENTIALS_FILE must contain readable JSON credentials");
+    }
+    if (!isGmailServiceAccountCredentials(parsed)) {
+      throw new Error("GMAIL_SERVICE_ACCOUNT_CREDENTIALS_FILE is not a valid service account credential file");
+    }
+    return {
+      email: parsed.client_email.toLowerCase(),
+      privateKey: parsed.private_key,
+    };
+  }
+
+  return {
+    email: required("GMAIL_SERVICE_ACCOUNT_CLIENT_EMAIL").toLowerCase(),
+    privateKey: required("GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY").replace(/\\n/g, "\n"),
+  };
+}
+
+function isGmailServiceAccountCredentials(
+  value: unknown,
+): value is { client_email: string; private_key: string } {
+  if (!value || typeof value !== "object") return false;
+  const credentials = value as Record<string, unknown>;
+  return (
+    typeof credentials.client_email === "string" &&
+    credentials.client_email.includes("@") &&
+    typeof credentials.private_key === "string" &&
+    credentials.private_key.startsWith("-----BEGIN ") &&
+    credentials.private_key.trimEnd().endsWith(" KEY-----") &&
+    credentials.private_key.length > 500
+  );
+}
+
+export function getTaskAutomationRuntimeConfig() {
+  return {
+    secret: required("TASK_AUTOMATION_SECRET"),
+    recurrenceLookaheadDays: integer("TASK_RECURRENCE_LOOKAHEAD_DAYS", 7, 0, 90),
   };
 }
 

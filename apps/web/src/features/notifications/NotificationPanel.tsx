@@ -63,6 +63,8 @@ function notificationHref(notification: InAppNotification) {
     return `/records/${notification.entityId}`;
   if (notification.entityType === "task" && notification.entityId)
     return `/tasks/${notification.entityId}`;
+  if (notification.entityType === "user" && notification.entityId)
+    return `/people/${notification.entityId}`;
   return "/dashboard";
 }
 
@@ -75,6 +77,11 @@ function notificationTitle(
     {
       task_assigned: "收到新任务",
       task_reassigned: "任务已重新分配",
+      task_reminder: "任务提醒",
+      group_membership_changed: "人员分组已变更",
+      program_membership_changed: "项目归属已变更",
+      access_changed: "角色或权限已变更",
+      affiliation_changed: "学校或机构归属已变更",
       record_needs_completion: "提交需要补充",
       record_approved: "提交已批准",
     }[notification.kindKey] ?? notification.title

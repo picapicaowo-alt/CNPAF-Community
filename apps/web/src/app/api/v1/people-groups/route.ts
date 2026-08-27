@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { personGroupCreateBodySchema } from "@cnpaf/shared";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { requireAnyPermission, requirePermission } from "@/lib/http";
@@ -6,6 +6,7 @@ import {
   createPersonGroup,
   listPersonGroups,
 } from "@/lib/modules/person-groups";
+import { processNotificationEmailJobs } from "@/lib/jobs";
 
 export async function GET(req: Request) {
   const traceId = requestId(req);
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
       personGroupCreateBodySchema.parse(await req.json()),
       traceId,
     );
+    after(() => processNotificationEmailJobs());
     return NextResponse.json({ group }, { status: 201 });
   } catch (error) {
     return apiErrorResponse(error, traceId);

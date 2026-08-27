@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api-client";
-import type { TaskAssignment, TaskSummary } from "@/lib/task-ui";
+import type { TaskAssignment, TaskRecurrence, TaskSummary } from "@/lib/task-ui";
 
 export type TaskUpdate = Partial<
   Pick<
@@ -42,6 +42,36 @@ export function transitionTaskAssignment(
 ) {
   return apiFetch<{ assignment: TaskAssignment }>(
     `/api/v1/tasks/${taskId}/assignments/${assignmentId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    },
+  );
+}
+
+export function sendTaskNotification(
+  taskId: string,
+  input: { assigneeIds?: string[]; message?: string | null },
+) {
+  return apiFetch<{
+    result: {
+      notificationsCreated: number;
+      emailQueued: number;
+      emailSkipped: number;
+      emailConfigured: boolean;
+    };
+  }>(`/api/v1/tasks/${taskId}/notifications`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateTaskRecurrenceStatus(
+  taskId: string,
+  status: "active" | "paused",
+) {
+  return apiFetch<{ recurrence: TaskRecurrence }>(
+    `/api/v1/tasks/${taskId}/recurrence`,
     {
       method: "PATCH",
       body: JSON.stringify({ status }),

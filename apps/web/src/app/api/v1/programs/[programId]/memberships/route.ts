@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { programMembershipRequestBodySchema } from "@cnpaf/shared";
 import { requirePermission } from "@/lib/http";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { addProgramMembership, addProgramMemberships } from "@/lib/modules/programs";
+import { processNotificationEmailJobs } from "@/lib/jobs";
 
 type Context = { params: Promise<{ programId: string }> };
 
@@ -20,6 +21,7 @@ export async function POST(req: Request, { params }: Context) {
         input,
         traceId,
       );
+      after(() => processNotificationEmailJobs());
       return NextResponse.json({ memberships }, { status: 201 });
     }
     const membership = await addProgramMembership(
@@ -28,6 +30,7 @@ export async function POST(req: Request, { params }: Context) {
       input,
       traceId,
     );
+    after(() => processNotificationEmailJobs());
     return NextResponse.json({ membership }, { status: 201 });
   } catch (error) {
     return apiErrorResponse(error, traceId);

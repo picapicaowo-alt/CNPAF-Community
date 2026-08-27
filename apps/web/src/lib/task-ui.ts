@@ -49,10 +49,24 @@ export type TaskSummary = {
   myAssignment: TaskAssignment | null;
 };
 
+export type TaskRecurrence = {
+  id: string;
+  templateTaskId: string;
+  frequency: "daily" | "weekly" | "monthly";
+  interval: number;
+  timezone: string;
+  status: "active" | "paused" | "ended";
+  nextOccurrenceAt: string;
+  endsAt?: string | null;
+  generatedCount: number;
+  scheduledFor: string;
+};
+
 export type TaskDetailResponse = {
   task: Omit<TaskSummary, "myAssignment" | "assignments">;
   myAssignment: TaskAssignment | null;
   assignments: TaskAssignment[];
+  recurrence: TaskRecurrence | null;
 };
 
 export function taskDate(
@@ -101,4 +115,21 @@ export function taskStatusLabel(status: string, locale: "zh" | "en") {
   return (
     TASK_STATUS_LABELS[status]?.[locale] ?? status.replaceAll("_", " ")
   );
+}
+
+export function taskRecurrenceLabel(
+  recurrence: Pick<TaskRecurrence, "frequency" | "interval">,
+  locale: "zh" | "en",
+) {
+  const units = {
+    daily: { zh: "天", en: "day" },
+    weekly: { zh: "周", en: "week" },
+    monthly: { zh: "个月", en: "month" },
+  }[recurrence.frequency];
+  if (locale === "zh") {
+    return recurrence.interval === 1 ? `每${units.zh}` : `每 ${recurrence.interval} ${units.zh}`;
+  }
+  return recurrence.interval === 1
+    ? `Every ${units.en}`
+    : `Every ${recurrence.interval} ${units.en}s`;
 }

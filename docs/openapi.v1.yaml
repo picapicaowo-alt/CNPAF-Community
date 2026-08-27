@@ -103,6 +103,11 @@ paths:
     post: { tags: [Access], operationId: createPeopleGroup, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
   /people-groups/{id}:
     patch: { tags: [Access], operationId: updatePeopleGroup, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /institutions:
+    get: { tags: [Access], operationId: listInstitutions, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    post: { tags: [Access], operationId: createInstitution, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /institutions/{id}:
+    patch: { tags: [Access], operationId: updateInstitution, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /config/registries/{registryKey}:
     get: { tags: [Configuration], operationId: getRegistry, parameters: [{ $ref: '#/components/parameters/RegistryKey' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /config/registries/{registryKey}/items:
@@ -321,6 +326,12 @@ paths:
     post: { tags: [Tasks], operationId: closeTask, parameters: [{ $ref: '#/components/parameters/TaskId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /tasks/{taskId}/package:
     get: { tags: [Tasks], operationId: getOfflineTaskPackage, parameters: [{ $ref: '#/components/parameters/TaskId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /tasks/{taskId}/notifications:
+    post: { tags: [Tasks], operationId: sendTaskNotification, parameters: [{ $ref: '#/components/parameters/TaskId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /tasks/{taskId}/recurrence:
+    patch: { tags: [Tasks], operationId: updateTaskRecurrenceStatus, parameters: [{ $ref: '#/components/parameters/TaskId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+  /automation/tasks:
+    post: { tags: [Tasks], operationId: materializeRecurringTasks, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '401': { description: Invalid automation bearer token } } }
   /locations:
     get: { tags: [Configuration], operationId: searchLocations, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     post: { tags: [Configuration], operationId: createLocation, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }

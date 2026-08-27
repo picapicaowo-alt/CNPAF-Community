@@ -58,10 +58,16 @@ export default function NewTaskPage() {
   const [priority, setPriority] = useState(0);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [openNow, setOpenNow] = useState(true);
+  const [recurring, setRecurring] = useState(false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<"daily" | "weekly" | "monthly">("weekly");
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  const [recurrenceEndsAt, setRecurrenceEndsAt] = useState("");
+  const [timezone, setTimezone] = useState("UTC");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     setCopyTaskId(new URLSearchParams(window.location.search).get("copy"));
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   }, []);
   useEffect(() => {
     if (copyTaskId === undefined) return;
@@ -196,6 +202,16 @@ export default function NewTaskPage() {
           configuration: {},
           assigneeIds,
           status: openNow ? "open" : "draft",
+          recurrence: recurring
+            ? {
+                frequency: recurrenceFrequency,
+                interval: recurrenceInterval,
+                timezone,
+                endsAt: recurrenceEndsAt
+                  ? new Date(recurrenceEndsAt).toISOString()
+                  : null,
+              }
+            : null,
         }),
       });
       router.replace(`/tasks/${result.task.id}`);
@@ -258,6 +274,67 @@ export default function NewTaskPage() {
                 ? "关闭此选项会保存为草稿，之后可在任务详情中开放。"
                 : "Turn this off to save a draft that can be opened later."}
             </p>
+            <p className="caption">
+              {locale === "zh"
+                ? "发布后会立即发送站内通知；管理员启用 Gmail 后会同时发送邮件。"
+                : "Publishing sends an in-app notification immediately and email when Gmail is enabled."}
+            </p>
+          </section>
+          <section className={`card stack-sm recurrence-card${recurring ? " recurrence-card-active" : ""}`}>
+            <label className="choice">
+              <input
+                checked={recurring}
+                onChange={(event) => setRecurring(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>{locale === "zh" ? "重复任务" : "Recurring task"}</strong>
+                <span className="caption recurrence-choice-copy">
+                  {locale === "zh"
+                    ? "系统会自动建立新一期，每期的进度和提交互不影响。"
+                    : "Each occurrence is a separate task with independent progress and submissions."}
+                </span>
+              </span>
+            </label>
+            {recurring ? (
+              <div className="recurrence-controls">
+                <label>
+                  {locale === "zh" ? "频率" : "Frequency"}
+                  <select
+                    onChange={(event) => setRecurrenceFrequency(event.target.value as typeof recurrenceFrequency)}
+                    value={recurrenceFrequency}
+                  >
+                    <option value="daily">{locale === "zh" ? "每天" : "Daily"}</option>
+                    <option value="weekly">{locale === "zh" ? "每周" : "Weekly"}</option>
+                    <option value="monthly">{locale === "zh" ? "每月" : "Monthly"}</option>
+                  </select>
+                </label>
+                <label>
+                  {locale === "zh" ? "间隔" : "Interval"}
+                  <input
+                    max={52}
+                    min={1}
+                    onChange={(event) => setRecurrenceInterval(Number(event.target.value))}
+                    type="number"
+                    value={recurrenceInterval}
+                  />
+                </label>
+                <label className="field-full">
+                  {locale === "zh" ? "结束时间（可选）" : "Ends (optional)"}
+                  <input
+                    min={dueAt || undefined}
+                    onChange={(event) => setRecurrenceEndsAt(event.target.value)}
+                    type="datetime-local"
+                    value={recurrenceEndsAt}
+                  />
+                </label>
+                <p className="caption field-full">
+                  {locale === "zh"
+                    ? `以截止时间为基准，按 ${timezone} 时区自动重复。`
+                    : `Repeats from the due time in ${timezone}.`}
+                </p>
+              </div>
+            ) : null}
           </section>
           <section className="card task-form-link-card stack-sm">
             <div className="task-form-link-heading">
@@ -414,7 +491,9 @@ export default function NewTaskPage() {
               </select>
             </label>
             <label>
-              {locale === "zh" ? "截止时间（可选）" : "Due date (optional)"}
+              {locale === "zh"
+                ? recurring ? "首次截止时间" : "截止时间（可选）"
+                : recurring ? "First due date" : "Due date (optional)"}
               <input
                 onChange={(event) => setDueAt(event.target.value)}
                 type="datetime-local"
@@ -449,7 +528,8 @@ export default function NewTaskPage() {
                 !templateVersionId ||
                 !taskTypeKey ||
                 !assigneeIds.length ||
-                !title.trim()
+                !title.trim() ||
+                (recurring && !dueAt)
               }
               onClick={create}
               type="button"

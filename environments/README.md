@@ -95,6 +95,11 @@ sudo systemctl enable --now cnpaf-community-db-backup@dev.timer \
   cnpaf-community-db-backup@prod.timer
 ```
 
+Recurring task creation and Gmail notification delivery use a separate
+15-minute timer. Configure the Workspace values documented in
+[`docs/google-workspace-task-notifications.md`](../docs/google-workspace-task-notifications.md),
+then install and enable the task automation units from that runbook.
+
 Dev database backups expire after 14 days and Prod backups after 35 days. S3
 versioning still protects application objects, while noncurrent object versions
 expire after 90 days. Restore into a fresh database first; never overwrite the

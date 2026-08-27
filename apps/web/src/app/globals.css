@@ -3783,32 +3783,43 @@ input[type="radio"] {
   display: grid;
   gap: 10px;
 }
+.people-admin-tool-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
 .people-admin-toggle {
-  overflow: hidden;
+  display: flex;
+  min-width: 0;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 15px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-}
-.people-admin-toggle > summary {
-  display: flex;
-  min-height: 72px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 14px 18px;
   cursor: pointer;
-  list-style: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
-.people-admin-toggle > summary::-webkit-details-marker { display: none; }
-.people-admin-toggle > summary > span:first-child {
+.people-admin-toggle:hover,
+.people-admin-toggle.active {
+  border-color: color-mix(in srgb, var(--blue) 48%, var(--line));
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+}
+.people-admin-toggle > span:first-child {
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
-.people-admin-toggle > summary strong { font-size: 16px; }
-.people-admin-toggle > summary small {
+.people-admin-toggle strong { font-size: 15px; }
+.people-admin-toggle small {
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.4;
 }
 .people-admin-toggle-action {
   display: inline-flex;
@@ -3825,17 +3836,32 @@ input[type="radio"] {
   transform: rotate(90deg);
   transition: transform 150ms ease;
 }
-.people-admin-toggle[open] .people-admin-toggle-action svg { transform: rotate(-90deg); }
-.people-admin-toggle[open] .people-admin-toggle-action { font-size: 0; }
-.people-admin-toggle[open] .people-admin-toggle-action::before {
-  content: "收起";
-  font-size: 12px;
-}
-[lang="en"] .people-admin-toggle[open] .people-admin-toggle-action::before { content: "Collapse"; }
+.people-admin-toggle.active .people-admin-toggle-action svg { transform: rotate(-90deg); }
 .people-admin-toggle-body {
   padding: 20px 18px 22px;
-  border-top: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
+.institution-create-row {
+  display: grid;
+  grid-template-columns: minmax(150px, .34fr) minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+.institution-directory-list { display: grid; gap: 8px; }
+.institution-directory-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.institution-directory-item > span:first-child { display: grid; gap: 2px; }
+.institution-directory-item small { color: var(--muted); }
 .role-permissions-layout {
   display: grid;
   grid-template-columns: minmax(210px, .62fr) minmax(0, 2fr);
@@ -4727,6 +4753,16 @@ input[type="radio"] {
   body {
     font-size: 14px;
   }
+  .people-admin-tool-row,
+  .institution-create-row {
+    grid-template-columns: 1fr;
+  }
+  .institution-directory-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .institution-directory-item .button {
+    grid-column: 1 / -1;
+  }
   h1 {
     font-size: 1.72rem;
   }
@@ -5521,6 +5557,55 @@ input[type="radio"] {
 .task-form-link-flow b {
   color: var(--chart-purple-500);
   font-weight: 500;
+}
+
+.recurrence-card {
+  border-left: 3px solid var(--border);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.recurrence-card-active {
+  border-left-color: #036eb7;
+  background: color-mix(in srgb, #036eb7 4%, var(--surface));
+}
+
+.recurrence-choice-copy {
+  display: block;
+  margin-top: 3px;
+}
+
+.recurrence-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.recurrence-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, #036eb7 20%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, #036eb7 4%, var(--surface));
+}
+
+.recurrence-summary .caption:last-child {
+  display: block;
+  margin-top: 3px;
+}
+
+.notification-compose {
+  border-left: 3px solid #036eb7;
+  background: color-mix(in srgb, #036eb7 4%, var(--surface));
+}
+
+@media (max-width: 720px) {
+  .recurrence-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Records filters stay compact until the next interaction asks for detail. */

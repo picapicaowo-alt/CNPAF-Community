@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { taskUpdateBodySchema } from "@cnpaf/shared";
 import { requirePermission } from "@/lib/http";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { getTask, updateTask } from "@/lib/modules/tasks";
+import { processNotificationEmailJobs } from "@/lib/jobs";
 
 type Context = { params: Promise<{ taskId: string }> };
 
@@ -22,6 +23,7 @@ export async function PATCH(req: Request, { params }: Context) {
     const { user, error } = await requirePermission("tasks.edit");
     if (error || !user) return error;
     const task = await updateTask(user.id, (await params).taskId, taskUpdateBodySchema.parse(await req.json()), traceId);
+    after(() => processNotificationEmailJobs());
     return NextResponse.json({ task });
   } catch (error) {
     return apiErrorResponse(error, traceId);

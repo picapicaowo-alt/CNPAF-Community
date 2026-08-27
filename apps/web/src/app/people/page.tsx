@@ -12,6 +12,7 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { RolePermissionsPanel } from "@/features/access-management/RolePermissionsPanel";
+import { InstitutionsPanel } from "@/features/institutions/components/InstitutionsPanel";
 import { PeopleGroupsPanel } from "@/features/people-groups/components/PeopleGroupsPanel";
 import { primaryDepartment } from "@/features/people-groups/model";
 import { apiFetch, errorMessage } from "@/lib/api-client";
@@ -61,6 +62,9 @@ export default function PeoplePage() {
   const [resetReason, setResetReason] = useState("");
   const [resetting, setResetting] = useState(false);
   const [aiUpdating, setAiUpdating] = useState("");
+  const [activeAdminTool, setActiveAdminTool] = useState<
+    "groups" | "roles" | "institutions" | null
+  >(null);
   const [resetCredential, setResetCredential] = useState<{
     name: string;
     email: string;
@@ -231,8 +235,13 @@ export default function PeoplePage() {
       ) : null}
       {permissions.length && !error ? (
         <div className="people-admin-tools">
-          <details className="people-admin-toggle">
-            <summary>
+          <div className="people-admin-tool-row">
+            <button
+              aria-expanded={activeAdminTool === "groups"}
+              className={`people-admin-toggle${activeAdminTool === "groups" ? " active" : ""}`}
+              onClick={() => setActiveAdminTool((current) => current === "groups" ? null : "groups")}
+              type="button"
+            >
               <span>
                 <strong>
                   {locale === "zh" ? "人员分组" : "People groups"}
@@ -244,23 +253,17 @@ export default function PeoplePage() {
                 </small>
               </span>
               <span className="people-admin-toggle-action">
-                {locale === "zh" ? "展开" : "Expand"}
+                {activeAdminTool === "groups" ? (locale === "zh" ? "收起" : "Collapse") : (locale === "zh" ? "展开" : "Expand")}
                 <AppIcon name="arrow" />
               </span>
-            </summary>
-            <div className="people-admin-toggle-body">
-        <PeopleGroupsPanel
-          canManage={permissions.includes("people.manage_groups")}
-                embedded
-          locale={locale}
-          onChanged={load}
-          people={users}
-        />
-            </div>
-          </details>
+            </button>
           {permissions.includes("roles.view") ? (
-            <details className="people-admin-toggle">
-              <summary>
+              <button
+                aria-expanded={activeAdminTool === "roles"}
+                className={`people-admin-toggle${activeAdminTool === "roles" ? " active" : ""}`}
+                onClick={() => setActiveAdminTool((current) => current === "roles" ? null : "roles")}
+                type="button"
+              >
                 <span>
                   <strong>
                     {locale === "zh" ? "角色与权限" : "Roles & permissions"}
@@ -272,17 +275,55 @@ export default function PeoplePage() {
                   </small>
                 </span>
                 <span className="people-admin-toggle-action">
-                  {locale === "zh" ? "展开" : "Expand"}
+                  {activeAdminTool === "roles" ? (locale === "zh" ? "收起" : "Collapse") : (locale === "zh" ? "展开" : "Expand")}
                   <AppIcon name="arrow" />
                 </span>
-              </summary>
-              <div className="people-admin-toggle-body">
+              </button>
+          ) : null}
+            <button
+              aria-expanded={activeAdminTool === "institutions"}
+              className={`people-admin-toggle${activeAdminTool === "institutions" ? " active" : ""}`}
+              onClick={() => setActiveAdminTool((current) => current === "institutions" ? null : "institutions")}
+              type="button"
+            >
+              <span>
+                <strong>{locale === "zh" ? "学校与机构" : "Schools & institutions"}</strong>
+                <small>
+                  {locale === "zh"
+                    ? "维护人员归属可选的学校与机构统一目录"
+                    : "Maintain the directory used by people affiliations"}
+                </small>
+              </span>
+              <span className="people-admin-toggle-action">
+                {activeAdminTool === "institutions" ? (locale === "zh" ? "收起" : "Collapse") : (locale === "zh" ? "展开" : "Expand")}
+                <AppIcon name="arrow" />
+              </span>
+            </button>
+          </div>
+          {activeAdminTool ? (
+            <div className="people-admin-toggle-body">
+              {activeAdminTool === "groups" ? (
+                <PeopleGroupsPanel
+                  canManage={permissions.includes("people.manage_groups")}
+                  embedded
+                  locale={locale}
+                  onChanged={load}
+                  people={users}
+                />
+              ) : null}
+              {activeAdminTool === "roles" ? (
                 <RolePermissionsPanel
                   canManage={permissions.includes("roles.manage")}
                   locale={locale}
                 />
-              </div>
-            </details>
+              ) : null}
+              {activeAdminTool === "institutions" ? (
+                <InstitutionsPanel
+                  canManage={permissions.includes("people.edit_affiliation")}
+                  locale={locale}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

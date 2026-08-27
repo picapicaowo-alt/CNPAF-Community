@@ -77,6 +77,8 @@ Normalized scope response:
 | DELETE | `/admin/users/:id/affiliations/:affiliationId` | `people.edit_affiliation` | — |
 | GET/POST | `/people-groups` | `people.view` / `people.manage_groups` | `personGroupCreateBodySchema` on POST; creates the group and selected members atomically |
 | PATCH | `/people-groups/:id` | `people.manage_groups` | `personGroupUpdateBodySchema`; updates group details and, when supplied, replaces `userIds` atomically |
+| GET/POST | `/institutions` | `people.view` / `people.edit_affiliation` | `institutionCreateBodySchema` on POST; organization-scoped school and institution directory |
+| PATCH | `/institutions/:id` | `people.edit_affiliation` | `institutionUpdateBodySchema`; rename, change type, archive, or restore |
 | GET/POST | `/admin/roles` | `roles.view` / `roles.manage` | `roleCreateBodySchema` on POST |
 | PATCH | `/admin/roles/:id` | `roles.manage` | `roleUpdateBodySchema` |
 | GET | `/admin/permissions` | `roles.view` | — |

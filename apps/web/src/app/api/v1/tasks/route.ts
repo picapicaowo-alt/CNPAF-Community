@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { taskCreateBodySchema } from "@cnpaf/shared";
 import { requirePermission } from "@/lib/http";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { createTask, listTasks } from "@/lib/modules/tasks";
+import { processNotificationEmailJobs } from "@/lib/jobs";
 
 export async function GET() {
   const { user, error } = await requirePermission("tasks.view");
@@ -16,6 +17,7 @@ export async function POST(req: Request) {
     const { user, error } = await requirePermission("tasks.create");
     if (error || !user) return error;
     const task = await createTask(user.id, taskCreateBodySchema.parse(await req.json()), traceId);
+    after(() => processNotificationEmailJobs());
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
     return apiErrorResponse(error, traceId);

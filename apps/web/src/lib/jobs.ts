@@ -4,6 +4,7 @@ import { db } from "./db";
 import { runAnalysisJob } from "./ai";
 import { runReportJob } from "./reports";
 import { runExportJob } from "./exports";
+import { runNotificationEmailDelivery } from "./modules/notification-delivery";
 
 const MAX_ATTEMPTS = 3;
 
@@ -26,13 +27,20 @@ export async function enqueueJob(kind: string, payload: Record<string, unknown>,
   return created ?? (await db.select().from(jobs).where(eq(jobs.idempotencyKey, idempotencyKey)).limit(1))[0];
 }
 
-export async function processJobs(limit = 5): Promise<{ processed: number; errors: string[] }> {
+export async function processJobs(
+  limit = 5,
+  kinds?: readonly string[],
+): Promise<{ processed: number; errors: string[] }> {
   const workerId = `web:${process.pid}:${crypto.randomUUID()}`;
   const due = await db.transaction(async (tx) => {
     const claimed = await tx
       .select()
       .from(jobs)
-      .where(and(eq(jobs.status, "queued"), lte(jobs.runAfter, new Date())))
+      .where(and(
+        eq(jobs.status, "queued"),
+        lte(jobs.runAfter, new Date()),
+        kinds?.length ? inArray(jobs.kind, [...kinds]) : undefined,
+      ))
       .orderBy(asc(jobs.runAfter))
       .limit(limit)
       .for("update", { skipLocked: true });
@@ -58,6 +66,12 @@ export async function processJobs(limit = 5): Promise<{ processed: number; error
         const payload = (job.payload ?? {}) as { exportJobId?: string };
         if (!payload.exportJobId) throw new Error("exportJobId missing from job payload");
         await runExportJob(payload.exportJobId);
+      } else if (job.kind === "send_notification_email") {
+        const payload = (job.payload ?? {}) as { deliveryId?: string };
+        if (!payload.deliveryId) throw new Error("deliveryId missing from job payload");
+        await runNotificationEmailDelivery(payload.deliveryId);
+      } else {
+        throw new Error(`Unsupported job kind: ${job.kind}`);
       }
       await db
         .update(jobs)
@@ -90,6 +104,10 @@ export async function processJobs(limit = 5): Promise<{ processed: number; error
   }
 
   return { processed, errors };
+}
+
+export function processNotificationEmailJobs(limit = 20) {
+  return processJobs(limit, ["send_notification_email"]);
 }
 
 export async function retryJob(jobId: string) {

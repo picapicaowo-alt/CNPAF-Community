@@ -1,0 +1,12 @@
+[Unit]
+Description=Run CNPAF Community %i task automation every 15 minutes
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=15m
+RandomizedDelaySec=1m
+Persistent=true
+Unit=cnpaf-community-task-automation@%i.service
+
+[Install]
+WantedBy=timers.target

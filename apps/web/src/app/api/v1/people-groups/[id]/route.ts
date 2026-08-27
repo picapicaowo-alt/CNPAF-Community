@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { personGroupUpdateBodySchema } from "@cnpaf/shared";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { requirePermission } from "@/lib/http";
 import { updatePersonGroup } from "@/lib/modules/person-groups";
+import { processNotificationEmailJobs } from "@/lib/jobs";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -17,6 +18,7 @@ export async function PATCH(req: Request, { params }: Context) {
       personGroupUpdateBodySchema.parse(await req.json()),
       traceId,
     );
+    after(() => processNotificationEmailJobs());
     return NextResponse.json({ group });
   } catch (error) {
     return apiErrorResponse(error, traceId);

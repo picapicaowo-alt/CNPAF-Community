@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { taskBulkActionBodySchema } from "@cnpaf/shared";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { requireUser } from "@/lib/http";
 import { bulkMutateTasks } from "@/lib/modules/tasks";
+import { processNotificationEmailJobs } from "@/lib/jobs";
 
 export async function POST(req: Request) {
   const traceId = requestId(req);
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
       taskBulkActionBodySchema.parse(await req.json()),
       traceId,
     );
+    after(() => processNotificationEmailJobs());
     return NextResponse.json({ result });
   } catch (error) {
     return apiErrorResponse(error, traceId);

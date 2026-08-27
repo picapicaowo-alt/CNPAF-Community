@@ -1,0 +1,12 @@
+[Unit]
+Description=CNPAF Community %i recurring tasks and notification delivery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/usr/local/sbin/cnpaf-community-task-automation %i
+
+[Install]
+WantedBy=multi-user.target
