@@ -12,6 +12,12 @@ const password = process.env.SEED_PASSWORD;
 if (!password) {
   throw new Error("SEED_PASSWORD is required for the local full-chain test");
 }
+const expectedAiProvider = process.env.E2E_EXPECTED_AI_PROVIDER ?? "local_heuristic";
+const expectedAiModel = process.env.E2E_EXPECTED_AI_MODEL ?? "local-v1";
+const aiTimeoutMs = Number(process.env.E2E_AI_TIMEOUT_MS ?? 60_000);
+if (!Number.isFinite(aiTimeoutMs) || aiTimeoutMs < 10_000 || aiTimeoutMs > 600_000) {
+  throw new Error("E2E_AI_TIMEOUT_MS must be between 10000 and 600000 milliseconds");
+}
 
 const roleAccounts = [
   { email: "admin@cnpaf.local", role: "admin" },
@@ -21,7 +27,7 @@ const roleAccounts = [
   { email: "volunteer@cnpaf.local", role: "volunteer" },
 ];
 
-const studentAccounts = [
+const defaultStudentAccounts = [
   {
     email: "usc.gerontology.alex@cnpaf.local",
     department: "USC Leonard Davis School of Gerontology",
@@ -51,6 +57,39 @@ const studentAccounts = [
     department: "USC Dornsife College of Letters, Arts and Sciences",
   },
 ];
+
+function configuredVolunteerAccounts() {
+  const configured = process.env.E2E_VOLUNTEERS_JSON;
+  if (!configured) return defaultStudentAccounts;
+
+  let accounts;
+  try {
+    accounts = JSON.parse(configured);
+  } catch {
+    throw new Error("E2E_VOLUNTEERS_JSON must be valid JSON");
+  }
+  if (
+    !Array.isArray(accounts) ||
+    accounts.length === 0 ||
+    accounts.some(
+      (account) =>
+        !account ||
+        typeof account.email !== "string" ||
+        !account.email.endsWith("@cnpaf.local") ||
+        (account.department !== undefined && typeof account.department !== "string"),
+    )
+  ) {
+    throw new Error(
+      "E2E_VOLUNTEERS_JSON must be a non-empty array of @cnpaf.local accounts with optional department values",
+    );
+  }
+  return accounts.map((account) => ({
+    email: account.email.toLowerCase(),
+    department: account.department,
+  }));
+}
+
+const studentAccounts = configuredVolunteerAccounts();
 
 class ApiSession {
   constructor(email, cookie) {
@@ -172,15 +211,17 @@ for (const account of [...roleAccounts, ...studentAccounts]) {
 }
 for (const student of studentAccounts) {
   const user = peopleByEmail.get(student.email);
-  assert.ok(
-    user.affiliations.some(
-      (affiliation) =>
-        affiliation.status === "active" &&
-        affiliation.institutionName === "University of Southern California" &&
-        affiliation.departmentName === student.department,
-    ),
-    `Missing USC department affiliation for ${student.email}`,
-  );
+  if (student.department) {
+    assert.ok(
+      user.affiliations.some(
+        (affiliation) =>
+          affiliation.status === "active" &&
+          affiliation.institutionName === "University of Southern California" &&
+          affiliation.departmentName === student.department,
+      ),
+      `Missing USC department affiliation for ${student.email}`,
+    );
+  }
 }
 
 const locationInputs = [
@@ -339,20 +380,15 @@ await admin.request(`/api/v1/programs/${program.id}/memberships`, {
   body: { userIds: studentIds, membershipRoleKey: "member" },
 });
 
-const taskPlans = [
-  {
-    location: locations[1],
-    students: [studentAccounts[0], studentAccounts[2], studentAccounts[4]],
-  },
-  {
-    location: locations[2],
-    students: [studentAccounts[1], studentAccounts[3]],
-  },
-  {
-    location: locations[3],
-    students: [studentAccounts[5], studentAccounts[6]],
-  },
-];
+const taskPlans = locations
+  .slice(1)
+  .map((location, locationIndex) => ({
+    location,
+    students: studentAccounts.filter(
+      (_student, studentIndex) => studentIndex % (locations.length - 1) === locationIndex,
+    ),
+  }))
+  .filter((plan) => plan.students.length > 0);
 const now = Date.now();
 const tasks = [];
 for (const [index, plan] of taskPlans.entries()) {
@@ -445,7 +481,8 @@ assert.equal(submissions.length, studentAccounts.length);
 
 const ops = await ApiSession.login("ops@cnpaf.local");
 let runRows = [];
-for (let attempt = 0; attempt < 40; attempt += 1) {
+const aiDeadline = Date.now() + aiTimeoutMs;
+while (Date.now() < aiDeadline) {
   await admin.request("/api/v1/jobs", { method: "POST" });
   const result = await ops.request("/api/v1/ai/runs");
   const versionIds = new Set(submissions.map((submission) => submission.version.id));
@@ -458,17 +495,17 @@ for (let attempt = 0; attempt < 40; attempt += 1) {
   ) {
     break;
   }
-  await delay(250);
+  await delay(1_000);
 }
 assert.equal(runRows.length, submissions.length, "Every submission needs an AI run");
 assert.ok(
   runRows.every(
     (row) =>
       row.run.status === "succeeded" &&
-      row.run.provider === "local_heuristic" &&
-      row.run.model === "local-v1",
+      row.run.provider === expectedAiProvider &&
+      row.run.model === expectedAiModel,
   ),
-  "Every AI run should succeed with the deterministic local provider",
+  `Every AI run should succeed with ${expectedAiProvider}/${expectedAiModel}`,
 );
 
 const runByVersion = new Map(
@@ -533,9 +570,10 @@ const workflows = await admin.request("/api/v1/ai/workflows");
 assert.ok(
   providers.providers.some(
     (entry) =>
-      entry.provider.key === "local_heuristic" &&
-      entry.models.some((model) => model.key === "local-v1"),
+      entry.provider.key === expectedAiProvider &&
+      entry.models.some((model) => model.key === expectedAiModel),
   ),
+  `Expected AI provider/model ${expectedAiProvider}/${expectedAiModel} is not configured`,
 );
 assert.ok(
   providers.providers.some((entry) => entry.provider.key === "openai"),
@@ -579,7 +617,8 @@ console.log(
       },
       ai: {
         providers: providers.providers.map((entry) => entry.provider.key),
-        recordClassificationProvider: "local_heuristic",
+        recordClassificationProvider: expectedAiProvider,
+        recordClassificationModel: expectedAiModel,
         openAiInterfaceReserved: true,
       },
     },

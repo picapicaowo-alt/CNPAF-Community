@@ -10,11 +10,16 @@
 }
 
 /* 2026 evidence-workspace alignment contract.
-   One 16/14/12 type ladder and a 24/16/12 spacing rhythm keep every workflow
+   A semantic type ladder and a 24/16/12 spacing rhythm keep every workflow
    legible without erasing the denser reviewer and administrator surfaces. */
 :root {
-  --type-body: 15px;
+  --type-heading: 20px;
+  --type-section: 18px;
+  --type-heading-sm: 17px;
+  --type-body: 16px;
+  --type-lead: 15px;
   --type-ui: 14px;
+  --type-caption: 13px;
   --type-meta: 12px;
   --space-panel: 24px;
   --space-flow: 16px;
@@ -48,7 +53,10 @@ body {
   font-size: var(--type-ui);
 }
 
-.caption,
+.caption {
+  font-size: var(--type-caption);
+}
+
 .eyebrow,
 .status-pill,
 .data-table th,
@@ -98,7 +106,7 @@ body {
 .record-reference {
   color: var(--blue-dark);
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-variant-numeric: tabular-nums;
 }
 
@@ -112,14 +120,14 @@ body {
 }
 
 .insight-ai-heading h2 {
-  font-size: 18px;
+  font-size: var(--type-section);
   line-height: 1.35;
 }
 
 .insight-ai-heading p {
   max-width: 82ch;
   margin-top: 3px;
-  font-size: 13px;
+  font-size: var(--type-caption);
   line-height: 1.55;
 }
 
@@ -160,13 +168,13 @@ body {
 
 .ai-copilot-generate strong {
   display: block;
-  font-size: 15px;
+  font-size: var(--type-lead);
 }
 
 .ai-copilot-generate p {
   margin: 3px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .insight-ai-prompts {
@@ -176,7 +184,7 @@ body {
 .insight-ai-prompts button {
   min-height: 82px;
   padding: 14px;
-  font-size: 14px;
+  font-size: var(--type-ui);
   line-height: 1.5;
 }
 
@@ -205,13 +213,13 @@ body {
 
 .ai-copilot-thinking strong {
   color: var(--ink);
-  font-size: 17px;
+  font-size: var(--type-heading-sm);
 }
 
 .ai-copilot-thinking p {
   margin: 0 0 14px;
   color: var(--blue-dark);
-  font-size: 14px;
+  font-size: var(--type-ui);
 }
 
 .ai-copilot-thinking ol {
@@ -227,7 +235,7 @@ body {
   align-items: center;
   gap: 9px;
   color: #7a8b93;
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .ai-copilot-thinking li > span {
@@ -239,7 +247,7 @@ body {
   border-radius: 50%;
   background: white;
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: var(--type-meta);
 }
 
 .ai-copilot-thinking li.is-active {
@@ -268,7 +276,7 @@ body {
   border-radius: 10px;
   background: var(--surface-blue);
   color: var(--blue-dark);
-  font-size: 13px;
+  font-size: var(--type-caption);
   font-weight: 650;
 }
 
@@ -296,12 +304,12 @@ body {
 .ai-prompt-composer > .ai-rich-input {
   min-height: 96px;
   padding: 16px 18px 12px;
-  font-size: 15px;
+  font-size: var(--type-lead);
   line-height: 1.6;
 }
 
 .dataset-chat-message {
-  font-size: 15px;
+  font-size: var(--type-lead);
   line-height: 1.7;
 }
 
@@ -345,14 +353,14 @@ body {
 
 .record-revision-sections legend {
   padding: 0 7px;
-  font-size: 14px;
+  font-size: var(--type-ui);
   font-weight: 750;
 }
 
 .record-revision-sections label {
   display: grid;
   gap: 7px;
-  font-size: 13px;
+  font-size: var(--type-caption);
   font-weight: 680;
 }
 
@@ -392,7 +400,7 @@ body {
 .record-archive-confirm p {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .record-review-history ol {
@@ -422,9 +430,9 @@ body {
 }
 
 .record-review-marker svg { width: 14px; }
-.record-review-history strong { font-size: 13px; }
+.record-review-history strong { font-size: var(--type-caption); }
 .record-review-history p,
-.record-review-history small { display: block; margin: 1px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.record-review-history small { display: block; margin: 1px 0 0; color: var(--muted); font-size: var(--type-meta); line-height: 1.5; }
 
 @keyframes ai-evidence-pulse {
   50% { box-shadow: 0 0 0 9px rgba(3, 110, 183, 0.08); transform: rotate(8deg); }
@@ -604,7 +612,7 @@ select {
 
 .brand-name {
   color: #f7fafb;
-  font-size: 14px;
+  font-size: var(--type-ui);
   font-weight: 680;
   letter-spacing: -0.018em;
 }
@@ -612,7 +620,7 @@ select {
 .brand-role {
   margin-top: 3px;
   color: #ffead8;
-  font-size: 10px;
+  font-size: var(--type-meta);
   font-weight: 570;
   letter-spacing: 0.025em;
 }
@@ -627,7 +635,7 @@ select {
   padding: 0 13px;
   border-radius: var(--radius-sm);
   color: #e5f1f7;
-  font-size: 13px;
+  font-size: var(--type-caption);
   font-weight: 550;
   transition:
     background-color 160ms ease,
@@ -733,7 +741,7 @@ select {
   max-width: 68ch;
   margin: 0;
   color: var(--muted-strong);
-  font-size: 14px;
+  font-size: var(--type-ui);
   line-height: 1.65;
 }
 
@@ -797,7 +805,7 @@ select {
   background: var(--blue);
   box-shadow: 0 6px 14px rgba(8, 94, 150, 0.14);
   color: #ffffff;
-  font-size: 13px;
+  font-size: var(--type-caption);
   font-weight: 680;
   line-height: 1;
   white-space: nowrap;
@@ -857,7 +865,7 @@ select {
 .button-small {
   min-height: 34px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .button:disabled,
@@ -883,7 +891,7 @@ select {
   border-radius: 9px;
   background: #ffffff;
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--type-ui);
   line-height: 1.45;
   transition:
     border-color 150ms ease,
@@ -922,7 +930,7 @@ select:focus {
 
 .eyebrow {
   color: var(--muted-strong);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 650;
   letter-spacing: 0;
   text-transform: none;
@@ -931,7 +939,7 @@ select:focus {
 .status-pill {
   min-height: 24px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 690;
   letter-spacing: 0;
 }
@@ -1007,7 +1015,7 @@ select:focus {
 .field-selection-help {
   justify-content: flex-start;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--type-caption);
   line-height: 1.5;
   text-align: left;
 }
@@ -1077,7 +1085,7 @@ select:focus {
 .insight-register-rank {
   color: #50666f;
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 720;
   letter-spacing: 0.08em;
 }
@@ -1107,14 +1115,14 @@ select:focus {
 .attention-copy strong,
 .insight-register-copy strong {
   color: var(--ink);
-  font-size: 14px;
+  font-size: var(--type-ui);
 }
 
 .attention-copy span,
 .insight-register-copy span,
 .insight-register-value span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .attention-count {
@@ -1131,7 +1139,7 @@ select:focus {
   justify-content: flex-end;
   gap: 8px;
   color: var(--blue-dark);
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 690;
 }
 
@@ -1231,7 +1239,7 @@ time {
   border-bottom: 1px solid var(--line);
   background: var(--surface-soft);
   color: var(--muted-strong);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 700;
 }
 
@@ -1259,7 +1267,7 @@ time {
 .data-table {
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .data-table th {
@@ -1269,7 +1277,7 @@ time {
   border-bottom: 1px solid var(--line-strong);
   background: #eaf0f2;
   color: #3d5661;
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 720;
   letter-spacing: 0.015em;
   text-transform: none;
@@ -1335,7 +1343,7 @@ time {
 
 .dashboard-slogan .brand-slogan-zh {
   color: #ffe2c9;
-  font-size: 0.82rem;
+  font-size: var(--type-caption);
   font-weight: 650;
 }
 
@@ -1538,7 +1546,7 @@ time {
 .insight-viz-canvas .recharts-legend-item-text {
   fill: var(--muted-strong);
   font-family: var(--font);
-  font-size: 11px;
+  font-size: var(--type-meta);
 }
 
 .insight-series-controls label,
@@ -1600,7 +1608,7 @@ time {
 .auth-brand-panel p {
   max-width: 58ch;
   color: #d9e9f1;
-  font-size: 15px;
+  font-size: var(--type-lead);
   line-height: 1.75;
 }
 
@@ -1611,7 +1619,7 @@ time {
 
 .auth-product-name {
   color: var(--navy-deep);
-  font-size: 13px;
+  font-size: var(--type-caption);
   font-weight: 720;
 }
 
@@ -1689,7 +1697,7 @@ time {
 .install-prompt-copy strong {
   display: block;
   margin-top: 3px;
-  font-size: 15px;
+  font-size: var(--type-lead);
 }
 
 .install-platform {
@@ -1700,7 +1708,7 @@ time {
   border-radius: var(--radius-status, 6px);
   background: var(--surface-blue);
   color: var(--blue-dark);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 720;
 }
 
@@ -1708,7 +1716,7 @@ time {
 .install-instructions p {
   margin: 4px 0 0;
   color: var(--muted-strong);
-  font-size: 11px;
+  font-size: var(--type-meta);
   line-height: 1.55;
 }
 
@@ -1793,14 +1801,14 @@ time {
   border-radius: var(--radius-status, 6px);
   color: var(--blue-dark);
   font-family: var(--font-data);
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 750;
 }
 
 .install-instructions li p {
   margin: 0;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--type-caption);
   line-height: 1.5;
 }
 
@@ -1858,7 +1866,7 @@ time {
 .insight-real-source-filter legend {
   margin-bottom: 7px;
   color: var(--muted-strong);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 650;
 }
 
@@ -1872,7 +1880,7 @@ time {
   border-radius: 8px;
   background: var(--surface);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 600;
 }
 
@@ -1979,7 +1987,7 @@ time {
   justify-self: end;
   width: 300px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-meta);
 }
 
 .insight-detail-page .insight-record-list > a {
@@ -2116,7 +2124,7 @@ time {
   .configuration-data-table td::before {
     color: var(--muted);
     content: attr(data-label);
-    font-size: 12px;
+    font-size: var(--type-meta);
     font-weight: 650;
   }
 
@@ -2207,12 +2215,12 @@ time {
 
   .mobile-brand-copy strong {
     color: var(--navy-deep);
-    font-size: 13px;
+    font-size: var(--type-caption);
   }
 
   .mobile-brand-copy span {
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--type-meta);
   }
 
   .mobile-user .status-pill {
@@ -2249,7 +2257,7 @@ time {
     gap: 3px;
     border-radius: 8px;
     color: var(--muted-strong);
-    font-size: 10px;
+    font-size: var(--type-meta);
     font-weight: 590;
   }
 
@@ -2297,7 +2305,7 @@ time {
   }
 
   .page-header p {
-    font-size: 13px;
+    font-size: var(--type-caption);
   }
 
   .page-actions {
@@ -2430,7 +2438,7 @@ time {
   .work-surface-field select,
   .work-surface-field .button {
     min-height: 48px;
-    font-size: 16px;
+    font-size: var(--type-body);
   }
 
   .work-surface-field .choice {
@@ -2482,7 +2490,7 @@ time {
   }
 
   .auth-brand-panel p {
-    font-size: 13px;
+    font-size: var(--type-caption);
     line-height: 1.65;
   }
 
@@ -2658,7 +2666,7 @@ time {
 .role-home-stat > span {
   grid-column: 1 / -1;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 680;
 }
 
@@ -2731,7 +2739,7 @@ time {
 .more-group-heading p {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .more-link-list {
@@ -2855,7 +2863,7 @@ time {
 
 .ai-model-current h2 {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 650;
 }
 
@@ -2982,7 +2990,7 @@ time {
   border-radius: 6px;
   background: var(--surface-soft);
   color: var(--muted-strong);
-  font-size: 11px;
+  font-size: var(--type-meta);
   font-weight: 650;
 }
 
@@ -3004,7 +3012,7 @@ time {
   padding-top: 10px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-meta);
 }
 
 .ai-model-tradeoffs span {
@@ -3100,7 +3108,7 @@ time {
   grid-area: step;
   color: var(--blue-dark);
   font-family: var(--font-data);
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 780;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3166,7 +3174,7 @@ time {
 
 .data-health-panel h2,
 .data-health-panel p { margin-bottom: 4px; }
-.data-health-panel p { color: var(--muted); font-size: 13px; }
+.data-health-panel p { color: var(--muted); font-size: var(--type-caption); }
 .data-health-panel dl {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3180,7 +3188,7 @@ time {
   border-left: 1px solid var(--line);
 }
 .data-health-panel dt,
-.data-health-panel small { color: var(--muted); font-size: 11px; }
+.data-health-panel small { color: var(--muted); font-size: var(--type-meta); }
 .data-health-panel dd {
   margin: 2px 0 0;
   color: var(--navy-deep);
@@ -3196,42 +3204,42 @@ time {
 
 /* Readable type scale: preserve dashboard density without sub-12px body copy. */
 body {
-  font-size: 16px;
+  font-size: var(--type-body);
   line-height: 1.6;
 }
 
 h2 {
-  font-size: 1.25rem;
+  font-size: var(--type-heading);
 }
 
 h3 {
-  font-size: 1.08rem;
+  font-size: var(--type-heading-sm);
 }
 
 .page-header p {
-  font-size: 15px;
+  font-size: var(--type-lead);
 }
 
 .button,
 .btn {
-  font-size: 14px;
+  font-size: var(--type-ui);
 }
 
 .button-small {
-  font-size: 13px;
+  font-size: var(--type-ui);
 }
 
 .muted {
-  font-size: 14px;
+  font-size: var(--type-ui);
 }
 
 .caption {
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .eyebrow,
 .status-pill {
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .status-pill {
@@ -3239,15 +3247,15 @@ h3 {
 }
 
 .list-panel-title {
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .data-table {
-  font-size: 14px;
+  font-size: var(--type-ui);
 }
 
 .data-table th {
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .dataset-ai-welcome > p,
@@ -3255,16 +3263,16 @@ h3 {
 .dataset-chat-sources summary,
 .dataset-chat-sources p,
 .dataset-ai-thinking {
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .dataset-chat-message {
-  font-size: 15px;
+  font-size: var(--type-lead);
   line-height: 1.65;
 }
 
 .insight-kpi-strip span {
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .insight-kpi-strip strong {
@@ -3273,19 +3281,19 @@ h3 {
 
 .insight-real-source-filter legend,
 .insight-series-controls legend {
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .insight-real-source-filter label {
-  font-size: 14px;
+  font-size: var(--type-ui);
 }
 
 .insight-viz-card > header h2 {
-  font-size: 17px;
+  font-size: var(--type-heading-sm);
 }
 
 .insight-viz-card > header p {
-  font-size: 12px;
+  font-size: var(--type-meta);
   line-height: 1.55;
 }
 
@@ -3293,31 +3301,31 @@ h3 {
 .insight-series-controls button,
 .insight-chart-actions button,
 .ai-copilot-suggestions button {
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .insight-viz-canvas .recharts-text,
 .insight-viz-canvas .recharts-legend-item-text {
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .insight-donut-legend li {
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .insight-records-heading p,
 .insight-record-list small,
 .insight-record-list time {
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .insight-record-id strong {
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .insight-record-status .status-pill,
 .insight-record-use strong {
-  font-size: 11px;
+  font-size: var(--type-meta);
 }
 
 /* Editorial evidence graphics: direct labels, quiet rules, exact units. */
@@ -3343,7 +3351,7 @@ h3 {
 .insight-viz-card > header p {
   max-width: 68ch;
   margin-top: 5px;
-  font-size: 13px;
+  font-size: var(--type-caption);
 }
 
 .insight-viz-canvas {
@@ -3355,7 +3363,7 @@ h3 {
 .insight-viz-source {
   padding-top: 13px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-meta);
   font-weight: 720;
   letter-spacing: 0.1em;
 }
@@ -3383,7 +3391,7 @@ h3 {
 .insight-hairline-period {
   fill: var(--muted);
   font-family: var(--font);
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 620;
 }
 
@@ -3415,14 +3423,14 @@ h3 {
 .insight-hairline-end-label text {
   fill: var(--series-color);
   font-family: var(--font);
-  font-size: 12px;
+  font-size: var(--type-meta);
   font-weight: 700;
   dominant-baseline: middle;
 }
 
 .insight-hairline-end-label .insight-hairline-value {
   font-family: var(--font-data);
-  font-size: 15px;
+  font-size: var(--type-lead);
   font-weight: 760;
   text-anchor: end;
 }
@@ -3449,7 +3457,7 @@ h3 {
 .insight-tick-axis > span {
   grid-column: 2;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-meta);
   font-weight: 700;
   letter-spacing: 0.05em;
 }
@@ -3471,7 +3479,7 @@ h3 {
 .insight-tick-row > strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--type-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3479,7 +3487,7 @@ h3 {
 .insight-tick-row > b {
   color: var(--ink);
   font-family: var(--font-data);
-  font-size: 16px;
+  font-size: var(--type-body);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -3538,7 +3546,7 @@ h3 {
 .insight-tick-chart > p {
   margin: 0 70px 0 auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-meta);
 }
 
 @keyframes insight-tick-rise {
@@ -3642,15 +3650,15 @@ h3 {
 
 @media (min-width: 900px) {
   .brand-name {
-    font-size: 15px;
+    font-size: var(--type-lead);
   }
 
   .brand-role {
-    font-size: 11px;
+    font-size: var(--type-meta);
   }
 
   .side-nav-link {
-    font-size: 15px;
+    font-size: var(--type-lead);
   }
 }
 
@@ -3667,16 +3675,16 @@ h3 {
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: var(--type-body);
   }
 
   .page-header p {
-    font-size: 14px;
+    font-size: var(--type-ui);
   }
 
   .bottom-nav-link {
     overflow: hidden;
-    font-size: 12px;
+    font-size: var(--type-meta);
   }
 
   .bottom-nav-link > span {
@@ -3865,7 +3873,7 @@ h3 {
   }
 
   .insight-conversation-field input::placeholder {
-    font-size: 14px;
+    font-size: var(--type-ui);
   }
 
   .forms-manage-page .form-quick-add-items {
@@ -3885,7 +3893,7 @@ h3 {
   }
 
   .bottom-nav-link {
-    font-size: 10.5px;
+    font-size: var(--type-meta);
   }
 
   .insight-conversation-entry > .button {
@@ -4133,7 +4141,7 @@ h3 {
   .people-data-table td::before {
     color: var(--muted-strong);
     content: attr(data-label);
-    font-size: 11px;
+    font-size: var(--type-meta);
     font-weight: 720;
     line-height: 1.3;
   }
@@ -4224,30 +4232,33 @@ h3 {
 /* Final cascade checkpoint for the shared evidence workspace. */
 .page-header { min-height: 76px; margin-bottom: 24px; }
 .page-header h1 { font-size: clamp(2rem, 2.5vw, 2.65rem); }
-.page-header p { font-size: 15px; }
+.page-header p { font-size: var(--type-lead); }
 .card { padding: var(--space-panel); }
-.data-table { font-size: 14px; }
-.data-table th { font-size: 12px; }
+.data-table { font-size: var(--type-ui); }
+.data-table th { font-size: var(--type-meta); }
 .definition-row dt,
-.definition-row dd { font-size: 12px; }
+.definition-row dd { font-size: var(--type-meta); }
 .insight-ai-panel { gap: 0; }
 .insight-ai-heading { align-items: flex-start; padding: 20px 24px; }
-.insight-ai-heading h2 { font-size: 18px; line-height: 1.35; }
-.insight-ai-heading p { max-width: 82ch; margin-top: 3px; font-size: 13px; line-height: 1.55; }
+.insight-ai-heading h2 { font-size: var(--type-section); line-height: 1.35; }
+.insight-ai-heading p { max-width: 82ch; margin-top: 3px; font-size: var(--type-caption); line-height: 1.55; }
 .insight-ai-body { min-height: 210px; max-height: 620px; padding: 24px; }
 .insight-ai-prompts { gap: 12px; }
-.insight-ai-prompts button { min-height: 82px; padding: 14px; font-size: 14px; line-height: 1.5; }
+.insight-ai-prompts button { min-height: 82px; padding: 14px; font-size: var(--type-ui); line-height: 1.5; }
 .ai-copilot-thinking { min-height: 230px; align-items: flex-start; justify-content: flex-start; gap: 18px; padding: 28px; }
 .insight-ai-compose { padding: 16px 18px 18px; }
 .ai-prompt-composer > textarea,
-.ai-prompt-composer > .ai-rich-input { min-height: 96px; padding: 16px 18px 12px; font-size: 15px; line-height: 1.6; }
-.dataset-chat-message { font-size: 15px; line-height: 1.7; }
-.records-data-table .table-link { font-size: 14px; line-height: 1.45; }
+.ai-prompt-composer > .ai-rich-input { min-height: 96px; padding: 16px 18px 12px; font-size: var(--type-lead); line-height: 1.6; }
+.dataset-chat-message { font-size: var(--type-lead); line-height: 1.7; }
+.records-data-table .table-link { font-size: var(--type-ui); line-height: 1.45; }
 
 @media (max-width: 899px) {
   .card { padding: 18px; }
   .page-header h1 { font-size: clamp(1.75rem, 8vw, 2.1rem); }
-  .page-header p { font-size: 14px; }
+  .page-header p { font-size: var(--type-ui); }
+  input,
+  textarea,
+  select { font-size: var(--type-body); }
   .insight-ai-body { padding: 16px; }
   .ai-copilot-thinking { padding: 20px 16px; }
 }
@@ -4350,13 +4361,13 @@ h3 {
 .person-avatar-small {
   width: 40px;
   height: 40px;
-  font-size: 12px;
+  font-size: var(--type-meta);
 }
 
 .person-avatar-large {
   width: 80px;
   height: 80px;
-  font-size: 20px;
+  font-size: var(--type-heading);
 }
 
 .person-avatar-image {
@@ -4437,7 +4448,7 @@ h3 {
   .person-avatar-large {
     width: 64px;
     height: 64px;
-    font-size: 17px;
+    font-size: var(--type-heading-sm);
   }
 
   .avatar-lightbox {
