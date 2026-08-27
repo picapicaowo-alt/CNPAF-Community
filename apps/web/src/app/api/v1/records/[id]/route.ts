@@ -34,7 +34,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     : [];
   const [creator, site, program, formVersion, approvals] = await Promise.all([
     db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.id, bundle.record.createdById)).limit(1).then((rows) => rows[0] ?? null),
-    bundle.record.siteId ? db.select({ id: sites.id, name: sites.name, region: sites.region, city: sites.city }).from(sites).where(eq(sites.id, bundle.record.siteId)).limit(1).then((rows) => rows[0] ?? null) : Promise.resolve(null),
+    bundle.record.siteId ? db.select({
+      id: sites.id,
+      name: sites.name,
+      nameEn: sites.nameEn,
+      nameZh: sites.nameZh,
+      region: sites.region,
+      city: sites.city,
+    }).from(sites).where(eq(sites.id, bundle.record.siteId)).limit(1).then((rows) => rows[0] ?? null) : Promise.resolve(null),
     bundle.record.programId ? db.select({ id: programs.id, nameEn: programs.nameEn, nameZh: programs.nameZh }).from(programs).where(eq(programs.id, bundle.record.programId)).limit(1).then((rows) => rows[0] ?? null) : Promise.resolve(null),
     headId ? db.select({ id: templateVersions.id, nameEn: templateVersions.nameEn, nameZh: templateVersions.nameZh, version: templateVersions.version }).from(templateVersions).where(eq(templateVersions.id, bundle.versions[0]?.templateVersionId ?? "00000000-0000-0000-0000-000000000000")).limit(1).then((rows) => rows[0] ?? null) : Promise.resolve(null),
     db.select({ decision: reviewDecisions, reviewer: { id: users.id, name: users.name, email: users.email } })

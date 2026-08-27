@@ -75,6 +75,8 @@ paths:
     get: { tags: [Access], operationId: adminGetUser, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     patch: { tags: [Access], operationId: adminUpdateUser, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     delete: { tags: [Access], operationId: removeUserIdentity, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /admin/users/{userId}/avatar:
+    get: { tags: [Access], operationId: adminGetUserAvatar, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { description: Avatar image }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } } }
   /admin/users/{userId}/access:
     get: { tags: [Access], operationId: getUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     put: { tags: [Access], operationId: replaceUserAccess, parameters: [{ $ref: '#/components/parameters/UserId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
@@ -126,6 +128,9 @@ paths:
   /templates:
     get: { tags: [Configuration], operationId: listTemplates, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     post: { tags: [Configuration], operationId: createTemplate, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
+  /form-presets/{key}:
+    post: { tags: [Configuration], operationId: materializeFormPreset, parameters: [{ name: key, in: path, required: true, schema: { type: string } }], responses: { '201': { $ref: '#/components/responses/JsonSuccess' }, '409': { $ref: '#/components/responses/Conflict' } } }
+    delete: { tags: [Configuration], operationId: archiveFormPreset, parameters: [{ name: key, in: path, required: true, schema: { type: string } }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /templates/{id}:
     get: { tags: [Configuration], operationId: getTemplate, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     delete: { tags: [Configuration], operationId: archiveTemplate, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, PageHeader } from "@/components/ui";
+import { localizedLocationName } from "@/features/locations/model";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import type { TaskDetailResponse } from "@/lib/task-ui";
 
@@ -20,6 +21,8 @@ type Location = {
   id: string;
   organizationId?: string | null;
   name: string;
+  nameEn?: string | null;
+  nameZh?: string | null;
   region?: string | null;
 };
 type Template = {
@@ -493,7 +496,7 @@ export default function NewTaskPage() {
                 </option>
                 {visibleLocations.map((location) => (
                   <option key={location.id} value={location.id}>
-                    {location.name}
+                    {localizedLocationName(location, locale)}
                     {location.region ? ` · ${location.region}` : ""}
                   </option>
                 ))}

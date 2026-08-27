@@ -419,8 +419,8 @@ async function getEvidenceFilterOptions(
       .map((location) => ({
         value: location.id,
         organizationId: location.organizationId,
-        labelEn: location.name,
-        labelZh: location.name,
+        labelEn: location.nameEn ?? "Location name not configured",
+        labelZh: location.nameZh ?? "地点名称待配置",
         description: location.region,
       }))
       .sort((left, right) => left.labelEn.localeCompare(right.labelEn)),
@@ -548,14 +548,19 @@ export async function getDataset(actorId: string, datasetId: string, requestedVe
     ? includedFields(selectedVersion.fieldPolicy as FieldPolicy).has("media_attachments")
     : false;
   const [siteRows, programRows, collectorRows, mediaRows] = await Promise.all([
-    siteIds.length ? db.select({ id: sites.id, name: sites.name }).from(sites).where(inArray(sites.id, siteIds)) : [],
+    siteIds.length ? db.select({
+      id: sites.id,
+      name: sites.name,
+      nameEn: sites.nameEn,
+      nameZh: sites.nameZh,
+    }).from(sites).where(inArray(sites.id, siteIds)) : [],
     programIds.length ? db.select({ id: programs.id, nameEn: programs.nameEn, nameZh: programs.nameZh }).from(programs).where(inArray(programs.id, programIds)) : [],
     collectorIds.length ? db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, collectorIds)) : [],
     mediaIncluded && frozenVersionIds.length
       ? db.select().from(attachments).where(inArray(attachments.recordVersionId, frozenVersionIds))
       : [],
   ]);
-  const siteById = new Map(siteRows.map((row) => [row.id, row.name]));
+  const siteById = new Map(siteRows.map((row) => [row.id, row]));
   const programById = new Map(programRows.map((row) => [row.id, row]));
   const collectorById = new Map(collectorRows.map((row) => [row.id, row.name]));
   const recordsInVersion = frozen
@@ -569,7 +574,12 @@ export async function getDataset(actorId: string, datasetId: string, requestedVe
         reviewStatus: record.reviewStatus,
         researchUseStatus: record.researchUseStatus,
         privacyStatus: record.privacyStatus,
-        site: record.siteId ? { id: record.siteId, name: siteById.get(record.siteId) ?? null } : null,
+        site: record.siteId ? {
+          id: record.siteId,
+          name: siteById.get(record.siteId)?.name ?? null,
+          nameEn: siteById.get(record.siteId)?.nameEn ?? null,
+          nameZh: siteById.get(record.siteId)?.nameZh ?? null,
+        } : null,
         program: record.programId ? {
           id: record.programId,
           nameEn: programById.get(record.programId)?.nameEn ?? null,

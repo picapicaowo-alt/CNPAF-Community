@@ -72,21 +72,26 @@ export function archiveLocationType(itemId: string) {
 export function createLocation(
   organizationId: string | null,
   draft: LocationDraft,
-  locale: "zh" | "en",
 ) {
   return apiFetch<{ location: Location }>("/api/v1/locations", {
     method: "POST",
     body: JSON.stringify({
       organizationId,
-      name: draft.name.trim(),
+      nameEn: draft.nameEn.trim(),
+      nameZh: draft.nameZh.trim(),
       siteType: draft.siteType,
       address: draft.address.trim() || null,
       city: draft.city.trim() || null,
       state: draft.state.trim() || null,
       country: draft.country.trim() || null,
-      aliases: draft.alias.trim()
-        ? [{ displayAlias: draft.alias.trim(), language: locale }]
-        : [],
+      aliases: [
+        draft.aliasZh.trim()
+          ? { displayAlias: draft.aliasZh.trim(), language: "zh" }
+          : null,
+        draft.aliasEn.trim()
+          ? { displayAlias: draft.aliasEn.trim(), language: "en" }
+          : null,
+      ].filter(Boolean),
     }),
   });
 }
@@ -95,7 +100,8 @@ export function updateLocation(locationId: string, draft: LocationDraft) {
   return apiFetch<{ location: Location }>(`/api/v1/locations/${locationId}`, {
     method: "PATCH",
     body: JSON.stringify({
-      name: draft.name.trim(),
+      nameEn: draft.nameEn.trim(),
+      nameZh: draft.nameZh.trim(),
       siteType: draft.siteType,
       address: draft.address.trim() || null,
       city: draft.city.trim() || null,

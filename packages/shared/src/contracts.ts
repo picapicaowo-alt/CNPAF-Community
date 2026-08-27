@@ -126,6 +126,7 @@ export const acceptInviteBodySchema = z.object({
 
 export const siteCreateBodySchema = z.object({
   name: z.string().min(1).max(200),
+  locale: z.enum(["zh", "en"]).default("zh"),
   siteType: z.string().min(1),
   region: z.string().max(120).optional(),
   organizationId: uuidSchema.nullable().optional(),

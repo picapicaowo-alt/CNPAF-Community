@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
+import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { MultiSelectDropdown } from "@/components/MultiSelectDropdown";
 import { useI18n } from "@/components/LocaleProvider";
+import { UserAvatar } from "@/components/UserAvatar";
 import {
   ErrorState,
   LoadingState,
@@ -74,6 +76,7 @@ type Access = {
     status: string;
     mustChangePassword: boolean;
     passwordChangedAt?: string | null;
+    avatarUrl: string | null;
   };
   roles: Array<{
     assignmentId: string;
@@ -159,6 +162,7 @@ export default function PersonManagementPage() {
   const [removalReason, setRemovalReason] = useState("");
   const [resetReason, setResetReason] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [avatarOpen, setAvatarOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -588,6 +592,29 @@ export default function PersonManagementPage() {
         eyebrow={locale === "zh" ? "人员与账号" : "People & accounts"}
         title={access.user.name}
         description={access.user.email}
+        leading={
+          access.user.avatarUrl ? (
+            <button
+              aria-label={
+                locale === "zh"
+                  ? `查看 ${access.user.name} 的大头像`
+                  : `View ${access.user.name}'s full-size profile photo`
+              }
+              className="person-avatar-trigger"
+              onClick={() => setAvatarOpen(true)}
+              title={locale === "zh" ? "查看大头像" : "View larger photo"}
+              type="button"
+            >
+              <UserAvatar
+                name={access.user.name}
+                size="large"
+                src={access.user.avatarUrl}
+              />
+            </button>
+          ) : (
+            <UserAvatar name={access.user.name} size="large" />
+          )
+        }
         actions={
           <Link className="button button-secondary" href="/people">
             <AppIcon name="back" />
@@ -595,6 +622,14 @@ export default function PersonManagementPage() {
           </Link>
         }
       />
+      {access.user.avatarUrl && avatarOpen ? (
+        <AvatarLightbox
+          locale={locale}
+          name={access.user.name}
+          onClose={() => setAvatarOpen(false)}
+          src={access.user.avatarUrl}
+        />
+      ) : null}
       {error ? <div className="feedback feedback-error">{error}</div> : null}
       {notice ? (
         <div className="feedback feedback-success" role="status">

@@ -25,6 +25,11 @@ export function LocationForm({
   onChange: (next: LocationDraft) => void;
   onSubmit: () => void;
 }) {
+  const visibleAliases = aliases?.filter(
+    (alias) => !alias.language || alias.language === locale,
+  );
+  const aliasPairIncomplete =
+    Boolean(draft.aliasZh.trim()) !== Boolean(draft.aliasEn.trim());
   return (
     <div className="stack">
       <div className="modal-heading row-between">
@@ -66,13 +71,24 @@ export function LocationForm({
 
       <div className="form-grid">
         <label>
-          {locale === "zh" ? "地点名称" : "Location name"}
+          {locale === "zh" ? "中文地点名称" : "Chinese location name"}
           <input
             autoFocus
             onChange={(event) =>
-              onChange({ ...draft, name: event.target.value })
+              onChange({ ...draft, nameZh: event.target.value })
             }
-            value={draft.name}
+            required
+            value={draft.nameZh}
+          />
+        </label>
+        <label>
+          {locale === "zh" ? "英文地点名称" : "English location name"}
+          <input
+            onChange={(event) =>
+              onChange({ ...draft, nameEn: event.target.value })
+            }
+            required
+            value={draft.nameEn}
           />
         </label>
         <label>
@@ -130,22 +146,48 @@ export function LocationForm({
         <label>
           {editing
             ? locale === "zh"
-              ? "新增别名（可选）"
-              : "Add an alias (optional)"
+              ? "新增中文别名（可选）"
+              : "Add a Chinese alias (optional)"
             : locale === "zh"
-              ? "首个别名（可选）"
-              : "First alias (optional)"}
+              ? "首个中文别名（可选）"
+              : "First Chinese alias (optional)"}
           <input
             onChange={(event) =>
-              onChange({ ...draft, alias: event.target.value })
+              onChange({ ...draft, aliasZh: event.target.value })
             }
             placeholder={
-              locale === "zh" ? "常用简称或旧名称" : "Common or former name"
+              locale === "zh" ? "中文简称或旧名称" : "Chinese short or former name"
             }
-            value={draft.alias}
+            value={draft.aliasZh}
+          />
+        </label>
+        <label>
+          {editing
+            ? locale === "zh"
+              ? "新增英文别名（可选）"
+              : "Add an English alias (optional)"
+            : locale === "zh"
+              ? "首个英文别名（可选）"
+              : "First English alias (optional)"}
+          <input
+            onChange={(event) =>
+              onChange({ ...draft, aliasEn: event.target.value })
+            }
+            placeholder={
+              locale === "zh" ? "英文简称或旧名称" : "English short or former name"
+            }
+            value={draft.aliasEn}
           />
         </label>
       </div>
+
+      {aliasPairIncomplete ? (
+        <div className="feedback feedback-error" role="alert">
+          {locale === "zh"
+            ? "如需添加别名，请同时填写中文与英文别名。"
+            : "To add an alias, enter both the Chinese and English versions."}
+        </div>
+      ) : null}
 
       {editing ? (
         <div className="stack-sm">
@@ -153,8 +195,8 @@ export function LocationForm({
             {locale === "zh" ? "已有别名" : "Existing aliases"}
           </div>
           <div className="row location-alias-list">
-            {aliases?.length ? (
-              aliases.map((alias) => (
+            {visibleAliases?.length ? (
+              visibleAliases.map((alias) => (
                 <StatusPill key={alias.id}>{alias.displayAlias}</StatusPill>
               ))
             ) : (
@@ -177,7 +219,13 @@ export function LocationForm({
         </button>
         <button
           className="button"
-          disabled={saving || !draft.name.trim() || !draft.siteType}
+          disabled={
+            saving ||
+            !draft.nameZh.trim() ||
+            !draft.nameEn.trim() ||
+            !draft.siteType ||
+            aliasPairIncomplete
+          }
           onClick={onSubmit}
           type="button"
         >

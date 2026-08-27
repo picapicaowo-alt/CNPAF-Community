@@ -107,7 +107,12 @@ export type DatasetRecordReference = {
   reviewStatus: string;
   researchUseStatus: string;
   privacyStatus: string;
-  site: { id: string; name: string | null } | null;
+  site: {
+    id: string;
+    name: string | null;
+    nameEn: string | null;
+    nameZh: string | null;
+  } | null;
   program: { id: string; nameEn: string | null; nameZh: string | null } | null;
   collector: { id: string; name: string | null };
   occurredAt: string | null;

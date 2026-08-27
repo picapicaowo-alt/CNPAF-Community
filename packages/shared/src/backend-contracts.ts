@@ -839,7 +839,8 @@ export const dataDownloadBodySchema = z.object({
 }).strict();
 export const locationCreateBodySchema = z.object({
   organizationId: uuidSchema.nullable().optional(),
-  name: z.string().min(1).max(500),
+  nameEn: z.string().trim().min(1).max(500),
+  nameZh: z.string().trim().min(1).max(500),
   siteType: z.string().min(1).max(120),
   region: z.string().max(240).nullable().optional(),
   address: z.string().max(1000).nullable().optional(),
@@ -857,7 +858,8 @@ export const locationCreateBodySchema = z.object({
   path: ["latitude"],
 });
 export const locationUpdateBodySchema = z.object({
-  name: z.string().min(1).max(500).optional(),
+  nameEn: z.string().trim().min(1).max(500).optional(),
+  nameZh: z.string().trim().min(1).max(500).optional(),
   siteType: z.string().min(1).max(120).optional(),
   region: z.string().max(240).nullable().optional(),
   address: z.string().max(1000).nullable().optional(),
@@ -876,10 +878,18 @@ export const locationUpdateBodySchema = z.object({
     message: "latitude and longitude must be updated together",
     path: ["latitude"],
   },
+).refine(
+  (value) =>
+    (value.nameEn === undefined && value.nameZh === undefined) ||
+    (value.nameEn !== undefined && value.nameZh !== undefined),
+  {
+    message: "nameEn and nameZh must be updated together",
+    path: ["nameEn"],
+  },
 );
 export const locationAliasBodySchema = z.object({
   displayAlias: z.string().min(1).max(500),
-  language: z.string().max(20).nullable().optional(),
+  language: z.enum(["zh", "en"]).nullable().optional(),
 }).strict();
 export const locationMergeBodySchema = z.object({
   destinationLocationId: uuidSchema,

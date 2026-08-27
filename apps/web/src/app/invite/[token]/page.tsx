@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/components/LocaleProvider";
+import { PasswordField } from "@/components/PasswordField";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
 export default function InvitePage() {
@@ -52,7 +53,9 @@ export default function InvitePage() {
               : "After setup, your workspace will match your role and program scope."}
           </p>
         </div>
-        <span className="auth-footnote">Secure · Scoped · Auditable</span>
+        <span className="auth-footnote">
+          {locale === "zh" ? "安全 · 分域 · 可审计" : "Secure · Scoped · Auditable"}
+        </span>
       </section>
       <section className="auth-form-panel">
         <div className="auth-product-name">CNPAF Community</div>
@@ -69,20 +72,15 @@ export default function InvitePage() {
               value={name}
             />
           </label>
-          <label>
-            {t.password}
-            <input
-              autoComplete="new-password"
-              minLength={12}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-            <span className="caption">
-              {locale === "zh" ? "至少 12 个字符" : "At least 12 characters"}
-            </span>
-          </label>
+          <PasswordField
+            autoComplete="new-password"
+            hint={locale === "zh" ? "至少 12 个字符" : "At least 12 characters"}
+            label={t.password}
+            minLength={12}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            value={password}
+          />
           {error ? (
             <div className="feedback feedback-error" role="alert">
               {error}

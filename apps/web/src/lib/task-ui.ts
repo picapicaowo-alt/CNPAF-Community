@@ -35,6 +35,8 @@ export type TaskSummary = {
   location: {
     id: string;
     name?: string | null;
+    nameEn?: string | null;
+    nameZh?: string | null;
     region?: string | null;
     address?: string | null;
   } | null;

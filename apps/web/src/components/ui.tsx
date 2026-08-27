@@ -9,19 +9,24 @@ export function PageHeader({
   title,
   description,
   eyebrow,
+  leading,
   actions,
 }: {
   title: string;
   description?: string;
   eyebrow?: string;
+  leading?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
     <header className="page-header">
-      <div className="page-header-copy">
-        {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
-        <h1>{title}</h1>
-        {description ? <p>{description}</p> : null}
+      <div className="page-header-main">
+        {leading}
+        <div className="page-header-copy">
+          {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
+          <h1>{title}</h1>
+          {description ? <p>{description}</p> : null}
+        </div>
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>

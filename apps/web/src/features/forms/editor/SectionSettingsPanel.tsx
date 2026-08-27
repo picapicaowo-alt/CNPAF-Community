@@ -106,14 +106,14 @@ export function SectionSettingsPanel({
       <div className="builder-settings-scroll stack-sm">
         <div className="form-grid">
           <label>
-            中文标题
+            {locale === "zh" ? "中文标题" : "Chinese title"}
             <input
               value={labelZh}
               onChange={(event) => setLabelZh(event.target.value)}
             />
           </label>
           <label>
-            English title
+            {locale === "zh" ? "英文标题" : "English title"}
             <input
               value={labelEn}
               onChange={(event) => setLabelEn(event.target.value)}
@@ -130,14 +130,14 @@ export function SectionSettingsPanel({
           <div className="settings-accordion-body stack-sm">
             <div className="form-grid">
               <label>
-                中文说明
+                {locale === "zh" ? "中文说明" : "Chinese description"}
                 <textarea
                   value={helpTextZh}
                   onChange={(event) => setHelpTextZh(event.target.value)}
                 />
               </label>
               <label>
-                English help
+                {locale === "zh" ? "英文说明" : "English description"}
                 <textarea
                   value={helpTextEn}
                   onChange={(event) => setHelpTextEn(event.target.value)}

@@ -68,7 +68,7 @@ export async function getLocation(actorId: string, locationId: string) {
 export async function searchLocations(actorId: string, query?: string | null, coordinates?: { latitude: number; longitude: number } | null) {
   const [access, locations, aliases] = await Promise.all([
     getAccessContext(actorId),
-    db.select().from(sites).where(inArray(sites.canonicalStatus, ["unverified", "canonical"])).orderBy(asc(sites.name)).limit(2000),
+    db.select().from(sites).where(inArray(sites.canonicalStatus, ["unverified", "canonical"])).orderBy(asc(sites.nameEn), asc(sites.nameZh), asc(sites.name)).limit(2000),
     db.select().from(locationAliases).where(eq(locationAliases.status, "active")).limit(5000),
   ]);
   const aliasesBySite = new Map<string, typeof aliases>();
@@ -80,6 +80,8 @@ export async function searchLocations(actorId: string, query?: string | null, co
       const locationAliases = aliasesBySite.get(location.id) ?? [];
       const names = [
         location.name,
+        location.nameEn,
+        location.nameZh,
         location.address,
         location.city,
         location.state,
@@ -104,7 +106,9 @@ export async function createLocation(actorId: string, input: LocationCreate, req
   return db.transaction(async (tx) => {
     const [location] = await tx.insert(sites).values({
       organizationId: input.organizationId,
-      name: input.name,
+      name: input.nameEn,
+      nameEn: input.nameEn,
+      nameZh: input.nameZh,
       siteType: input.siteType,
       region: input.region,
       address: input.address,
@@ -158,6 +162,7 @@ export async function updateLocation(
   }
   const values = {
     ...input,
+    name: input.nameEn,
     latitude:
       input.latitude === undefined
         ? undefined

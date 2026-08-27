@@ -23,6 +23,8 @@ export type SafetyFlagSummary = {
 export type OpsSite = {
   id: string;
   name: string;
+  nameEn?: string | null;
+  nameZh?: string | null;
   siteType: string;
   canonicalStatus: string;
   region: string | null;

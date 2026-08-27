@@ -26,6 +26,7 @@ import { apiFetch, errorMessage } from "@/lib/api-client";
 import { workflowLabel } from "@/lib/display-labels";
 import type { AttachmentSummary } from "@cnpaf/shared";
 import { AttachmentGallery } from "@/features/attachments/components/AttachmentGallery";
+import { localizedLocationName } from "@/features/locations/model";
 
 function readableKey(value: string) {
   return value
@@ -134,7 +135,14 @@ export default function RecordDetail() {
     : [];
   const context = (data.context as {
     creator?: { id: string; name: string; email: string } | null;
-    site?: { id: string; name: string; region?: string | null; city?: string | null } | null;
+    site?: {
+      id: string;
+      name: string;
+      nameEn?: string | null;
+      nameZh?: string | null;
+      region?: string | null;
+      city?: string | null;
+    } | null;
     program?: { id: string; nameEn: string; nameZh: string } | null;
     formVersion?: { id: string; nameEn: string; nameZh: string; version: number } | null;
   } | undefined) ?? {};
@@ -255,7 +263,9 @@ export default function RecordDetail() {
     { sourceKind: record.sourceKind, occurredAt: head?.occurredAt, updatedAt: record.updatedAt },
     locale,
     {
-      locationName: context.site?.name,
+      locationName: context.site
+        ? localizedLocationName(context.site, locale)
+        : null,
       formName: context.formVersion ? (locale === "zh" ? context.formVersion.nameZh : context.formVersion.nameEn) : null,
     },
   );

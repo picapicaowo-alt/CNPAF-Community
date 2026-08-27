@@ -13,6 +13,7 @@ import type {
 import {
   formFieldValidationError,
   formRatingValues,
+  formSafetyAlertConfiguration,
   parseFormBranchRules,
   parseFormVisibilityConditions,
 } from "@cnpaf/shared";
@@ -89,6 +90,15 @@ export function FieldSettingsPanel({
   const [allowCustomEntry, setAllowCustomEntry] = useState(
     field.allowCustomEntry,
   );
+  const existingSafetyAlert = formSafetyAlertConfiguration(field.configuration);
+  const [safetyAlertEnabled, setSafetyAlertEnabled] = useState(
+    Boolean(existingSafetyAlert),
+  );
+  const [safetyTriggerOptionKeys, setSafetyTriggerOptionKeys] = useState(
+    existingSafetyAlert?.triggerValues.filter(
+      (value): value is string => typeof value === "string",
+    ) ?? [],
+  );
   const [min, setMin] = useState(
     validationString(field.validation.min) || (control === "rating" ? "1" : ""),
   );
@@ -117,6 +127,8 @@ export function FieldSettingsPanel({
     selectedControl === "multi" ||
     selectedControl === "dropdown";
   const displayField = selectedControl === "display";
+  const safetyAlertSupported =
+    selectedControl === "boolean" || choiceField;
   const currentSectionIndex = sections.findIndex(
     (section) => section.id === sectionId,
   );
@@ -180,6 +192,12 @@ export function FieldSettingsPanel({
       }),
       visibilityConditions,
       branchingLogic,
+      configuration: fieldConfigurationWithSafetyAlert({
+        configuration: field.configuration,
+        control: selectedControl,
+        enabled: safetyAlertEnabled && safetyAlertSupported,
+        optionKeys: safetyTriggerOptionKeys,
+      }),
     });
   }, [
     allowCustomEntry,
@@ -201,6 +219,9 @@ export function FieldSettingsPanel({
     placeholderEn,
     placeholderZh,
     required,
+    safetyAlertEnabled,
+    safetyAlertSupported,
+    safetyTriggerOptionKeys,
     selectedControl,
     visibilityConditions,
   ]);
@@ -236,14 +257,14 @@ export function FieldSettingsPanel({
           </summary>
           <div className="settings-accordion-body form-grid">
             <label>
-              中文题目
+              {locale === "zh" ? "中文题目" : "Chinese question"}
               <input
                 value={labelZh}
                 onChange={(event) => setLabelZh(event.target.value)}
               />
             </label>
             <label>
-              English question
+              {locale === "zh" ? "英文题目" : "English question"}
               <input
                 value={labelEn}
                 onChange={(event) => setLabelEn(event.target.value)}
@@ -292,28 +313,28 @@ export function FieldSettingsPanel({
           </summary>
           <div className="settings-accordion-body form-grid">
             <label>
-              中文帮助文字
+              {locale === "zh" ? "中文帮助文字" : "Chinese help text"}
               <textarea
                 value={helpTextZh}
                 onChange={(event) => setHelpTextZh(event.target.value)}
               />
             </label>
             <label>
-              English help
+              {locale === "zh" ? "英文帮助文字" : "English help text"}
               <textarea
                 value={helpTextEn}
                 onChange={(event) => setHelpTextEn(event.target.value)}
               />
             </label>
             <label>
-              中文占位文字
+              {locale === "zh" ? "中文占位文字" : "Chinese placeholder"}
               <input
                 value={placeholderZh}
                 onChange={(event) => setPlaceholderZh(event.target.value)}
               />
             </label>
             <label>
-              English placeholder
+              {locale === "zh" ? "英文占位文字" : "English placeholder"}
               <input
                 value={placeholderEn}
                 onChange={(event) => setPlaceholderEn(event.target.value)}
@@ -381,6 +402,68 @@ export function FieldSettingsPanel({
                   </label>
                 ) : null}
               </div>
+              {safetyAlertSupported ? (
+                <div className="builder-safety-setting stack-sm">
+                  <label className="choice">
+                    <input
+                      checked={safetyAlertEnabled}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        setSafetyAlertEnabled(enabled);
+                        if (
+                          enabled &&
+                          choiceField &&
+                          !safetyTriggerOptionKeys.length &&
+                          options[0]
+                        )
+                          setSafetyTriggerOptionKeys([options[0].key]);
+                      }}
+                      type="checkbox"
+                    />
+                    <span>
+                      {locale === "zh"
+                        ? "危险回答出现时弹出安全提醒"
+                        : "Show a safety alert for a danger response"}
+                    </span>
+                  </label>
+                  {safetyAlertEnabled && selectedControl === "boolean" ? (
+                    <p className="caption">
+                      {locale === "zh"
+                        ? "回答“是”时，将立即显示联系工作人员或报警的安全提醒。"
+                        : "Answering Yes immediately shows guidance to contact staff or emergency services."}
+                    </p>
+                  ) : null}
+                  {safetyAlertEnabled && choiceField ? (
+                    <fieldset className="form-fieldset builder-safety-options">
+                      <legend>
+                        {locale === "zh"
+                          ? "哪些选项表示可能有危险？"
+                          : "Which options may indicate danger?"}
+                      </legend>
+                      <div className="choice-list">
+                        {options.map((option) => (
+                          <label className="choice" key={option.id}>
+                            <input
+                              checked={safetyTriggerOptionKeys.includes(option.key)}
+                              onChange={(event) =>
+                                setSafetyTriggerOptionKeys((current) =>
+                                  event.target.checked
+                                    ? [...new Set([...current, option.key])]
+                                    : current.filter((key) => key !== option.key),
+                                )
+                              }
+                              type="checkbox"
+                            />
+                            <span>
+                              {locale === "zh" ? option.labelZh : option.labelEn}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  ) : null}
+                </div>
+              ) : null}
               {selectedControl === "rating" ? (
               <div className="builder-rating-settings stack-sm">
                 <div className="row-between">
@@ -723,7 +806,8 @@ export function FieldSettingsPanel({
             !labelZh.trim() ||
             !labelEn.trim() ||
             !key.trim() ||
-            Boolean(validationError)
+            Boolean(validationError) ||
+            (safetyAlertEnabled && choiceField && !safetyTriggerOptionKeys.length)
           }
           onClick={() =>
             void onSave({
@@ -742,6 +826,12 @@ export function FieldSettingsPanel({
               validation: currentValidation,
               visibilityConditions,
               branchingLogic,
+              configuration: fieldConfigurationWithSafetyAlert({
+                configuration: field.configuration,
+                control: selectedControl,
+                enabled: safetyAlertEnabled && safetyAlertSupported,
+                optionKeys: safetyTriggerOptionKeys,
+              }),
             })
           }
           type="button"
@@ -797,8 +887,8 @@ function OptionEditorRow({
 
   return (
     <div className="editor-option-row">
-      <input aria-label="中文选项" value={labelZh} onChange={(event) => setLabelZh(event.target.value)} />
-      <input aria-label="English option" value={labelEn} onChange={(event) => setLabelEn(event.target.value)} />
+      <input aria-label={locale === "zh" ? "中文选项" : "Chinese option"} value={labelZh} onChange={(event) => setLabelZh(event.target.value)} />
+      <input aria-label={locale === "zh" ? "英文选项" : "English option"} value={labelEn} onChange={(event) => setLabelEn(event.target.value)} />
       <button className="button button-secondary button-small" disabled={busy || index === 0} onClick={() => void onMove(-1)} type="button">↑</button>
       <button className="button button-secondary button-small" disabled={busy || index === total - 1} onClick={() => void onMove(1)} type="button">↓</button>
       <button className="button button-secondary button-small" disabled={busy || !labelZh.trim() || !labelEn.trim()} onClick={() => void onSave({ labelZh: labelZh.trim(), labelEn: labelEn.trim() })} type="button">
@@ -833,6 +923,29 @@ function optionalNumber(value: string) {
   if (!value.trim()) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function fieldConfigurationWithSafetyAlert({
+  configuration,
+  control,
+  enabled,
+  optionKeys,
+}: {
+  configuration?: Record<string, unknown>;
+  control: FormControlKind;
+  enabled: boolean;
+  optionKeys: string[];
+}) {
+  const next = { ...(configuration ?? {}) };
+  if (!enabled) {
+    delete next.safetyAlert;
+    return next;
+  }
+  const triggerValues = control === "boolean" ? [true] : optionKeys;
+  if (triggerValues.length)
+    next.safetyAlert = { enabled: true, triggerValues };
+  else delete next.safetyAlert;
+  return next;
 }
 
 function validationFor({

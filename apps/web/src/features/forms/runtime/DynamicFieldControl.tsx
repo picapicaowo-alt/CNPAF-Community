@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type {
   FormAnswer,
   FormControlKind,
@@ -7,7 +8,8 @@ import type {
   RuntimeFormOption,
   RuntimeRegistryItem,
 } from "@cnpaf/shared";
-import { formRatingValues } from "@cnpaf/shared";
+import { formAnswerTriggersSafetyAlert, formRatingValues } from "@cnpaf/shared";
+import { AppIcon } from "@/components/AppIcon";
 
 type Props = {
   answer?: FormAnswer;
@@ -30,6 +32,7 @@ export function DynamicFieldControl({
   onChange,
   options,
 }: Props) {
+  const [safetyAlertOpen, setSafetyAlertOpen] = useState(false);
   const label = locale === "zh" ? field.labelZh : field.labelEn;
   const help = locale === "zh" ? field.helpTextZh : field.helpTextEn;
   const placeholder =
@@ -60,6 +63,8 @@ export function DynamicFieldControl({
       value,
       missingReasonKey: undefined,
     });
+    if (formAnswerTriggersSafetyAlert(value, field.configuration))
+      setSafetyAlertOpen(true);
   }
 
   const controlElement = renderControl({
@@ -126,6 +131,12 @@ export function DynamicFieldControl({
             ))}
           </select>
         </label>
+      ) : null}
+      {safetyAlertOpen ? (
+        <SafetyAlertDialog
+          locale={locale}
+          onAcknowledge={() => setSafetyAlertOpen(false)}
+        />
       ) : null}
     </div>
   );
@@ -211,7 +222,7 @@ function renderControl({
                   name={field.id}
                   onChange={(event) => {
                     if (control === "single") {
-                      onChange(field.id, { value: option.key });
+                      updateValue(option.key);
                       return;
                     }
                     updateValue(
@@ -344,6 +355,52 @@ function renderControl({
         }
       />
     </label>
+  );
+}
+
+function SafetyAlertDialog({
+  locale,
+  onAcknowledge,
+}: {
+  locale: "zh" | "en";
+  onAcknowledge: () => void;
+}) {
+  const acknowledgeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    acknowledgeRef.current?.focus();
+  }, []);
+  return (
+    <div className="modal-backdrop safety-alert-backdrop" role="presentation">
+      <section
+        aria-describedby="safety-alert-description"
+        aria-labelledby="safety-alert-title"
+        aria-modal="true"
+        className="modal-card safety-alert-dialog"
+        role="alertdialog"
+      >
+        <div className="safety-alert-icon">
+          <AppIcon name="warning" size={28} weight="fill" />
+        </div>
+        <div className="stack-sm">
+          <h2 id="safety-alert-title">
+            {locale === "zh" ? "安全提醒" : "Safety Alert"}
+          </h2>
+          <p id="safety-alert-description">
+            {locale === "zh"
+              ? "如果你或他人可能正处于危险中，请立即联系身边的工作人员或当地警方/紧急服务。如有紧急危险，请立即拨打 911。请优先确保自己和他人的安全。"
+              : "If you or someone else may be in immediate danger, please contact a nearby staff member, local police, or emergency services immediately. If there is an immediate emergency, call 911. Prioritize your own safety and the safety of others."}
+          </p>
+        </div>
+        <button
+          className="button button-wide safety-alert-action"
+          onClick={onAcknowledge}
+          ref={acknowledgeRef}
+          type="button"
+        >
+          {locale === "zh" ? "我知道了" : "I Understand"}
+        </button>
+      </section>
+    </div>
   );
 }
 

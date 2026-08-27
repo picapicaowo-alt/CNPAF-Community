@@ -20,6 +20,7 @@ import {
   ZAxis,
 } from "recharts";
 import { sourceKindLabel } from "@/lib/display-labels";
+import { localizedLocationName } from "@/features/locations/model";
 
 export type InsightCategory = "changes" | "attention" | "gaps" | "coverage";
 
@@ -36,7 +37,12 @@ export type InsightChartRecord = {
 type Props = {
   category: InsightCategory;
   records: InsightChartRecord[];
-  locations: Array<{ id: string; name: string }>;
+  locations: Array<{
+    id: string;
+    name: string;
+    nameEn?: string | null;
+    nameZh?: string | null;
+  }>;
   locale: "zh" | "en";
   selectedSource?: string;
   onSelectSource?: (source: string) => void;
@@ -410,7 +416,15 @@ function GapsCharts(props: Props) {
 }
 
 function CoverageCharts(props: Props) {
-  const locationNames = useMemo(() => new Map(props.locations.map((location) => [location.id, location.name])), [props.locations]);
+  const locationNames = useMemo(
+    () => new Map(
+      props.locations.map((location) => [
+        location.id,
+        localizedLocationName(location, props.locale),
+      ]),
+    ),
+    [props.locale, props.locations],
+  );
   const locations = useMemo(() => {
     const grouped = new Map<string, InsightChartRecord[]>();
     for (const record of props.records) {

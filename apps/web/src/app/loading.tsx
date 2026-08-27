@@ -1,8 +1,13 @@
+"use client";
+
+import { useI18n } from "@/components/LocaleProvider";
+
 export default function RouteLoading() {
+  const { locale } = useI18n();
   return (
     <div
       aria-busy="true"
-      aria-label="正在打开页面 / Opening page"
+      aria-label={locale === "zh" ? "正在打开页面" : "Opening page"}
       className="route-loading"
       role="status"
     >

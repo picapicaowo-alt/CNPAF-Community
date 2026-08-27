@@ -177,5 +177,30 @@ export function prefetchApi(input: string) {
 }
 
 export function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Request failed";
+  const locale =
+    typeof document !== "undefined" && document.documentElement.lang === "zh"
+      ? "zh"
+      : "en";
+  if (locale === "en")
+    return error instanceof Error ? error.message : "Request failed";
+  if (error instanceof ClientApiError) {
+    const byCode: Record<string, string> = {
+      BAD_REQUEST: "提交的信息有误，请检查后重试。",
+      UNAUTHENTICATED: "登录状态已失效，请重新登录。",
+      FORBIDDEN: "当前账号没有执行此操作的权限。",
+      NOT_FOUND: "请求的内容不存在或已被移除。",
+      CONFLICT: "内容已发生变化，请刷新后重试。",
+      INVALID_TRANSITION: "当前状态下无法执行此操作，请刷新后重试。",
+      IDEMPOTENCY_CONFLICT: "该请求已处理，请刷新页面确认最新状态。",
+      PASSWORD_CHANGE_REQUIRED: "请先修改临时密码。",
+      INTERNAL_ERROR: "服务暂时无法完成请求，请稍后重试。",
+    };
+    return byCode[error.code ?? ""] ??
+      (error.status >= 500
+        ? "服务暂时无法完成请求，请稍后重试。"
+        : "请求未完成，请检查后重试。");
+  }
+  return error instanceof Error && /[一-龥]/.test(error.message)
+    ? error.message
+    : "请求未完成，请检查后重试。";
 }

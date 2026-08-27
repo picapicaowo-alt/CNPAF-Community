@@ -11,17 +11,24 @@ type Ctx = {
 
 const LocaleContext = createContext<Ctx | null>(null);
 
-export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("zh");
+export function LocaleProvider({
+  children,
+  initialLocale = "zh",
+}: {
+  children: React.ReactNode;
+  initialLocale?: Locale;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
   useEffect(() => {
     const stored = localStorage.getItem("cnpaf.locale") as Locale | null;
-    const nextLocale = stored === "en" || stored === "zh" ? stored : "zh";
+    const nextLocale = stored === "en" || stored === "zh" ? stored : initialLocale;
     setLocaleState(nextLocale);
     document.documentElement.lang = nextLocale;
-  }, []);
+  }, [initialLocale]);
   const setLocale = (l: Locale) => {
     setLocaleState(l);
     localStorage.setItem("cnpaf.locale", l);
+    document.cookie = `cnpaf.locale=${l}; Path=/; Max-Age=31536000; SameSite=Lax`;
     document.documentElement.lang = l;
   };
   const value = useMemo(() => ({ locale, setLocale, t: messages[locale] }), [locale]);

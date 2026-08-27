@@ -55,7 +55,7 @@ export function ConfigurationItemForm({
           />
         </label>
         <label>
-          中文名称
+          {locale === "zh" ? "中文名称" : "Chinese name"}
           <input
             onChange={(event) =>
               onChange({ ...draft, labelZh: event.target.value })
@@ -64,7 +64,7 @@ export function ConfigurationItemForm({
           />
         </label>
         <label>
-          English name
+          {locale === "zh" ? "英文名称" : "English name"}
           <input
             onChange={(event) =>
               onChange({ ...draft, labelEn: event.target.value })

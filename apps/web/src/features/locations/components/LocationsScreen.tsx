@@ -31,6 +31,7 @@ import {
   EMPTY_LOCATION_TYPE_DRAFT,
   latestLocationTypes,
   formattedLocationAddress,
+  localizedLocationName,
   locationTypeKeyFrom,
 } from "../model";
 import type {
@@ -298,16 +299,24 @@ export function LocationsScreen() {
     try {
       if (formMode === "edit" && selected) {
         await updateLocation(selected.id, draft);
-        const normalizedAlias = draft.alias.trim().toLocaleLowerCase();
-        if (
-          normalizedAlias &&
-          !selected.aliases.some(
-            (item) => item.displayAlias.trim().toLocaleLowerCase() === normalizedAlias,
-          )
-        ) {
-          await addLocationAlias(selected.id, draft.alias.trim(), locale);
+        const aliases = [
+          { language: "zh" as const, value: draft.aliasZh.trim() },
+          { language: "en" as const, value: draft.aliasEn.trim() },
+        ];
+        for (const alias of aliases) {
+          const normalizedAlias = alias.value.toLocaleLowerCase();
+          if (
+            normalizedAlias &&
+            !selected.aliases.some(
+              (item) =>
+                item.language === alias.language &&
+                item.displayAlias.trim().toLocaleLowerCase() === normalizedAlias,
+            )
+          ) {
+            await addLocationAlias(selected.id, alias.value, alias.language);
+          }
         }
-      } else await createLocation(organizationId, draft, locale);
+      } else await createLocation(organizationId, draft);
       closeForm();
       await search(query);
     } catch (caught) {
@@ -336,8 +345,8 @@ export function LocationsScreen() {
       !location ||
       !confirm(
         locale === "zh"
-          ? `删除地点“${location.name}”？它将从地点列表移除，但历史记录仍会保留。`
-          : `Remove “${location.name}”? It will leave the location list, while historical records remain available.`,
+          ? `删除地点“${localizedLocationName(location, locale)}”？它将从地点列表移除，但历史记录仍会保留。`
+          : `Remove “${localizedLocationName(location, locale)}”? It will leave the location list, while historical records remain available.`,
       )
     )
       return;
@@ -543,7 +552,7 @@ export function LocationsScreen() {
                       {locale === "zh" ? type.labelZh : type.labelEn}
                     </strong>
                     <div className="caption">
-                      {locale === "zh" ? type.labelEn : type.labelZh} · {type.key}
+                      {locale === "zh" ? "系统标识" : "System key"}: {type.key}
                     </div>
                   </div>
                   <div className="row">
@@ -677,7 +686,7 @@ export function LocationsScreen() {
                             .filter((location) => location.id !== selected.id)
                             .map((location) => (
                               <option key={location.id} value={location.id}>
-                                {location.name}
+                                {localizedLocationName(location, locale)}
                               </option>
                             ))}
                         </select>
@@ -742,7 +751,9 @@ export function LocationsScreen() {
                 </StatusPill>
               </div>
               <div>
-                <h2 className="location-card-title">{location.name}</h2>
+                <h2 className="location-card-title">
+                  {localizedLocationName(location, locale)}
+                </h2>
                 <p className="caption location-card-address">
                   {formattedLocationAddress(location) ||
                     (locale === "zh" ? "未提供地址" : "No address supplied")}
@@ -752,9 +763,12 @@ export function LocationsScreen() {
                 <StatusPill tone="blue">
                   {typeLabels.get(location.siteType) ?? location.siteType}
                 </StatusPill>
-                {location.aliases.slice(0, 3).map((item) => (
+                {location.aliases
+                  .filter((item) => !item.language || item.language === locale)
+                  .slice(0, 3)
+                  .map((item) => (
                   <StatusPill key={item.id}>{item.displayAlias}</StatusPill>
-                ))}
+                  ))}
               </div>
               {canManage ? (
                 <div className="row">
