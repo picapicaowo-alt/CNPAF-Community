@@ -29,6 +29,11 @@ type Props = {
   initialPrompt?: string;
   starterPrompts?: string[];
   onUseAnswer?: (answer: string) => void;
+  recordSnapshot?: {
+    recordId: string;
+    title: string;
+    onSaved: () => Promise<void>;
+  };
 };
 
 export function AiCopilotPanel({
@@ -42,6 +47,7 @@ export function AiCopilotPanel({
   initialPrompt,
   starterPrompts = [],
   onUseAnswer,
+  recordSnapshot,
 }: Props) {
   const [bundle, setBundle] = useState<AskBundle | null>(null);
   const [question, setQuestion] = useState("");
@@ -51,6 +57,9 @@ export function AiCopilotPanel({
   const [files, setFiles] = useState<File[]>([]);
   const [privacyAttested, setPrivacyAttested] = useState(false);
   const [thinkingStage, setThinkingStage] = useState(0);
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
+  const [savedRevision, setSavedRevision] = useState(0);
+  const [snapshotFeedback, setSnapshotFeedback] = useState("");
   const conversationId = useRef("");
   const scopeKey = JSON.stringify({ contextSources, datasetVersionId, scope });
 
@@ -117,13 +126,48 @@ export function AiCopilotPanel({
     ? ["读取当前范围", "检索内部证据与外部视角", "组织结论与可验证引用"]
     : ["Reading the current scope", "Retrieving internal and external context", "Structuring verifiable citations"];
 
+  async function saveSnapshot() {
+    const id = conversationId.current;
+    if (!id || !recordSnapshot) return;
+    setSavingSnapshot(true);
+    setError("");
+    setSnapshotFeedback("");
+    try {
+      const result = await apiFetch<{ artifact: { currentRevision: number } }>(
+        `/api/v1/records/${recordSnapshot.recordId}/ai-conversation-artifacts`,
+        {
+          method: "POST",
+          body: JSON.stringify({ conversationId: id, title: recordSnapshot.title }),
+        },
+      );
+      setSavedRevision(result.artifact.currentRevision);
+      setSnapshotFeedback(locale === "zh" ? `已保存 Markdown 快照 v${result.artifact.currentRevision}` : `Markdown snapshot v${result.artifact.currentRevision} saved`);
+      await recordSnapshot.onSaved();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setSavingSnapshot(false);
+    }
+  }
+
   return (
     <section className="card insight-ai-panel ai-copilot-panel">
       <div className="insight-ai-heading">
         <span className="dataset-ai-avatar"><AppIcon name="sparkles" /></span>
-        <div><h2>{title}</h2><p>{description ?? (locale === "zh" ? "ChatGPT 以你有权限访问的已批准证据为主，并可检索外部公开来源补充视角；所有外部引用都会附上可验证链接。" : "ChatGPT grounds answers in approved evidence you can access and may add perspective from public web sources; every external citation includes a verifiable link.")}</p></div>
+        <div className="ai-copilot-heading-copy"><h2>{title}</h2><p>{description ?? (locale === "zh" ? "ChatGPT 以你有权限访问的已批准证据为主，并可检索外部公开来源补充视角；所有外部引用都会附上可验证链接。" : "ChatGPT grounds answers in approved evidence you can access and may add perspective from public web sources; every external citation includes a verifiable link.")}</p></div>
+        {recordSnapshot && lastAssistant ? (
+          <button className="button button-secondary button-small ai-snapshot-save" disabled={savingSnapshot || sending} onClick={() => void saveSnapshot()} type="button">
+            <AppIcon name="file" />
+            {savingSnapshot
+              ? (locale === "zh" ? "保存中…" : "Saving…")
+              : savedRevision
+                ? (locale === "zh" ? "更新记录快照" : "Update record snapshot")
+                : (locale === "zh" ? "保存到记录" : "Save to record")}
+          </button>
+        ) : null}
       </div>
       {error ? <div className="feedback feedback-error" role="alert">{error}</div> : null}
+      {snapshotFeedback ? <div className="feedback feedback-success ai-snapshot-feedback" role="status">{snapshotFeedback}</div> : null}
       <div className="insight-ai-body">
         {sending && !visibleMessages.length ? (
           <div className="ai-copilot-thinking" role="status" aria-live="polite">

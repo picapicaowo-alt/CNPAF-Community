@@ -27,6 +27,10 @@ import { workflowLabel } from "@/lib/display-labels";
 import type { AttachmentSummary } from "@cnpaf/shared";
 import { AttachmentGallery } from "@/features/attachments/components/AttachmentGallery";
 import { localizedLocationName } from "@/features/locations/model";
+import {
+  AiConversationArtifactList,
+  type AiConversationArtifactSummary,
+} from "@/features/records/components/AiConversationArtifactList";
 
 function readableKey(value: string) {
   return value
@@ -116,6 +120,7 @@ export default function RecordDetail() {
     | null
     | undefined;
   const attachments = (data.attachments as AttachmentSummary[]) ?? [];
+  const aiConversationArtifacts = (data.aiConversationArtifacts as AiConversationArtifactSummary[]) ?? [];
   const runMetadata = run?.costMetadata && typeof run.costMetadata === "object" && !Array.isArray(run.costMetadata)
     ? run.costMetadata as { externalSources?: unknown }
     : null;
@@ -522,6 +527,15 @@ export default function RecordDetail() {
               <AttachmentGallery attachments={attachments} locale={locale} />
             </section>
           ) : null}
+          {canArchive && aiConversationArtifacts.length && identity ? (
+            <AiConversationArtifactList
+              artifacts={aiConversationArtifacts}
+              currentUserId={identity.userId}
+              locale={locale}
+              onChanged={load}
+              recordId={record.id}
+            />
+          ) : null}
         </aside>
       </div>
       {canAsk ? (
@@ -529,6 +543,11 @@ export default function RecordDetail() {
           conversationTitle={recordCitationLabel({ id: record.id, sourceKind: record.sourceKind, occurredAt: head?.occurredAt, updatedAt: record.updatedAt }, locale)}
           description={locale === "zh" ? "围绕这条记录的已批准证据进行总结、质疑和共同梳理；未批准内容不会进入回答，外部公开视角会单独标示并附链接。" : "Summarize, challenge, and co-develop findings from this record's approved evidence. Unapproved content is excluded, while any public outside perspective is labeled and linked separately."}
           locale={locale}
+          recordSnapshot={canArchive ? {
+            recordId: record.id,
+            title: recordCitationLabel({ id: record.id, sourceKind: record.sourceKind, occurredAt: head?.occurredAt, updatedAt: record.updatedAt }, locale),
+            onSaved: load,
+          } : undefined}
           scope={{ recordIds: [record.id] }}
           starterPrompts={[
             locale === "zh" ? "用三句话总结这条记录的已批准证据。" : "Summarize this record's approved evidence in three sentences.",

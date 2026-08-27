@@ -190,6 +190,12 @@ paths:
     post: { tags: [Records], operationId: createRecordAttachment, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /records/{id}/attachments/{attachmentId}:
     get: { tags: [Records], operationId: getRecordAttachment, parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/AttachmentId' }], responses: { '200': { description: Attachment bytes }, '403': { $ref: '#/components/responses/Forbidden' } } }
+  /records/{id}/ai-conversation-artifacts:
+    post: { tags: [AI, Records], operationId: createRecordAiConversationArtifact, summary: Save an authorized AI conversation as a versioned Markdown record artifact, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /records/{id}/ai-conversation-artifacts/{artifactId}:
+    patch: { tags: [AI, Records], operationId: manageRecordAiConversationArtifact, summary: Rename, version, or archive an AI conversation record without overwriting prior snapshots, parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/ArtifactId' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' }, '400': { $ref: '#/components/responses/BadRequest' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { $ref: '#/components/responses/Conflict' } } }
+  /records/{id}/ai-conversation-artifacts/{artifactId}/download:
+    get: { tags: [AI, Records], operationId: downloadRecordAiConversationArtifact, summary: Download the current immutable Markdown snapshot, parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/ArtifactId' }], responses: { '200': { description: Markdown snapshot bytes }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } } }
   /records/{id}/ai/classify:
     post: { tags: [AI], operationId: classifyRecord, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '202': { $ref: '#/components/responses/JsonSuccess' } } }
   /records/{id}/review:
@@ -431,6 +437,7 @@ components:
     UserId: { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
     RoleId: { name: roleId, in: path, required: true, schema: { type: string, format: uuid } }
     AttachmentId: { name: attachmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    ArtifactId: { name: artifactId, in: path, required: true, schema: { type: string, format: uuid } }
     RegistryKey: { name: registryKey, in: path, required: true, schema: { type: string } }
     ProgramId: { name: programId, in: path, required: true, schema: { type: string, format: uuid } }
     MembershipId: { name: membershipId, in: path, required: true, schema: { type: string, format: uuid } }

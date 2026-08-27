@@ -8,6 +8,8 @@ import { getRecordBundle } from "@/lib/records";
 import { toAttachmentSummary } from "@/lib/attachments";
 import { apiErrorResponse, requestId } from "@/lib/api-error";
 import { applyRecordLifecycle } from "@/lib/modules/record-lifecycle";
+import { listAiConversationArtifacts } from "@/lib/ai-conversation-artifacts";
+import { authorize } from "@/lib/authorization";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { user, error } = await requireUser();
@@ -22,6 +24,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ record: bundle.record, approvedFindings: approved, accessMode: bundle.accessMode });
   }
   const headId = bundle.record.headVersionId;
+  const canReview = (await authorize({
+    userId: user!.id,
+    permission: "records.review",
+    resource: {
+      organizationId: bundle.record.organizationId,
+      programId: bundle.record.programId,
+      siteId: bundle.record.siteId,
+      serviceKey: bundle.record.sourceKind,
+      researchUse: bundle.record.researchUseStatus,
+      ownerUserId: bundle.record.createdById,
+    },
+  })).allowed;
   const run = headId
     ? (await db.select().from(aiRuns).where(eq(aiRuns.recordVersionId, headId)).orderBy(desc(aiRuns.createdAt)).limit(1))[0]
     : null;
@@ -32,7 +46,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const files = headId
     ? await db.select().from(attachments).where(eq(attachments.recordVersionId, headId))
     : [];
-  const [creator, site, program, formVersion, approvals] = await Promise.all([
+  const [creator, site, program, formVersion, approvals, conversationArtifacts] = await Promise.all([
     db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.id, bundle.record.createdById)).limit(1).then((rows) => rows[0] ?? null),
     bundle.record.siteId ? db.select({
       id: sites.id,
@@ -49,6 +63,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       .innerJoin(users, eq(reviewDecisions.reviewerId, users.id))
       .where(eq(reviewDecisions.recordId, id))
       .orderBy(desc(reviewDecisions.createdAt)),
+    canReview ? listAiConversationArtifacts(id) : Promise.resolve([]),
   ]);
   return NextResponse.json({
     ...bundle,
@@ -57,6 +72,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     safetyFlags: flags,
     context: { creator, site, program, formVersion },
     reviewHistory: approvals,
+    aiConversationArtifacts: conversationArtifacts,
     attachments: files.map((file) => toAttachmentSummary(
       file,
       `/api/v1/records/${bundle.record.id}/attachments/${file.id}`,

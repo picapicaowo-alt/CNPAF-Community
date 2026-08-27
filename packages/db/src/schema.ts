@@ -1626,6 +1626,52 @@ export const askMessageSources = pgTable(
   (t) => [index("ask_message_sources_message").on(t.messageId), index("ask_message_sources_source").on(t.sourceType, t.sourceId)],
 );
 
+export const aiConversationArtifacts = pgTable(
+  "ai_conversation_artifacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recordId: uuid("record_id").notNull().references(() => records.id),
+    recordVersionId: uuid("record_version_id").notNull().references(() => recordVersions.id),
+    conversationId: uuid("conversation_id").notNull().references(() => askConversations.id),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("active"),
+    currentRevision: integer("current_revision").notNull().default(0),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    archivedById: uuid("archived_by_id").references(() => users.id),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archiveReason: text("archive_reason"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("ai_conversation_artifacts_record_conversation").on(t.recordId, t.conversationId),
+    index("ai_conversation_artifacts_record_status").on(t.recordId, t.status, t.updatedAt),
+    index("ai_conversation_artifacts_conversation").on(t.conversationId),
+  ],
+);
+
+export const aiConversationArtifactVersions = pgTable(
+  "ai_conversation_artifact_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    artifactId: uuid("artifact_id").notNull().references(() => aiConversationArtifacts.id),
+    revisionNumber: integer("revision_number").notNull(),
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull().default("text/markdown"),
+    byteSize: integer("byte_size").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    messageCount: integer("message_count").notNull(),
+    sourceCount: integer("source_count").notNull(),
+    provenance: jsonb("provenance").notNull().default({}),
+    createdById: uuid("created_by_id").notNull().references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ai_conversation_artifact_versions_revision").on(t.artifactId, t.revisionNumber),
+    uniqueIndex("ai_conversation_artifact_versions_storage_key").on(t.storageKey),
+    index("ai_conversation_artifact_versions_artifact_created").on(t.artifactId, t.createdAt),
+  ],
+);
+
 export const jobs = pgTable(
   "jobs",
   {
@@ -1831,6 +1877,8 @@ export const schema = {
   askConversations,
   askMessages,
   askMessageSources,
+  aiConversationArtifacts,
+  aiConversationArtifactVersions,
   jobs,
   exportJobs,
   storageMigrationRuns,
