@@ -275,6 +275,7 @@ async function callOpenAi(
   images: AiImageInput[] = [],
   outputSchema?: unknown,
   files: AiFileInput[] = [],
+  webSearchOverride?: OpenAiWebSearchOptions,
 ): Promise<{
   raw: string;
   parsed: unknown;
@@ -301,7 +302,7 @@ async function callOpenAi(
       images,
       outputSchema,
       files,
-      { enabled: webSearchEnabled, contextSize: webSearchContextSize },
+      webSearchOverride ?? { enabled: webSearchEnabled, contextSize: webSearchContextSize },
     )),
   });
   const body = (await res.json()) as OpenAiResponsesBody;
@@ -687,7 +688,15 @@ export async function runAnalysisJob(recordVersionId: string, aiRunId?: string |
     if (activeRun.provider === "openai") {
       const workflow = activeRun.workflowVersionId ? await resolveWorkflowConfiguration(activeRun.workflowVersionId) : null;
       try {
-        const result = await callOpenAi(prompt.systemPrompt, userPrompt, activeRun.model, [], workflow?.outputSchema?.schema);
+        const result = await callOpenAi(
+          prompt.systemPrompt,
+          userPrompt,
+          activeRun.model,
+          [],
+          workflow?.outputSchema?.schema,
+          [],
+          { enabled: false, contextSize: "low" },
+        );
         parsed = validateConfiguredJson(result.parsed, workflow?.outputSchema?.schema ?? { contract: "@cnpaf/shared#aiOutputSchema" });
         raw = result.raw;
         tokens = result.tokens;
