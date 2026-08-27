@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AI_OUTPUT_JSON_SCHEMA } from "@cnpaf/shared";
 import {
   buildOpenAiResponsesRequest,
   parseOpenAiResponsesBody,
@@ -124,7 +125,7 @@ test("OpenAI requests pin configured workflow schemas with strict structured out
   });
 });
 
-test("legacy contract references retain JSON object mode", () => {
+test("shared contract references resolve to the strict classification schema", () => {
   const request = buildOpenAiResponsesRequest(
     "Return JSON.",
     "Answer.",
@@ -133,5 +134,10 @@ test("legacy contract references retain JSON object mode", () => {
     { contract: "@cnpaf/shared#aiOutputSchema" },
   );
 
-  assert.deepEqual(request.text.format, { type: "json_object" });
+  assert.deepEqual(request.text.format, {
+    type: "json_schema",
+    name: "cnpaf_workflow_output",
+    strict: true,
+    schema: AI_OUTPUT_JSON_SCHEMA,
+  });
 });

@@ -19,6 +19,7 @@ import {
   privacyFlags,
 } from "@cnpaf/db/schema";
 import {
+  AI_OUTPUT_JSON_SCHEMA,
   AI_OUTPUT_SCHEMA_VERSION,
   aiOutputSchema,
   type AiOutput,
@@ -216,11 +217,16 @@ export function buildOpenAiResponsesRequest(
       file_data: `data:${file.mimeType};base64,${file.body.toString("base64")}`,
     })),
   ];
+  const configuredContract = outputSchema && typeof outputSchema === "object" && !Array.isArray(outputSchema)
+    ? (outputSchema as { contract?: unknown }).contract
+    : null;
+  const resolvedOutputSchema = configuredContract === "@cnpaf/shared#aiOutputSchema"
+    ? AI_OUTPUT_JSON_SCHEMA
+    : outputSchema;
   const canUseStrictSchema = Boolean(
-    outputSchema
-    && typeof outputSchema === "object"
-    && !Array.isArray(outputSchema)
-    && !("contract" in outputSchema),
+    resolvedOutputSchema
+    && typeof resolvedOutputSchema === "object"
+    && !Array.isArray(resolvedOutputSchema),
   );
   return {
     model,
@@ -237,7 +243,7 @@ export function buildOpenAiResponsesRequest(
             type: "json_schema",
             name: "cnpaf_workflow_output",
             strict: true,
-            schema: outputSchema,
+            schema: resolvedOutputSchema,
           }
         : { type: "json_object" },
     },
