@@ -233,7 +233,7 @@ export default function NewTaskPage() {
     }
   }
   return (
-    <div className="stack">
+    <div className="stack task-create-page">
       <PageHeader
         eyebrow={locale === "zh" ? "任务" : "Tasks"}
         title={

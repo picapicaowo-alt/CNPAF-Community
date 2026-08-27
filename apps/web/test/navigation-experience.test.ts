@@ -184,7 +184,7 @@ test("standalone mobile workspaces keep navigation and forms inside the viewport
   assert.match(styles, /\.app-main input:is\([\s\S]*?\[type="date"\][\s\S]*?\[type="datetime-local"\][\s\S]*?min-width: 0;[\s\S]*?max-width: 100%/);
   assert.match(styles, /\.mobile-stack > \*[\s\S]*?min-width: 0;[\s\S]*?max-width: 100%/);
   assert.match(styles, /\.insight-conversation-field\s*\{[\s\S]*?width: 100%;[\s\S]*?min-width: 0/);
-  assert.match(styles, /\.insight-conversation-field input::placeholder\s*\{[\s\S]*?font-size: 14px/);
+  assert.match(styles, /\.insight-conversation-field input::placeholder\s*\{[\s\S]*?font-size: var\(--type-ui\)/);
   assert.match(insights, /className="insight-conversation-field"/);
   assert.match(insights, /问问一线记录告诉我们什么/);
 });
@@ -247,6 +247,25 @@ test("administrators can assign any role and scope from person management", () =
 test("review field-selection guidance stays compact and left aligned", () => {
   const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
 
-  assert.match(styles, /\.field-selection-help\s*\{[\s\S]*?justify-content: flex-start;[\s\S]*?gap: 8px;[\s\S]*?font-size: 13px;/);
+  assert.match(styles, /\.field-selection-help\s*\{[\s\S]*?justify-content: flex-start;[\s\S]*?gap: 8px;[\s\S]*?font-size: var\(--type-caption\);/);
   assert.match(styles, /\.field-selection-help > svg\s*\{[\s\S]*?flex: 0 0 16px;/);
+});
+
+test("site typography uses one readable semantic scale", () => {
+  const globals = readFileSync(path.join(appRoot, "globals.css"), "utf8");
+  const adaptive = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
+  const styles = `${globals}\n${adaptive}`;
+  const subTwelvePixelText = [...styles.matchAll(/font-size:\s*([0-9]+(?:\.[0-9]+)?)px/g)]
+    .map((match) => Number(match[1]))
+    .filter((size) => size > 0 && size < 12);
+
+  assert.deepEqual(subTwelvePixelText, []);
+  assert.match(adaptive, /--type-heading: 20px;/);
+  assert.match(adaptive, /--type-body: 16px;/);
+  assert.match(adaptive, /--type-ui: 14px;/);
+  assert.match(adaptive, /--type-caption: 13px;/);
+  assert.match(adaptive, /--type-meta: 12px;/);
+  assert.match(globals, /\.task-form-link-selection span\s*\{[\s\S]*?font-size: var\(--type-meta/);
+  assert.match(globals, /\.task-form-link-selection strong\s*\{[\s\S]*?font-size: var\(--type-ui/);
+  assert.match(globals, /\.task-form-link-flow\s*\{[\s\S]*?font-size: var\(--type-caption/);
 });
