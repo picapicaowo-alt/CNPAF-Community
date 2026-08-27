@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { Noto_Sans_SC } from "next/font/google";
 import { AppChrome } from "@/components/AppChrome";
 import { LocaleProvider } from "@/components/LocaleProvider";
@@ -51,17 +52,19 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const { liveRefreshMs } = getInsightRuntimeConfig();
+  const cookieLocale = (await cookies()).get("cnpaf.locale")?.value;
+  const initialLocale = cookieLocale === "en" ? "en" : "zh";
   return (
     <html
       data-insight-refresh-ms={liveRefreshMs}
       data-scroll-behavior="smooth"
-      lang="zh"
+      lang={initialLocale}
       suppressHydrationWarning
     >
       <body className={cnpafSans.variable}>
@@ -69,7 +72,7 @@ export default function RootLayout({
           data-impeccable-contract="43c0ea9d"
           dangerouslySetInnerHTML={{ __html: directionContract }}
         />
-        <LocaleProvider>
+        <LocaleProvider initialLocale={initialLocale}>
           <ServiceWorkerRegistrar />
           <AppChrome>
             <InstallBanner />

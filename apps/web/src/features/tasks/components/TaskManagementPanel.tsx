@@ -6,6 +6,7 @@ import { StatusPill } from "@/components/ui";
 import { MultiSelectDropdown } from "@/components/MultiSelectDropdown";
 import { getProgram } from "@/features/programs/api";
 import type { ProgramMembership } from "@/features/programs/types";
+import { localizedLocationName } from "@/features/locations/model";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import {
   taskStatusLabel,
@@ -26,6 +27,8 @@ type LocationChoice = {
   id: string;
   organizationId?: string | null;
   name: string;
+  nameEn?: string | null;
+  nameZh?: string | null;
   canonicalStatus: string;
 };
 
@@ -441,7 +444,7 @@ export function TaskManagementPanel({
               <option value="">{locale === "zh" ? "不限定地点" : "No location"}</option>
               {locations.map((location) => (
                 <option key={location.id} value={location.id}>
-                  {location.name}
+                  {localizedLocationName(location, locale)}
                 </option>
               ))}
             </select>

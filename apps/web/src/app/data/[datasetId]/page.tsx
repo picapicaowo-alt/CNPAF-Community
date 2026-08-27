@@ -21,6 +21,7 @@ import { apiFetch, errorMessage } from "@/lib/api-client";
 import type { OpenAiModelId } from "@/lib/openai-model-catalog";
 import { AttachmentGallery } from "@/features/attachments/components/AttachmentGallery";
 import { recordCitationLabel } from "@/features/records/display";
+import { localizedLocationName } from "@/features/locations/model";
 
 type WorkspaceTab = "analysis" | "records" | "report";
 type AskMessage = {
@@ -492,7 +493,7 @@ export default function DatasetWorkspacePage() {
       {activeTab === "records" ? (
         <section className="card stack dataset-records-panel">
           <div className="row-between"><div><h2>{locale === "zh" ? "数据集中的记录" : "Records in this dataset"}</h2><p className="muted">{locale === "zh" ? "每一行都锁定创建数据集时的精确记录版本。" : "Each row is pinned to the exact record version captured at creation."}</p></div><button className="button button-secondary button-small" onClick={() => runDownload("csv")} type="button"><AppIcon name="download" />CSV</button></div>
-          <div className="table-shell"><div className="table-scroll"><table className="data-table"><thead><tr><th>#</th><th>{locale === "zh" ? "记录" : "Record"}</th><th>{locale === "zh" ? "地点" : "Location"}</th><th>{locale === "zh" ? "项目" : "Program"}</th><th>{locale === "zh" ? "采集人" : "Collector"}</th><th>{locale === "zh" ? "附件" : "Attachments"}</th><th>{locale === "zh" ? "发生时间" : "Occurred"}</th></tr></thead><tbody>{detail.records.map((record) => <tr key={record.recordVersionId}><td>{record.ordinal + 1}</td><td><Link className="table-link" href={`/records/${record.id}`}>{recordCitationLabel(record, locale)}</Link></td><td><strong>{record.site?.name ?? "—"}</strong></td><td>{locale === "zh" ? record.program?.nameZh : record.program?.nameEn}</td><td>{record.collector.name ?? record.collector.id.slice(0, 8)}</td><td>{record.attachments.length ? <AttachmentGallery attachments={record.attachments} compact locale={locale} /> : "—"}</td><td>{record.occurredAt ? new Date(record.occurredAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US") : "—"}</td></tr>)}</tbody></table></div></div>
+          <div className="table-shell"><div className="table-scroll"><table className="data-table"><thead><tr><th>#</th><th>{locale === "zh" ? "记录" : "Record"}</th><th>{locale === "zh" ? "地点" : "Location"}</th><th>{locale === "zh" ? "项目" : "Program"}</th><th>{locale === "zh" ? "采集人" : "Collector"}</th><th>{locale === "zh" ? "附件" : "Attachments"}</th><th>{locale === "zh" ? "发生时间" : "Occurred"}</th></tr></thead><tbody>{detail.records.map((record) => <tr key={record.recordVersionId}><td>{record.ordinal + 1}</td><td><Link className="table-link" href={`/records/${record.id}`}>{recordCitationLabel(record, locale)}</Link></td><td><strong>{record.site ? localizedLocationName({ ...record.site, name: record.site.name ?? "" }, locale) : "—"}</strong></td><td>{locale === "zh" ? record.program?.nameZh : record.program?.nameEn}</td><td>{record.collector.name ?? record.collector.id.slice(0, 8)}</td><td>{record.attachments.length ? <AttachmentGallery attachments={record.attachments} compact locale={locale} /> : "—"}</td><td>{record.occurredAt ? new Date(record.occurredAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US") : "—"}</td></tr>)}</tbody></table></div></div>
         </section>
       ) : null}
 

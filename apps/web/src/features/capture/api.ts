@@ -24,6 +24,7 @@ export function searchCaptureSites(query: string) {
 export function createCaptureSite(body: {
   name: string;
   siteType: string;
+  locale: "zh" | "en";
   organizationId?: string | null;
 }) {
   return apiFetch<{ site?: SiteChoice; suggestions?: SiteChoice[] }>(

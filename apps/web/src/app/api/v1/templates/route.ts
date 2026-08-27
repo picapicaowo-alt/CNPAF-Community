@@ -3,6 +3,7 @@ import { templateCreateBodySchema } from "@cnpaf/shared";
 import { requirePermission, jsonError } from "@/lib/http";
 import {
   createTemplate,
+  listHiddenFormPresetKeys,
   listTemplateBundles,
   listTemplates,
 } from "@/lib/templates";
@@ -15,13 +16,17 @@ export async function GET(req: Request) {
   const context = await getAccessContext(user.id);
   const wantsCards = new URL(req.url).searchParams.get("view") === "cards";
   if (wantsCards) {
-    const bundles = (await listTemplateBundles()).filter(({ template }) =>
+    const [allBundles, hiddenPresetKeys] = await Promise.all([
+      listTemplateBundles(),
+      listHiddenFormPresetKeys(user.organizationId),
+    ]);
+    const bundles = allBundles.filter(({ template }) =>
       evaluateAuthorization(context, "templates.view", {
         templateId: template.id,
         organizationId: template.organizationId,
       }).allowed,
     );
-    return NextResponse.json({ templates: bundles });
+    return NextResponse.json({ templates: bundles, hiddenPresetKeys });
   }
   const rows = (await listTemplates()).filter((template) =>
     evaluateAuthorization(context, "templates.view", { templateId: template.id, organizationId: template.organizationId }).allowed,

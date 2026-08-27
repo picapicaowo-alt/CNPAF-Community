@@ -13,6 +13,7 @@ import {
   DotsThreeOutline,
   DownloadSimple,
   Eye,
+  EyeSlash,
   File,
   Files,
   FileText,
@@ -34,6 +35,7 @@ import {
   Trash,
   UsersThree,
   VideoCamera,
+  WarningCircle,
   Waveform,
   X,
 } from "@phosphor-icons/react";
@@ -68,13 +70,15 @@ export type AppIconName =
   | "file"
   | "edit"
   | "eye"
+  | "eye-off"
   | "copy"
   | "template"
   | "unpublish"
   | "trash"
   | "clock"
   | "info"
-  | "share";
+  | "share"
+  | "warning";
 
 const icons: Record<AppIconName, Icon> = {
   home: House,
@@ -106,6 +110,7 @@ const icons: Record<AppIconName, Icon> = {
   file: File,
   edit: PencilSimple,
   eye: Eye,
+  "eye-off": EyeSlash,
   copy: Copy,
   template: NotePencil,
   unpublish: CloudArrowUp,
@@ -113,6 +118,7 @@ const icons: Record<AppIconName, Icon> = {
   clock: Clock,
   info: Info,
   share: ShareNetwork,
+  warning: WarningCircle,
 };
 
 export function AppIcon({

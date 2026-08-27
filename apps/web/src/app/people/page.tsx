@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
+import { UserAvatar } from "@/components/UserAvatar";
 import {
   EmptyState,
   ErrorState,
@@ -28,6 +29,7 @@ type User = {
   mustChangePassword: boolean;
   aiEnabled: boolean;
   passwordChangedAt: string | null;
+  avatarUrl: string | null;
   roleAssignments: Array<{
     roleKey: string;
     roleNameEn: string;
@@ -401,8 +403,13 @@ export default function PeoplePage() {
                 {visible.map((user) => (
                   <tr key={user.id}>
                     <td data-label={locale === "zh" ? "人员" : "Person"}>
-                      <strong>{user.name}</strong>
-                      <div className="caption">{user.email}</div>
+                      <div className="people-person-identity">
+                        <UserAvatar name={user.name} src={user.avatarUrl} />
+                        <div className="people-person-copy">
+                          <strong>{user.name}</strong>
+                          <div className="caption">{user.email}</div>
+                        </div>
+                      </div>
                     </td>
                     <td
                       data-label={

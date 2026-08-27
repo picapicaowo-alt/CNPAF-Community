@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/components/LocaleProvider";
+import { PasswordField } from "@/components/PasswordField";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
 export default function ResetPasswordPage() {
@@ -64,15 +65,23 @@ export default function ResetPasswordPage() {
             </>
           ) : (
             <>
-              <label>
-                {locale === "zh" ? "新密码" : "New password"}
-                <input autoComplete="new-password" minLength={12} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
-                <span className="caption">{locale === "zh" ? "至少 12 个字符" : "At least 12 characters"}</span>
-              </label>
-              <label>
-                {locale === "zh" ? "确认新密码" : "Confirm new password"}
-                <input autoComplete="new-password" minLength={12} onChange={(event) => setConfirmation(event.target.value)} required type="password" value={confirmation} />
-              </label>
+              <PasswordField
+                autoComplete="new-password"
+                hint={locale === "zh" ? "至少 12 个字符" : "At least 12 characters"}
+                label={locale === "zh" ? "新密码" : "New password"}
+                minLength={12}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                value={password}
+              />
+              <PasswordField
+                autoComplete="new-password"
+                label={locale === "zh" ? "确认新密码" : "Confirm new password"}
+                minLength={12}
+                onChange={(event) => setConfirmation(event.target.value)}
+                required
+                value={confirmation}
+              />
               {error ? <div className="feedback feedback-error" role="alert">{error}</div> : null}
               <button className="button button-wide" disabled={submitting} type="submit">
                 {submitting

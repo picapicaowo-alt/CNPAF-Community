@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { TaskBulkActions } from "@/features/tasks/components/TaskBulkActions";
+import { localizedLocationName } from "@/features/locations/model";
 import {
   taskDate,
   taskStatusLabel,
@@ -141,7 +142,7 @@ export default function TasksPage() {
           task.program.nameZh,
           task.form.nameEn,
           task.form.nameZh,
-          task.location?.name,
+          task.location ? localizedLocationName(task.location, locale) : null,
           task.location?.region,
           ...(task.assignments ?? []).flatMap((assignment) => [
             assignment.assigneeName,
@@ -339,7 +340,7 @@ export default function TasksPage() {
                 <option value="">{locale === "zh" ? "全部地点" : "All locations"}</option>
                 {filterOptions.locations.map((location) => (
                   <option key={location.id} value={location.id}>
-                    {location.name}
+                    {localizedLocationName(location, locale)}
                   </option>
                 ))}
               </select>
@@ -443,7 +444,9 @@ export default function TasksPage() {
                     {taskDate(task.dueAt ?? task.opensAt, locale)}
                   </div>
                   <div className="list-row-title">
-                    {task.location?.name ?? task.title}
+                    {task.location
+                      ? localizedLocationName(task.location, locale)
+                      : task.title}
                   </div>
                 </div>
                 <div>{task.title}</div>

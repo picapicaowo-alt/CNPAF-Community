@@ -125,6 +125,17 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
       "country",
       "state",
     ]);
+    const bilingualLocationColumns = await db.query<{ column_name: string }>(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'sites'
+        AND column_name IN ('name_en', 'name_zh')
+      ORDER BY column_name
+    `);
+    assert.deepEqual(
+      bilingualLocationColumns.rows.map((row) => row.column_name),
+      ["name_en", "name_zh"],
+    );
     const accountAvatarColumns = await db.query<{ column_name: string }>(`
       SELECT column_name
       FROM information_schema.columns
@@ -136,6 +147,10 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
       "avatar_mime_type",
       "avatar_storage_key",
     ]);
+    const formPresetPreferenceTable = await db.query<{ exists: boolean }>(`
+      SELECT to_regclass('form_preset_preferences') IS NOT NULL AS exists
+    `);
+    assert.equal(formPresetPreferenceTable.rows[0]?.exists, true);
     const priorityLevels = await db.query<{
       key: string;
       label_en: string;

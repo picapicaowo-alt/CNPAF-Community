@@ -13,6 +13,7 @@ import {
 import { AppIcon, type AppIconName } from "./AppIcon";
 import { BrandLogo } from "./BrandLogo";
 import { useI18n } from "./LocaleProvider";
+import { PasswordField } from "./PasswordField";
 
 type Role = { id: string; key: string; nameEn: string; nameZh: string };
 type MeResponse = {
@@ -179,7 +180,9 @@ function PasswordChangeGate({ locale }: { locale: "zh" | "en" }) {
           </p>
         </div>
         <span className="auth-footnote">
-          Secure access · Scoped permissions
+          {locale === "zh"
+            ? "安全访问 · 权限分域"
+            : "Secure access · Scoped permissions"}
         </span>
       </section>
       <section className="auth-form-panel">
@@ -191,44 +194,35 @@ function PasswordChangeGate({ locale }: { locale: "zh" | "en" }) {
             </div>
             <h1>{locale === "zh" ? "修改密码" : "Change password"}</h1>
           </div>
-          <label>
-            {locale === "zh" ? "当前临时密码" : "Current temporary password"}
-            <input
-              autoComplete="current-password"
-              minLength={8}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              required
-              type="password"
-              value={currentPassword}
-            />
-          </label>
-          <label>
-            {locale === "zh" ? "新密码" : "New password"}
-            <input
-              autoComplete="new-password"
-              minLength={12}
-              onChange={(event) => setNewPassword(event.target.value)}
-              required
-              type="password"
-              value={newPassword}
-            />
-            <span className="caption">
-              {locale === "zh"
+          <PasswordField
+            autoComplete="current-password"
+            label={locale === "zh" ? "当前临时密码" : "Current temporary password"}
+            minLength={8}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            required
+            value={currentPassword}
+          />
+          <PasswordField
+            autoComplete="new-password"
+            hint={
+              locale === "zh"
                 ? "至少 12 个字符，且不能与临时密码相同"
-                : "At least 12 characters and different from the temporary password"}
-            </span>
-          </label>
-          <label>
-            {locale === "zh" ? "确认新密码" : "Confirm new password"}
-            <input
-              autoComplete="new-password"
-              minLength={12}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              required
-              type="password"
-              value={confirmPassword}
-            />
-          </label>
+                : "At least 12 characters and different from the temporary password"
+            }
+            label={locale === "zh" ? "新密码" : "New password"}
+            minLength={12}
+            onChange={(event) => setNewPassword(event.target.value)}
+            required
+            value={newPassword}
+          />
+          <PasswordField
+            autoComplete="new-password"
+            label={locale === "zh" ? "确认新密码" : "Confirm new password"}
+            minLength={12}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            required
+            value={confirmPassword}
+          />
           {error ? (
             <div className="feedback feedback-error" role="alert">
               {error}
@@ -489,7 +483,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             </span>
             <span className="sidebar-user-copy">
               <span className="sidebar-user-name">
-                {me?.user.name ?? (loaded ? "CNPAF" : "Loading…")}
+                {me?.user.name ??
+                  (loaded ? "CNPAF" : locale === "zh" ? "正在加载…" : "Loading…")}
               </span>
               <span className="sidebar-user-email">{me?.user.email ?? ""}</span>
             </span>
@@ -497,11 +492,12 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="sidebar-utilities">
             <button
+              aria-label={locale === "zh" ? "切换至英文" : "Switch to Chinese"}
               className="sidebar-utility"
               onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
               type="button"
             >
-              {locale === "zh" ? "EN" : "中文"}
+              {locale === "zh" ? "切换至英文" : "Switch to Chinese"}
             </button>
             <button className="sidebar-utility" onClick={logout} type="button">
               <AppIcon name="logout" />

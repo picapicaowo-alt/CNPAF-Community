@@ -15,6 +15,7 @@ import {
   NotificationPanel,
   type InAppNotification,
 } from "@/features/notifications/NotificationPanel";
+import { localizedLocationName } from "@/features/locations/model";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { listLocalDrafts, type LocalDraft } from "@/lib/offline";
 import {
@@ -267,7 +268,11 @@ export default function DashboardPage() {
                   {taskDate(currentTask.dueAt ?? currentTask.opensAt, locale)}
                 </StatusPill>
                 <div className="current-task-heading">
-                  <h2>{currentTask.location?.name ?? currentTask.title}</h2>
+                  <h2>
+                    {currentTask.location
+                      ? localizedLocationName(currentTask.location, locale)
+                      : currentTask.title}
+                  </h2>
                   <p className="muted">{currentTask.title}</p>
                 </div>
                 <div className="caption">
@@ -313,7 +318,9 @@ export default function DashboardPage() {
                 >
                   <div>
                     <div className="list-row-title">
-                      {task.location?.name ?? task.title}
+                      {task.location
+                        ? localizedLocationName(task.location, locale)
+                        : task.title}
                     </div>
                     <div className="list-row-subtitle">
                       {taskDate(task.dueAt ?? task.opensAt, locale)}
@@ -547,7 +554,9 @@ export default function DashboardPage() {
                 >
                   <div>
                     <div className="list-row-title">
-                      {task.location?.name ?? task.title}
+                      {task.location
+                        ? localizedLocationName(task.location, locale)
+                        : task.title}
                     </div>
                     <div className="list-row-subtitle">
                       {taskDate(task.dueAt ?? task.opensAt, locale)}

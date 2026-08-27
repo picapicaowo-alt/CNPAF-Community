@@ -148,6 +148,7 @@ export async function getUserAccess(userId: string) {
     status: users.status,
     mustChangePassword: users.mustChangePassword,
     passwordChangedAt: users.passwordChangedAt,
+    avatarStorageKey: users.avatarStorageKey,
     legacyRole: users.role,
     createdAt: users.createdAt,
     updatedAt: users.updatedAt,
@@ -188,8 +189,14 @@ export async function getUserAccess(userId: string) {
     }).from(programMemberships).innerJoin(programs, eq(programMemberships.programId, programs.id)).where(eq(programMemberships.userId, userId)),
   ]);
 
+  const { avatarStorageKey, ...publicUser } = user;
   return {
-    user,
+    user: {
+      ...publicUser,
+      avatarUrl: avatarStorageKey
+        ? `/api/v1/admin/users/${user.id}/avatar?v=${user.updatedAt.getTime()}`
+        : null,
+    },
     ...serializeAccessContext(context),
     scopeAssignments: scopeRows,
     overrides: overrideRows,

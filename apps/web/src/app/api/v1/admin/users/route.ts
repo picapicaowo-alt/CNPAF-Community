@@ -23,6 +23,7 @@ export async function GET(req: Request) {
       status: users.status,
       mustChangePassword: users.mustChangePassword,
       passwordChangedAt: users.passwordChangedAt,
+      avatarStorageKey: users.avatarStorageKey,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
     }).from(users),
@@ -87,15 +88,21 @@ export async function GET(req: Request) {
     evaluateAuthorization(access, "users.view", { organizationId: user.organizationId }).allowed
   );
   const aiAccessByUser = await getAiAccessStates(visible.map((user) => user.id));
-  const enriched = visible.map((user) => ({
-    ...user,
-    aiEnabled: aiAccessByUser.get(user.id) ?? false,
-    roleAssignments: (byUser.get(user.id) ?? []).filter((assignment) => assignment.status === "active"),
-    affiliations: affiliationsByUser.get(user.id) ?? [],
-    programMemberships: membershipsByUser.get(user.id) ?? [],
-    accessScopes: scopesByUser.get(user.id) ?? [],
-    groups: groupsByUser.get(user.id) ?? [],
-  }));
+  const enriched = visible.map((user) => {
+    const { avatarStorageKey, ...publicUser } = user;
+    return {
+      ...publicUser,
+      avatarUrl: avatarStorageKey
+        ? `/api/v1/admin/users/${user.id}/avatar?v=${user.updatedAt.getTime()}`
+        : null,
+      aiEnabled: aiAccessByUser.get(user.id) ?? false,
+      roleAssignments: (byUser.get(user.id) ?? []).filter((assignment) => assignment.status === "active"),
+      affiliations: affiliationsByUser.get(user.id) ?? [],
+      programMemberships: membershipsByUser.get(user.id) ?? [],
+      accessScopes: scopesByUser.get(user.id) ?? [],
+      groups: groupsByUser.get(user.id) ?? [],
+    };
+  });
   const searched = query ? enriched.filter((user) => [
     user.name,
     user.email,

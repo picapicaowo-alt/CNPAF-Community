@@ -20,6 +20,7 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { DatasetBuilder } from "@/features/datasets/components/DatasetBuilder";
+import { localizedLocationName } from "@/features/locations/model";
 import { fetchDatasetBuilderOptions } from "@/features/datasets/api";
 import {
   datasetFilterSearchParams,
@@ -68,6 +69,8 @@ type BuilderSource =
 type Location = {
   id: string;
   name: string;
+  nameEn?: string | null;
+  nameZh?: string | null;
   region?: string | null;
   city?: string | null;
 };
@@ -566,7 +569,9 @@ function RecordsContent() {
                             row,
                             locale,
                             {
-                              locationName: location?.name,
+                              locationName: location
+                                ? localizedLocationName(location, locale)
+                                : null,
                               formName: row.templateVersionId ? formById.get(row.templateVersionId) : null,
                             },
                           )}
@@ -577,7 +582,7 @@ function RecordsContent() {
                         </div>
                       </td>
                       <td>
-                        <strong>{location?.name ?? sourceKindLabel(row.sourceKind, locale)}</strong>
+                        <strong>{location ? localizedLocationName(location, locale) : sourceKindLabel(row.sourceKind, locale)}</strong>
                         <div className="caption">
                           {location
                             ? sourceKindLabel(row.sourceKind, locale)

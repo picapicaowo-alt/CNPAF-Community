@@ -19,7 +19,12 @@ export async function searchSites(query: string) {
     .from(sites)
     .where(
       and(
-        or(ilike(sites.name, `%${q}%`), ilike(sites.region, `%${q}%`)),
+        or(
+          ilike(sites.name, `%${q}%`),
+          ilike(sites.nameEn, `%${q}%`),
+          ilike(sites.nameZh, `%${q}%`),
+          ilike(sites.region, `%${q}%`),
+        ),
       ),
     )
     .limit(20);
@@ -42,6 +47,8 @@ export async function createSite(input: SiteCreateBody, userId: string, organiza
   const site = await db.transaction(async (tx) => {
     const [created] = await tx.insert(sites).values({
       name: input.name.trim(),
+      nameEn: input.locale === "en" ? input.name.trim() : null,
+      nameZh: input.locale === "zh" ? input.name.trim() : null,
       siteType: input.siteType,
       region: input.region ?? null,
       organizationId,

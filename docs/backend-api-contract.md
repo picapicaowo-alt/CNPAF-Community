@@ -112,7 +112,7 @@ the caller must deliver it through an approved channel.
 | GET | `/tasks/my` | authenticated assignee | caller's assigned tasks |
 | GET | `/tasks/today` | authenticated assignee | currently actionable assignments |
 | GET | `/tasks/:taskId/package` | assignee or scoped `tasks.view` | pinned task, assignment, form version, org-visible registry items, sync contract, content hash |
-| GET/POST | `/locations?q=&latitude=&longitude=` | scoped `locations.view` / `locations.manage` | fuzzy/alias/proximity search; `locationCreateBodySchema` on POST |
+| GET/POST | `/locations?q=&latitude=&longitude=` | scoped `locations.view` / `locations.manage` | fuzzy/alias/proximity search; `locationCreateBodySchema` on POST; canonical locations require `nameZh` and `nameEn` |
 | GET/PATCH | `/locations/:locationId` | scoped `locations.view` / `locations.manage` | fetch or update a location; PATCH also handles approve/archive status transitions |
 | POST | `/locations/:locationId/aliases` | `locations.manage` | `locationAliasBodySchema` |
 | POST | `/locations/:locationId/merge` | `locations.manage` | `locationMergeBodySchema` |
@@ -144,6 +144,8 @@ together.
 | PATCH | `/config/registries/:registryKey/items/:id` | `services.manage`; `site_type` also accepts `locations.manage` | `registryItemUpdateBodySchema` |
 | POST | `/config/registries/:registryKey/items/:id/archive` | `services.manage`; `site_type` also accepts `locations.manage` | — |
 | GET/POST | `/templates` | `templates.view` / `templates.create` | `templateCreateBodySchema` |
+| POST | `/form-presets/:key` | `templates.create` + scoped `templates.edit` | materializes the built-in workflow as an editable team template and hides the built-in card for that team |
+| DELETE | `/form-presets/:key` | `templates.archive` | hides the built-in workflow for the current team; existing forms and records remain unchanged |
 | GET | `/templates/:id` | scoped `templates.view` | — |
 | POST | `/templates/:id/versions` | scoped `templates.edit` | `templateVersionCreateBodySchema` |
 | GET | `/templates/:id/versions/compare` | scoped `templates.view` | compares stable Section, field, and option Keys using `fromVersionId` and `toVersionId` |

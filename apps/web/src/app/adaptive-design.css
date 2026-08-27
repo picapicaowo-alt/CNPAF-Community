@@ -4251,3 +4251,214 @@ h3 {
   .insight-ai-body { padding: 16px; }
   .ai-copilot-thinking { padding: 20px 16px; }
 }
+
+/* Password visibility uses one accessible, touch-safe control across every
+   sign-in, setup, recovery, forced-change, and account-security form. */
+.password-field {
+  min-width: 0;
+}
+
+.password-field > label {
+  display: block;
+}
+
+.password-input-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.password-input-shell > input {
+  padding-right: 54px;
+}
+
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+  touch-action: manipulation;
+  transform: translateY(-50%);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.password-visibility-toggle:hover,
+.password-visibility-toggle[aria-pressed="true"] {
+  background: var(--surface-blue);
+  color: var(--blue-dark);
+}
+
+.password-input-shell:focus-within .password-visibility-toggle {
+  color: var(--blue-dark);
+}
+
+/* People identity stays compact in the register and expands only on the
+   dedicated person page, where the uploaded photo is intentionally operable. */
+.page-header-main,
+.people-person-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.page-header-main {
+  flex: 1;
+  gap: 18px;
+}
+
+.people-person-identity {
+  gap: 11px;
+}
+
+.people-person-copy {
+  min-width: 0;
+}
+
+.people-person-copy strong,
+.people-person-copy .caption {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.person-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid #b8ccd5;
+  border-radius: 50%;
+  background: var(--surface-blue);
+  color: var(--navy-deep);
+  font-weight: 720;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.person-avatar-small {
+  width: 40px;
+  height: 40px;
+  font-size: 12px;
+}
+
+.person-avatar-large {
+  width: 80px;
+  height: 80px;
+  font-size: 20px;
+}
+
+.person-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.person-avatar-trigger {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 6px 16px rgba(20, 56, 72, 0.12);
+  cursor: zoom-in;
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.person-avatar-trigger:hover {
+  box-shadow: 0 9px 22px rgba(20, 56, 72, 0.18);
+  transform: translateY(-1px);
+}
+
+.avatar-lightbox {
+  width: min(760px, calc(100vw - 40px));
+  max-width: none;
+  max-height: calc(100dvh - 40px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 32px 90px rgba(5, 24, 44, 0.38);
+}
+
+.avatar-lightbox::backdrop {
+  background: rgba(5, 24, 44, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.avatar-lightbox-content {
+  display: grid;
+  max-height: calc(100dvh - 40px);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.avatar-lightbox-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.avatar-lightbox-heading .eyebrow,
+.avatar-lightbox-heading h2 {
+  margin-bottom: 0;
+}
+
+.avatar-lightbox-image {
+  width: 100%;
+  height: min(72vh, 760px);
+  min-height: 0;
+  background: #0b2635;
+  object-fit: contain;
+}
+
+@media (max-width: 680px) {
+  .page-header-main {
+    gap: 13px;
+  }
+
+  .person-avatar-large {
+    width: 64px;
+    height: 64px;
+    font-size: 17px;
+  }
+
+  .avatar-lightbox {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 14px;
+  }
+
+  .avatar-lightbox-content {
+    max-height: calc(100dvh - 24px);
+  }
+
+  .avatar-lightbox-image {
+    height: min(70vh, 680px);
+  }
+}
+
+@media (forced-colors: active) {
+  .password-visibility-toggle,
+  .person-avatar,
+  .person-avatar-trigger {
+    border: 1px solid ButtonText;
+  }
+}

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AiCopilotPanel } from "@/components/AiCopilotPanel";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
+import { localizedLocationName } from "@/features/locations/model";
 import {
   EmptyState,
   ErrorState,
@@ -34,7 +35,12 @@ type InsightRecord = {
   occurredAt?: string | null;
   updatedAt: string;
 };
-type InsightLocation = { id: string; name: string };
+type InsightLocation = {
+  id: string;
+  name: string;
+  nameEn?: string | null;
+  nameZh?: string | null;
+};
 
 const categoryCopy: Record<
   Category,
@@ -227,8 +233,13 @@ export default function InsightCategoryPage() {
     ["chat.ask_collect", "ask_collect.use"].includes(permission),
   );
   const locationNameById = useMemo(
-    () => new Map(locations.map((location) => [location.id, location.name])),
-    [locations],
+    () => new Map(
+      locations.map((location) => [
+        location.id,
+        localizedLocationName(location, locale),
+      ]),
+    ),
+    [locale, locations],
   );
 
   const metrics = (() => {

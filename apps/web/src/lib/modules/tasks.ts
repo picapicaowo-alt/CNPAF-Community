@@ -63,6 +63,8 @@ function describedTask(row: {
   programNameEn: string;
   programNameZh: string;
   locationName: string | null;
+  locationNameEn: string | null;
+  locationNameZh: string | null;
   locationRegion: string | null;
   locationAddress: string | null;
   formKey: string;
@@ -73,7 +75,14 @@ function describedTask(row: {
   return {
     ...row.task,
     program: { id: row.task.programId, key: row.programKey, nameEn: row.programNameEn, nameZh: row.programNameZh },
-    location: row.task.siteId ? { id: row.task.siteId, name: row.locationName, region: row.locationRegion, address: row.locationAddress } : null,
+    location: row.task.siteId ? {
+      id: row.task.siteId,
+      name: row.locationName,
+      nameEn: row.locationNameEn,
+      nameZh: row.locationNameZh,
+      region: row.locationRegion,
+      address: row.locationAddress,
+    } : null,
     form: { templateVersionId: row.task.templateVersionId, key: row.formKey, nameEn: row.formNameEn, nameZh: row.formNameZh, versionNumber: row.formVersionNumber },
   };
 }
@@ -85,6 +94,8 @@ function taskDescriptionQuery() {
     programNameEn: programs.nameEn,
     programNameZh: programs.nameZh,
     locationName: sites.name,
+    locationNameEn: sites.nameEn,
+    locationNameZh: sites.nameZh,
     locationRegion: sites.region,
     locationAddress: sites.address,
     formKey: templates.key,

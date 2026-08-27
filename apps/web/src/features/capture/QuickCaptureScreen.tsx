@@ -24,6 +24,7 @@ import {
 } from "@/lib/offline";
 import { DynamicFieldControl } from "@/features/forms/runtime/DynamicFieldControl";
 import { serializeFormAnswers } from "@/features/forms/runtime/serializeFormAnswers";
+import { localizedLocationName } from "@/features/locations/model";
 import {
   createCaptureSite,
   listQuickForms,
@@ -239,6 +240,7 @@ export function QuickCaptureScreen() {
     const result = await createCaptureSite({
       name: siteQuery.trim(),
       siteType,
+      locale,
       organizationId: formPackage?.template.organizationId,
     });
     if (!result.site && result.suggestions?.length) {
@@ -423,7 +425,10 @@ export function QuickCaptureScreen() {
                 {locale === "zh" ? "搜索或新建地点" : "Search or create location"}
                 <input value={siteQuery} onChange={(event) => { setSiteQuery(event.target.value); setSiteId(null); }} />
               </label>
-              {sites.length ? <div className="choice-list">{sites.map((site) => <button className={`choice${site.id === siteId ? " selected-row" : ""}`} key={site.id} onClick={() => { setSiteId(site.id); setSiteQuery(site.name); }} type="button">{site.name}</button>)}</div> : null}
+              {sites.length ? <div className="choice-list">{sites.map((site) => {
+                const siteName = localizedLocationName(site, locale);
+                return <button className={`choice${site.id === siteId ? " selected-row" : ""}`} key={site.id} onClick={() => { setSiteId(site.id); setSiteQuery(siteName); }} type="button">{siteName}</button>;
+              })}</div> : null}
               <label>
                 {locale === "zh" ? "地点类型" : "Location type"}
                 <select value={siteType} onChange={(event) => setSiteType(event.target.value)}>

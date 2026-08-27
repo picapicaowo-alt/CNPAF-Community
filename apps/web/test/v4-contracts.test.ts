@@ -9,6 +9,7 @@ import {
   draftBodySchema,
   editableReportCreateBodySchema,
   formFieldValidationError,
+  formAnswerTriggersSafetyAlert,
   formRatingValues,
   affiliationBodySchema,
   institutionCreateBodySchema,
@@ -667,17 +668,49 @@ test("permanent identity removal requires an explicit confirmation and reason", 
 test("location coordinates are paired and bounded", () => {
   assert.equal(locationCreateBodySchema.safeParse({
     organizationId: ids.organization,
-    name: "Configured location",
+    nameZh: "缺少英文名称",
+    siteType: "configured_location_type",
+  }).success, false);
+  assert.equal(locationCreateBodySchema.safeParse({
+    organizationId: ids.organization,
+    nameEn: "Configured location",
+    nameZh: "已配置地点",
     siteType: "configured_location_type",
     latitude: 34.02,
   }).success, false);
   assert.equal(locationCreateBodySchema.safeParse({
     organizationId: ids.organization,
-    name: "Configured location",
+    nameEn: "Configured location",
+    nameZh: "已配置地点",
     siteType: "configured_location_type",
     latitude: 34.02,
     longitude: -118.28,
   }).success, true);
+});
+
+test("configured danger responses trigger the safety alert exactly", () => {
+  const booleanConfiguration = {
+    safetyAlert: { enabled: true, triggerValues: [true] },
+  };
+  assert.equal(
+    formAnswerTriggersSafetyAlert(true, booleanConfiguration),
+    true,
+  );
+  assert.equal(
+    formAnswerTriggersSafetyAlert(false, booleanConfiguration),
+    false,
+  );
+  const optionConfiguration = {
+    safetyAlert: { enabled: true, triggerValues: ["urgent"] },
+  };
+  assert.equal(
+    formAnswerTriggersSafetyAlert(["routine", "urgent"], optionConfiguration),
+    true,
+  );
+  assert.equal(
+    formAnswerTriggersSafetyAlert("routine", optionConfiguration),
+    false,
+  );
 });
 
 test("source-kind behavior is validated as registry metadata", () => {

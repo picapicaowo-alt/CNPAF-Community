@@ -19,6 +19,7 @@ export function TemplateLaunchModal({
   canDelete,
   canEdit,
   choices,
+  error,
   locale,
   onAdd,
   onChoose,
@@ -34,6 +35,7 @@ export function TemplateLaunchModal({
   canDelete: boolean;
   canEdit: boolean;
   choices: TemplateChoice[];
+  error: string;
   locale: "zh" | "en";
   onAdd: () => void;
   onChoose: (choice: TemplateChoice) => void;
@@ -128,6 +130,12 @@ export function TemplateLaunchModal({
           />
         </label>
 
+        {error ? (
+          <div className="feedback feedback-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+
         {visible.length ? (
           <div className="template-choice-grid">
             {visible.map((choice) => {
@@ -173,9 +181,9 @@ export function TemplateLaunchModal({
                         ? locale === "zh" ? "已加入 Quick Add" : "In Quick Add"
                         : "Quick Add"}
                     </button>
-                    {choice.kind === "library" && (canEdit || canDelete) ? (
+                    {canEdit || canDelete ? (
                       <span className="template-choice-manage-actions">
-                        {canEdit ? (
+                        {canEdit && (choice.kind === "library" || canAdd) ? (
                           <button
                             disabled={working}
                             onClick={() => onEdit(choice)}

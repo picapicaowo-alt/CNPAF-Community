@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { BrandSlogan } from "@/components/BrandSlogan";
 import { useI18n } from "@/components/LocaleProvider";
+import { PasswordField } from "@/components/PasswordField";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
 export default function LoginPage() {
@@ -44,12 +45,18 @@ export default function LoginPage() {
           />
           <BrandSlogan
             className="auth-slogan"
-            showChinese={locale === "zh"}
+            locale={locale}
           />
-          <p>A future shaped by every community.</p>
+          <p>
+            {locale === "zh"
+              ? "每一个社区，共同塑造未来。"
+              : "A future shaped by every community."}
+          </p>
         </div>
         <span className="auth-footnote">
-          Community Needs & Programs Assessment Framework
+          {locale === "zh"
+            ? "社区需求与项目评估框架"
+            : "Community Needs & Programs Assessment Framework"}
         </span>
       </section>
       <section className="auth-form-panel">
@@ -60,11 +67,12 @@ export default function LoginPage() {
               <h1>{t.login}</h1>
             </div>
             <button
+              aria-label={locale === "zh" ? "切换至英文" : "Switch to Chinese"}
               className="button button-ghost button-small"
               onClick={() => setLocale(locale === "zh" ? "en" : "zh")}
               type="button"
             >
-              {locale === "zh" ? "EN" : "中文"}
+              {locale === "zh" ? "切换至英文" : "Switch to Chinese"}
             </button>
           </div>
           <label>
@@ -78,16 +86,13 @@ export default function LoginPage() {
               value={email}
             />
           </label>
-          <label>
-            {t.password}
-            <input
-              autoComplete="current-password"
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </label>
+          <PasswordField
+            autoComplete="current-password"
+            label={t.password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            value={password}
+          />
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "-6px" }}>
             <Link className="inline-link" href="/forgot-password">
               {locale === "zh" ? "忘记密码？" : "Forgot password?"}

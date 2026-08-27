@@ -53,6 +53,8 @@ export type QuickCapturePackage = {
 export type SiteChoice = {
   id: string;
   name: string;
+  nameEn?: string | null;
+  nameZh?: string | null;
   siteType: string;
   region?: string | null;
 };

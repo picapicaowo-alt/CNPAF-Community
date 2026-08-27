@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, ne } from "drizzle-orm";
 import {
   tasks,
+  formPresetPreferences,
   templateFieldOptions,
   templateFields,
   templateSections,
@@ -142,6 +143,149 @@ export async function listTemplates() {
     .from(templates)
     .where(ne(templates.status, "archived"))
     .orderBy(desc(templates.updatedAt));
+}
+
+function formPresetScopeKey(organizationId: string | null) {
+  return organizationId
+    ? `organization:${organizationId}`
+    : "global";
+}
+
+export async function listHiddenFormPresetKeys(
+  organizationId: string | null,
+) {
+  const rows = await db
+    .select({ presetKey: formPresetPreferences.presetKey })
+    .from(formPresetPreferences)
+    .where(
+      and(
+        eq(
+          formPresetPreferences.scopeKey,
+          formPresetScopeKey(organizationId),
+        ),
+        eq(formPresetPreferences.status, "hidden"),
+      ),
+    );
+  return rows.map((row) => row.presetKey);
+}
+
+async function hideFormPreset(
+  presetKey: string,
+  organizationId: string | null,
+  actorId: string,
+  replacementTemplateId: string | null,
+) {
+  const [preference] = await db
+    .insert(formPresetPreferences)
+    .values({
+      scopeKey: formPresetScopeKey(organizationId),
+      organizationId,
+      presetKey,
+      status: "hidden",
+      replacementTemplateId,
+      updatedById: actorId,
+    })
+    .onConflictDoUpdate({
+      target: [
+        formPresetPreferences.scopeKey,
+        formPresetPreferences.presetKey,
+      ],
+      set: {
+        organizationId,
+        status: "hidden",
+        replacementTemplateId,
+        updatedById: actorId,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  return preference;
+}
+
+async function getFormPresetPreference(
+  presetKey: string,
+  organizationId: string | null,
+) {
+  return (
+    await db
+      .select()
+      .from(formPresetPreferences)
+      .where(
+        and(
+          eq(
+            formPresetPreferences.scopeKey,
+            formPresetScopeKey(organizationId),
+          ),
+          eq(formPresetPreferences.presetKey, presetKey),
+        ),
+      )
+      .limit(1)
+  )[0];
+}
+
+export async function archiveFormPreset(
+  presetKey: string,
+  organizationId: string | null,
+  actorId: string,
+) {
+  if (!getFormPreset(presetKey)) throw new Error("Form preset not found");
+  return hideFormPreset(presetKey, organizationId, actorId, null);
+}
+
+export async function materializeFormPreset(
+  presetKey: string,
+  organizationId: string | null,
+  actorId: string,
+) {
+  const preset = getFormPreset(presetKey);
+  if (!preset) throw new Error("Form preset not found");
+  const existingPreference = await getFormPresetPreference(
+    preset.key,
+    organizationId,
+  );
+  if (existingPreference?.replacementTemplateId) {
+    const existing = await getTemplateBundle(
+      existingPreference.replacementTemplateId,
+    );
+    const existingVersion = existing?.versions[0];
+    if (existing?.template.status !== "archived" && existingVersion) {
+      return {
+        template: existing.template,
+        version: existingVersion,
+        preference: existingPreference,
+      };
+    }
+  }
+  const result = await createTemplate(
+    {
+      key: `${preset.key}-team-${Date.now().toString(36)}`,
+      templateTypeKey: preset.templateTypeKey,
+      organizationId,
+      nameEn: preset.nameEn,
+      nameZh: preset.nameZh,
+      descriptionEn: preset.descriptionEn,
+      descriptionZh: preset.descriptionZh,
+      presetKey: preset.key,
+      configuration: {
+        allowQuickCapture: false,
+        replacesPreset: true,
+        savedAsReusableTemplate: true,
+      },
+    },
+    actorId,
+  );
+  try {
+    const preference = await hideFormPreset(
+      preset.key,
+      organizationId,
+      actorId,
+      result.template.id,
+    );
+    return { ...result, preference };
+  } catch (caught) {
+    await archiveTemplate(result.template.id);
+    throw caught;
+  }
 }
 
 export async function listTemplateBundles() {

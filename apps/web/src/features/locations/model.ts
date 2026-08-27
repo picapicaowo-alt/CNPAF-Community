@@ -6,13 +6,15 @@ import type {
 } from "./types";
 
 export const EMPTY_LOCATION_DRAFT: LocationDraft = {
-  name: "",
+  nameEn: "",
+  nameZh: "",
   siteType: "",
   address: "",
   city: "",
   state: "",
   country: "",
-  alias: "",
+  aliasEn: "",
+  aliasZh: "",
 };
 
 export const EMPTY_LOCATION_TYPE_DRAFT: LocationTypeDraft = {
@@ -26,14 +28,29 @@ export const EMPTY_LOCATION_TYPE_DRAFT: LocationTypeDraft = {
 
 export function draftFromLocation(location: Location): LocationDraft {
   return {
-    name: location.name,
+    nameEn: location.nameEn ?? "",
+    nameZh: location.nameZh ?? "",
     siteType: location.siteType,
     address: location.address ?? "",
     city: location.city ?? location.region ?? "",
     state: location.state ?? "",
     country: location.country ?? "",
-    alias: "",
+    aliasEn: "",
+    aliasZh: "",
   };
+}
+
+export function localizedLocationName(
+  location: {
+    name?: string | null;
+    nameEn?: string | null;
+    nameZh?: string | null;
+  },
+  locale: "zh" | "en",
+) {
+  const localized = locale === "zh" ? location.nameZh : location.nameEn;
+  return localized?.trim() ||
+    (locale === "zh" ? "地点名称待配置" : "Location name not configured");
 }
 
 export function formattedLocationAddress(location: Location) {

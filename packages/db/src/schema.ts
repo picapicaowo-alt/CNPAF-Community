@@ -212,6 +212,8 @@ export const sites = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: uuid("organization_id").references(() => organizations.id),
     name: text("name").notNull(),
+    nameEn: text("name_en"),
+    nameZh: text("name_zh"),
     siteType: text("site_type").notNull(),
     region: text("region"),
     address: text("address"),
@@ -225,7 +227,12 @@ export const sites = pgTable(
     createdById: uuid("created_by_id").references(() => users.id),
     ...timestamps,
   },
-  (t) => [index("sites_name").on(t.name), index("sites_org").on(t.organizationId)],
+  (t) => [
+    index("sites_name").on(t.name),
+    index("sites_name_en").on(t.nameEn),
+    index("sites_name_zh").on(t.nameZh),
+    index("sites_org").on(t.organizationId),
+  ],
 );
 
 export const configRegistries = pgTable(
@@ -288,6 +295,29 @@ export const templates = pgTable(
   (t) => [
     uniqueIndex("templates_org_key").on(t.organizationId, t.key),
     index("templates_type_status").on(t.templateTypeKey, t.status),
+  ],
+);
+
+export const formPresetPreferences = pgTable(
+  "form_preset_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scopeKey: text("scope_key").notNull(),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    presetKey: text("preset_key").notNull(),
+    status: text("status").notNull().default("active"),
+    replacementTemplateId: uuid("replacement_template_id").references(
+      () => templates.id,
+    ),
+    updatedById: uuid("updated_by_id").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("form_preset_preferences_scope_preset").on(
+      t.scopeKey,
+      t.presetKey,
+    ),
+    index("form_preset_preferences_organization").on(t.organizationId),
   ],
 );
 

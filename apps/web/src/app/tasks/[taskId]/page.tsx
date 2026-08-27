@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
+import { localizedLocationName } from "@/features/locations/model";
 import {
   ErrorState,
   LoadingState,
@@ -113,7 +114,7 @@ export default function TaskDetailPage() {
   return (
     <div className="stack">
       <PageHeader
-        title={task.location?.name ?? task.title}
+        title={task.location ? localizedLocationName(task.location, locale) : task.title}
         description={task.title}
         actions={
           <StatusPill tone={taskTone(myAssignment?.status ?? task.status)}>
@@ -153,7 +154,7 @@ export default function TaskDetailPage() {
               </div>
               <strong>
                 {task.location?.address ??
-                  task.location?.name ??
+                  (task.location ? localizedLocationName(task.location, locale) : null) ??
                   (locale === "zh" ? "未指定" : "Not specified")}
               </strong>
             </div>

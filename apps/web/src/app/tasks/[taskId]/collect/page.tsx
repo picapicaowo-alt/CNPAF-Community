@@ -29,6 +29,7 @@ import {
 } from "@/lib/offline";
 import type { TaskAssignment, TaskSummary } from "@/lib/task-ui";
 import { DynamicFieldControl } from "@/features/forms/runtime/DynamicFieldControl";
+import { localizedLocationName } from "@/features/locations/model";
 import { serializeFormAnswers } from "@/features/forms/runtime/serializeFormAnswers";
 import { AttachmentPicker } from "@/features/attachments/components/AttachmentPicker";
 
@@ -668,7 +669,9 @@ export default function GuidedCollectionPage() {
             </div>
             <div className="card stack-sm">
               <h2>
-                {taskPackage.task.location?.name ?? taskPackage.task.title}
+                {taskPackage.task.location
+                  ? localizedLocationName(taskPackage.task.location, locale)
+                  : taskPackage.task.title}
               </h2>
               <p className="muted">{title}</p>
               <div className="row">

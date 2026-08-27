@@ -20,6 +20,29 @@ test("protected route changes keep the authenticated shell warm", () => {
   assert.doesNotMatch(chrome, /\[pathname, publicPage\]/);
 });
 
+test("public and configurable surfaces keep each interface language pure", () => {
+  const login = readFileSync(path.join(appRoot, "login/page.tsx"), "utf8");
+  const loading = readFileSync(path.join(appRoot, "loading.tsx"), "utf8");
+  const privacy = readFileSync(path.join(appRoot, "privacy/page.tsx"), "utf8");
+  const locationForm = readFileSync(
+    path.resolve(process.cwd(), "src/features/locations/components/LocationForm.tsx"),
+    "utf8",
+  );
+  const safetyControl = readFileSync(
+    path.resolve(process.cwd(), "src/features/forms/runtime/DynamicFieldControl.tsx"),
+    "utf8",
+  );
+
+  assert.doesNotMatch(login, /<p>A future shaped by every community\.<\/p>/);
+  assert.doesNotMatch(loading, /正在打开页面 \/ Opening page/);
+  assert.doesNotMatch(privacy, /Privacy Policy 隐私政策/);
+  assert.match(locationForm, /draft\.nameZh/);
+  assert.match(locationForm, /draft\.nameEn/);
+  assert.match(safetyControl, /role="alertdialog"/);
+  assert.match(safetyControl, /我知道了/);
+  assert.match(safetyControl, /I Understand/);
+});
+
 test("authentication reads are coalesced and briefly reused", async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
@@ -76,6 +99,28 @@ test("API reads are coalesced and mutations invalidate their short cache", async
     invalidateApiReadCache();
     globalThis.fetch = originalFetch;
   }
+});
+
+test("built-in form presets expose persistent edit and delete actions", () => {
+  const page = readFileSync(path.join(appRoot, "forms/page.tsx"), "utf8");
+  const launcher = readFileSync(
+    path.resolve(
+      process.cwd(),
+      "src/features/forms/components/TemplateLaunchModal.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(page, /hiddenPresetKeys/);
+  assert.match(page, /\/api\/v1\/form-presets\/\$\{encodeURIComponent/);
+  assert.match(page, /method: "POST"/);
+  assert.match(page, /method: "DELETE"/);
+  assert.doesNotMatch(
+    launcher,
+    /choice\.kind === "library" && \(canEdit \|\| canDelete\)/,
+  );
+  assert.match(launcher, /onEdit\(choice\)/);
+  assert.match(launcher, /onDelete\(choice\)/);
 });
 
 test("route navigation avoids overlapping page snapshots", () => {

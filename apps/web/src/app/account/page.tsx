@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
+import { PasswordField } from "@/components/PasswordField";
 import { ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
@@ -267,40 +268,31 @@ export default function AccountPage() {
             </span>
           </div>
           <form className="stack-sm" onSubmit={changePassword}>
-            <label>
-              {locale === "zh" ? "当前密码" : "Current password"}
-              <input
-                autoComplete="current-password"
-                minLength={8}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                required
-                type="password"
-                value={currentPassword}
-              />
-            </label>
+            <PasswordField
+              autoComplete="current-password"
+              label={locale === "zh" ? "当前密码" : "Current password"}
+              minLength={8}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              required
+              value={currentPassword}
+            />
             <div className="form-grid">
-              <label>
-                {locale === "zh" ? "新密码" : "New password"}
-                <input
-                  autoComplete="new-password"
-                  minLength={12}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={newPassword}
-                />
-              </label>
-              <label>
-                {locale === "zh" ? "确认新密码" : "Confirm new password"}
-                <input
-                  autoComplete="new-password"
-                  minLength={12}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={confirmPassword}
-                />
-              </label>
+              <PasswordField
+                autoComplete="new-password"
+                label={locale === "zh" ? "新密码" : "New password"}
+                minLength={12}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+                value={newPassword}
+              />
+              <PasswordField
+                autoComplete="new-password"
+                label={locale === "zh" ? "确认新密码" : "Confirm new password"}
+                minLength={12}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
+                value={confirmPassword}
+              />
             </div>
             <span className="caption">
               {locale === "zh"

@@ -2494,6 +2494,36 @@ input[type="radio"] {
   background: var(--surface);
   box-shadow: 0 28px 80px rgba(5, 24, 44, 0.28);
 }
+.safety-alert-backdrop {
+  z-index: 140;
+}
+.safety-alert-dialog {
+  display: grid;
+  width: min(520px, 100%);
+  gap: 18px;
+  padding: clamp(22px, 5vw, 32px);
+  border-color: color-mix(in srgb, var(--red) 36%, var(--line));
+}
+.safety-alert-dialog h2,
+.safety-alert-dialog p {
+  margin: 0;
+}
+.safety-alert-dialog p {
+  color: var(--muted-strong);
+  line-height: 1.7;
+}
+.safety-alert-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--red);
+  background: var(--surface-red);
+}
+.safety-alert-action {
+  min-height: 46px;
+}
 .location-modal {
   display: grid;
   gap: 18px;
@@ -3463,6 +3493,22 @@ input[type="radio"] {
 .builder-choice-grid .choice {
   min-height: 40px !important;
   padding-block: 8px !important;
+}
+.builder-safety-setting {
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 28%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-red) 55%, var(--surface));
+}
+.builder-safety-setting > .choice,
+.builder-safety-options .choice {
+  min-height: 40px !important;
+}
+.builder-safety-setting .caption {
+  margin: 0;
+}
+.builder-safety-options {
+  margin: 0;
 }
 .builder-settings-group {
   padding: 14px;
@@ -5452,6 +5498,10 @@ input[type="radio"] {
 .template-choice-actions button.active {
   background: var(--surface-blue);
   color: var(--blue);
+}
+.template-choice-actions button:disabled {
+  cursor: wait;
+  opacity: 0.52;
 }
 .template-choice-actions button.danger:hover {
   background: var(--surface-red);

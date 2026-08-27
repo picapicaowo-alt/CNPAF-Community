@@ -53,6 +53,7 @@ export default function FormsPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [hiddenPresetKeys, setHiddenPresetKeys] = useState<string[]>([]);
   const [workingId, setWorkingId] = useState("");
   const [showTemplateLauncher, setShowTemplateLauncher] = useState(false);
   const [quickIds, setQuickIds] = useState<string[]>(
@@ -68,10 +69,13 @@ export default function FormsPage() {
     try {
       const [me, list] = await Promise.all([
         apiFetch<{ permissions: string[] }>("/api/v1/auth/me"),
-        apiFetch<{ templates: FormCard[] }>("/api/v1/templates?view=cards"),
+        apiFetch<{ templates: FormCard[]; hiddenPresetKeys?: string[] }>(
+          "/api/v1/templates?view=cards",
+        ),
       ]);
       setPermissions(me.permissions ?? []);
       setForms(list.templates ?? []);
+      setHiddenPresetKeys(list.hiddenPresetKeys ?? []);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -132,7 +136,9 @@ export default function FormsPage() {
   );
 
   const templateChoices = useMemo<TemplateChoice[]>(() => {
-    const presetChoices: TemplateChoice[] = FORM_PRESETS.map((preset) => ({
+    const presetChoices: TemplateChoice[] = FORM_PRESETS.filter(
+      (preset) => !hiddenPresetKeys.includes(preset.key),
+    ).map((preset) => ({
       id: `preset:${preset.key}`,
       kind: "preset",
       sourceId: preset.key,
@@ -158,7 +164,7 @@ export default function FormsPage() {
       }];
     });
     return [...libraryChoices, ...presetChoices];
-  }, [locale, reusableForms]);
+  }, [hiddenPresetKeys, locale, reusableForms]);
 
   const quickChoices = useMemo(
     () =>
@@ -221,7 +227,34 @@ export default function FormsPage() {
     );
   }
 
-  async function deleteReusableTemplate(choice: TemplateChoice) {
+  async function deleteTemplateChoice(choice: TemplateChoice) {
+    if (choice.kind === "preset") {
+      if (
+        !window.confirm(
+          locale === "zh"
+            ? `删除业务模板“${choice.title}”？它会从团队的新建入口移除，已创建的表单和历史记录不受影响。`
+            : `Delete the workflow template “${choice.title}”? It will be removed from the team's new-form launcher without affecting existing forms or records.`,
+        )
+      )
+        return;
+      setWorkingId(choice.sourceId);
+      setError("");
+      try {
+        await apiFetch(
+          `/api/v1/form-presets/${encodeURIComponent(choice.sourceId)}`,
+          { method: "DELETE" },
+        );
+        setHiddenPresetKeys((current) => [
+          ...new Set([...current, choice.sourceId]),
+        ]);
+        setQuickIds((current) => current.filter((id) => id !== choice.id));
+      } catch (caught) {
+        setError(errorMessage(caught));
+      } finally {
+        setWorkingId("");
+      }
+      return;
+    }
     const card = reusableForms.find(
       (item) => item.template.id === choice.sourceId,
     );
@@ -236,7 +269,23 @@ export default function FormsPage() {
     router.push("/forms/new?purpose=template");
   }
 
-  function editReusableTemplate(choice: TemplateChoice) {
+  async function editTemplateChoice(choice: TemplateChoice) {
+    if (choice.kind === "preset") {
+      setWorkingId(choice.sourceId);
+      setError("");
+      try {
+        const result = await apiFetch<{ template: { id: string } }>(
+          `/api/v1/form-presets/${encodeURIComponent(choice.sourceId)}`,
+          { method: "POST" },
+        );
+        setShowTemplateLauncher(false);
+        router.push(`/forms/${result.template.id}`);
+      } catch (caught) {
+        setError(errorMessage(caught));
+        setWorkingId("");
+      }
+      return;
+    }
     const card = reusableForms.find(
       (item) => item.template.id === choice.sourceId,
     );
@@ -639,12 +688,13 @@ export default function FormsPage() {
           canDelete={canArchive}
           canEdit={canEdit}
           choices={templateChoices}
+          error={error}
           locale={locale}
           onAdd={addReusableTemplate}
           onChoose={chooseTemplate}
           onClose={() => setShowTemplateLauncher(false)}
-          onDelete={deleteReusableTemplate}
-          onEdit={editReusableTemplate}
+          onDelete={(choice) => void deleteTemplateChoice(choice)}
+          onEdit={(choice) => void editTemplateChoice(choice)}
           onStartBlank={() => router.push("/forms/new?blank=1")}
           onToggleQuick={toggleQuick}
           quickIds={quickIds}

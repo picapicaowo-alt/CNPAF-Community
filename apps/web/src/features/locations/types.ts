@@ -8,6 +8,8 @@ export type Location = {
   id: string;
   organizationId?: string | null;
   name: string;
+  nameEn?: string | null;
+  nameZh?: string | null;
   siteType: string;
   region?: string | null;
   address?: string | null;
@@ -43,11 +45,13 @@ export type LocationTypeDraft = {
 };
 
 export type LocationDraft = {
-  name: string;
+  nameEn: string;
+  nameZh: string;
   siteType: string;
   address: string;
   city: string;
   state: string;
   country: string;
-  alias: string;
+  aliasEn: string;
+  aliasZh: string;
 };

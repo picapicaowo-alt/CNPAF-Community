@@ -98,6 +98,36 @@ export type RuntimeRegistryItem = {
   metadata?: Record<string, unknown>;
 };
 
+export type FormSafetyAlertConfiguration = {
+  enabled: true;
+  triggerValues: Array<string | number | boolean>;
+};
+
+export function formSafetyAlertConfiguration(
+  configuration?: Record<string, unknown>,
+): FormSafetyAlertConfiguration | null {
+  const candidate = configuration?.safetyAlert;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate))
+    return null;
+  const value = candidate as { enabled?: unknown; triggerValues?: unknown };
+  if (value.enabled !== true || !Array.isArray(value.triggerValues)) return null;
+  const triggerValues = value.triggerValues.filter(
+    (entry): entry is string | number | boolean =>
+      ["string", "number", "boolean"].includes(typeof entry),
+  );
+  return triggerValues.length ? { enabled: true, triggerValues } : null;
+}
+
+export function formAnswerTriggersSafetyAlert(
+  value: FormScalarAnswer | undefined,
+  configuration?: Record<string, unknown>,
+) {
+  const alert = formSafetyAlertConfiguration(configuration);
+  if (!alert || value === undefined) return false;
+  const values = Array.isArray(value) ? value : [value];
+  return values.some((entry) => alert.triggerValues.includes(entry));
+}
+
 const CONTROL_KINDS = new Set<FormControlKind>([
   "text",
   "textarea",
