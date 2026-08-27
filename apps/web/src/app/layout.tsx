@@ -62,12 +62,13 @@ export default async function RootLayout({
   const initialLocale = cookieLocale === "en" ? "en" : "zh";
   return (
     <html
+      className={cnpafSans.variable}
       data-insight-refresh-ms={liveRefreshMs}
       data-scroll-behavior="smooth"
       lang={initialLocale}
       suppressHydrationWarning
     >
-      <body className={cnpafSans.variable}>
+      <body>
         <template
           data-impeccable-contract="43c0ea9d"
           dangerouslySetInnerHTML={{ __html: directionContract }}

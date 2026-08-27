@@ -254,6 +254,7 @@ test("review field-selection guidance stays compact and left aligned", () => {
 test("site typography uses one readable semantic scale", () => {
   const globals = readFileSync(path.join(appRoot, "globals.css"), "utf8");
   const adaptive = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
+  const layout = readFileSync(path.join(appRoot, "layout.tsx"), "utf8");
   const styles = `${globals}\n${adaptive}`;
   const subTwelvePixelText = [...styles.matchAll(/font-size:\s*([0-9]+(?:\.[0-9]+)?)px/g)]
     .map((match) => Number(match[1]))
@@ -265,6 +266,8 @@ test("site typography uses one readable semantic scale", () => {
   assert.match(adaptive, /--type-ui: 14px;/);
   assert.match(adaptive, /--type-caption: 13px;/);
   assert.match(adaptive, /--type-meta: 12px;/);
+  assert.match(layout, /<html[\s\S]*?className=\{cnpafSans\.variable\}/);
+  assert.doesNotMatch(layout, /<body\s+className=\{cnpafSans\.variable\}/);
   assert.match(globals, /\.task-form-link-selection span\s*\{[\s\S]*?font-size: var\(--type-meta/);
   assert.match(globals, /\.task-form-link-selection strong\s*\{[\s\S]*?font-size: var\(--type-ui/);
   assert.match(globals, /\.task-form-link-flow\s*\{[\s\S]*?font-size: var\(--type-caption/);
