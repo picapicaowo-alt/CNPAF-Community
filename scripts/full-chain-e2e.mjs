@@ -363,7 +363,7 @@ for (const [index, plan] of taskPlans.entries()) {
       taskTypeKey: "data_collection",
       title: `${plan.location.name} — ${runKey}`,
       instructions: "Collect de-identified operational observations and submit for human review.",
-      priority: 10 - index,
+      priority: ["high", "medium", "low"][index],
       opensAt: new Date(now - 5 * 60_000).toISOString(),
       dueAt: new Date(now + 24 * 60 * 60_000).toISOString(),
       closesAt: new Date(now + 7 * 24 * 60 * 60_000).toISOString(),

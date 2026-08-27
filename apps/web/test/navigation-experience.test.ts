@@ -157,6 +157,14 @@ test("task priority uses optional configured choices instead of a numeric steppe
     path.resolve(process.cwd(), "src/features/configuration/types.ts"),
     "utf8",
   );
+  const configurationScreen = readFileSync(
+    path.resolve(
+      process.cwd(),
+      "src/features/configuration/components/ConfigurationScreen.tsx",
+    ),
+    "utf8",
+  );
+  const styles = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");
 
   for (const source of [createTask, taskManager]) {
     assert.match(source, /config\/registries\/priority_level\?status=active/);
@@ -165,6 +173,12 @@ test("task priority uses optional configured choices instead of a numeric steppe
     assert.doesNotMatch(source, /setPriority\(Number\(/);
   }
   assert.match(configuration, /key: "priority_level"/);
+  assert.match(configurationScreen, /configuration-data-table/);
+  assert.match(configurationScreen, /data-label=/);
+  assert.match(
+    styles,
+    /\.configuration-data-table td\s*\{[\s\S]*?grid-template-columns:[\s\S]*?minmax\(0, 1fr\)/,
+  );
 });
 
 test("administrators can assign any role and scope from person management", () => {
