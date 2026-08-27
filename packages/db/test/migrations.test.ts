@@ -151,6 +151,18 @@ test("legacy data migrates and immutable/versioning constraints are enforced", a
       SELECT to_regclass('form_preset_preferences') IS NOT NULL AS exists
     `);
     assert.equal(formPresetPreferenceTable.rows[0]?.exists, true);
+    const aiConversationArtifactTables = await db.query<{
+      artifact_table: boolean;
+      version_table: boolean;
+    }>(`
+      SELECT
+        to_regclass('ai_conversation_artifacts') IS NOT NULL AS artifact_table,
+        to_regclass('ai_conversation_artifact_versions') IS NOT NULL AS version_table
+    `);
+    assert.deepEqual(aiConversationArtifactTables.rows[0], {
+      artifact_table: true,
+      version_table: true,
+    });
     const priorityLevels = await db.query<{
       key: string;
       label_en: string;

@@ -6107,6 +6107,17 @@ input[type="radio"] {
   color: var(--muted);
   font-size: var(--type-meta);
 }
+.ai-copilot-heading-copy {
+  min-width: 0;
+  flex: 1;
+}
+.ai-snapshot-save {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.ai-snapshot-feedback {
+  margin: 12px 18px 0;
+}
 .insight-ai-body {
   min-height: 160px;
   max-height: 430px;
@@ -6150,6 +6161,72 @@ input[type="radio"] {
 .insight-ai-compose {
   padding: 12px 14px;
   border-top: 1px solid var(--line);
+}
+
+.ai-conversation-artifacts {
+  gap: 14px;
+}
+.ai-conversation-artifacts .card-section-heading > div {
+  min-width: 0;
+}
+.ai-conversation-artifacts .card-section-heading p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--type-meta);
+  font-weight: 500;
+}
+.ai-artifact-list {
+  display: grid;
+  gap: 10px;
+}
+.ai-artifact-item {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+.ai-artifact-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+}
+.ai-artifact-file-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--surface-blue);
+  color: var(--blue);
+}
+.ai-artifact-main strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--type-ui);
+}
+.ai-artifact-main p,
+.ai-artifact-main small {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--type-meta);
+  line-height: 1.5;
+}
+.ai-artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.ai-artifact-title-field,
+.ai-artifact-archive-form {
+  display: grid;
+  gap: 8px;
+}
+.ai-artifact-title-field > span {
+  font-size: var(--type-meta);
 }
 
 .ai-prompt-composer {
@@ -7045,6 +7122,25 @@ input[type="radio"] {
 }
 
 @media (max-width: 680px) {
+  .insight-ai-heading {
+    flex-wrap: wrap;
+  }
+  .ai-snapshot-save {
+    width: 100%;
+  }
+  .ai-snapshot-feedback {
+    margin-inline: 14px;
+  }
+  .ai-artifact-actions,
+  .ai-artifact-actions .button,
+  .ai-artifact-archive-form .row,
+  .ai-artifact-archive-form .button {
+    width: 100%;
+  }
+  .ai-artifact-actions .button,
+  .ai-artifact-archive-form .button {
+    justify-content: center;
+  }
   .context-back-control {
     margin-bottom: 6px;
   }
