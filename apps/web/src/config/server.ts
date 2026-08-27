@@ -150,7 +150,14 @@ function gmailServiceAccountCredentials() {
     }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(readFileSync(path.resolve(credentialsFile), "utf8"));
+      parsed = JSON.parse(
+        readFileSync(
+          /* turbopackIgnore: true */ path.resolve(
+            /* turbopackIgnore: true */ credentialsFile,
+          ),
+          "utf8",
+        ),
+      );
     } catch {
       throw new Error("GMAIL_SERVICE_ACCOUNT_CREDENTIALS_FILE must contain readable JSON credentials");
     }
