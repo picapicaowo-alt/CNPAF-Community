@@ -171,7 +171,7 @@ Quick capture uses `GET /quick-capture/forms` and `GET /quick-capture/forms/:ver
 | POST | `/records` | `records.create` | draft upsert; `draftBodySchema` |
 | PUT | `/records` | `records.submit` | immutable snapshot; `submitBodySchema` |
 | GET | `/records/:id` | scoped record permission | approved-evidence mode never returns raw versions or attachments |
-| POST | `/records/:id/attachments` | scoped `records.edit_own` | draft versions only; bounded image/audio/video/document upload with normalized media kind |
+| POST | `/records/:id/attachments` | scoped `records.edit_own` | draft versions only; bounded image/audio/video/document upload with normalized media kind; documents include PDF, text, CSV, Word, Excel, and PowerPoint (`.ppt`/`.pptx`) |
 | GET | `/records/:id/attachments/:attachmentId` | scoped record permission | private inline media response for the current Record Version |
 | POST | `/records/:id/review-decisions` | scoped `records.review` | `reviewBodySchema` |
 | GET | `/review/inbox` | scoped `review.view` plus item capability | unified summaries; privacy-gated records only |

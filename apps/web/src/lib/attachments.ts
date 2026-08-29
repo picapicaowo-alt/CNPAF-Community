@@ -2,31 +2,24 @@ import {
   attachmentKindForMime,
   attachmentOriginalName,
   aiFileMimeTypes,
+  documentAttachmentTypes,
   normalizeAttachmentKind,
   type AttachmentSummary,
 } from "@cnpaf/shared";
 import { attachments } from "@cnpaf/db/schema";
 
-const documentMimeTypes = new Set([
-  "application/msword",
-  "application/pdf",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/csv",
-  "text/plain",
-  "text/markdown",
-]);
+const documentMimeTypes = new Set<string>(
+  documentAttachmentTypes.map(({ mimeType }) => mimeType),
+);
 
-const mimeByExtension: Record<string, string> = {
-  csv: "text/csv",
-  doc: "application/msword",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  pdf: "application/pdf",
-  txt: "text/plain",
-  xls: "application/vnd.ms-excel",
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-};
+const mimeByExtension = Object.fromEntries(
+  documentAttachmentTypes.map(({ extension, mimeType }) => [extension, mimeType]),
+) as Record<string, string>;
+
+const genericUploadMimeTypes = new Set([
+  "application/octet-stream",
+  "application/zip",
+]);
 
 export const attachmentLimits = {
   image: 25 * 1024 * 1024,
@@ -36,9 +29,13 @@ export const attachmentLimits = {
 } as const;
 
 export function uploadMimeType(file: File) {
-  if (file.type) return file.type.toLowerCase();
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
-  return mimeByExtension[extension] ?? "application/octet-stream";
+  const declaredMimeType = file.type.toLowerCase();
+  const extensionMimeType = mimeByExtension[extension];
+  if (extensionMimeType && (!declaredMimeType || genericUploadMimeTypes.has(declaredMimeType))) {
+    return extensionMimeType;
+  }
+  return declaredMimeType || extensionMimeType || "application/octet-stream";
 }
 
 export function attachmentUploadError(file: File, mimeType: string) {

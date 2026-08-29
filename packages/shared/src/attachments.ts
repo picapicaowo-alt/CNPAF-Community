@@ -38,6 +38,32 @@ export const aiFileMimeTypes = new Set([
   "text/plain",
 ]);
 
+export const documentAttachmentTypes = [
+  { extension: "pdf", mimeType: "application/pdf" },
+  { extension: "txt", mimeType: "text/plain" },
+  { extension: "md", mimeType: "text/markdown" },
+  { extension: "csv", mimeType: "text/csv" },
+  { extension: "doc", mimeType: "application/msword" },
+  {
+    extension: "docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  },
+  { extension: "xls", mimeType: "application/vnd.ms-excel" },
+  {
+    extension: "xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  },
+  { extension: "ppt", mimeType: "application/vnd.ms-powerpoint" },
+  {
+    extension: "pptx",
+    mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  },
+] as const;
+
+export const documentAttachmentAccept = documentAttachmentTypes
+  .map(({ extension }) => `.${extension}`)
+  .join(",");
+
 export function attachmentKindForMime(mimeType: string): AttachmentKind {
   const normalized = mimeType.toLowerCase();
   if (normalized.startsWith("image/")) return "image";

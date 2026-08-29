@@ -38,3 +38,22 @@ test("attachment upload policy accepts supported media and rejects executable fi
     "Unsupported attachment type",
   );
 });
+
+test("attachment upload policy accepts PowerPoint files across browser MIME variants", () => {
+  const presentation = new File([new Uint8Array([1, 2, 3])], "briefing.pptx", {
+    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  });
+  assert.equal(attachmentUploadError(presentation, uploadMimeType(presentation)), null);
+
+  const genericPresentation = new File([new Uint8Array([1, 2, 3])], "briefing.pptx", {
+    type: "application/octet-stream",
+  });
+  assert.equal(
+    uploadMimeType(genericPresentation),
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  );
+  assert.equal(
+    attachmentUploadError(genericPresentation, uploadMimeType(genericPresentation)),
+    null,
+  );
+});
