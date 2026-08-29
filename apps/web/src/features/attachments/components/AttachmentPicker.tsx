@@ -1,6 +1,10 @@
 "use client";
 
-import { attachmentKindForMime, formatAttachmentBytes } from "@cnpaf/shared";
+import {
+  attachmentKindForMime,
+  documentAttachmentAccept,
+  formatAttachmentBytes,
+} from "@cnpaf/shared";
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
 
 const choices: Array<{
@@ -13,7 +17,6 @@ const choices: Array<{
 }> = [
   {
     accept: "image/*",
-    capture: "environment",
     icon: "image",
     kind: "image",
     labelEn: "Photo or image",
@@ -36,7 +39,7 @@ const choices: Array<{
     labelZh: "拍摄或添加视频",
   },
   {
-    accept: ".pdf,.txt,.csv,.doc,.docx,.xls,.xlsx",
+    accept: documentAttachmentAccept,
     icon: "file",
     kind: "document",
     labelEn: "Document or file",
