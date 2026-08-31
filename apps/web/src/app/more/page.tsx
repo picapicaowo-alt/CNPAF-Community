@@ -76,8 +76,8 @@ const modules: Module[] = [
     icon: "insights",
     en: "Analytics detail",
     zh: "分析详情",
-    detailEn: "Source-separated operational metrics",
-    detailZh: "按来源分开的运营指标",
+    detailEn: "Data health, coverage, and source-separated quality metrics",
+    detailZh: "数据健康、覆盖与按来源分开的采集质量",
     permissions: ["analytics.view", "insights.view"],
   },
   {

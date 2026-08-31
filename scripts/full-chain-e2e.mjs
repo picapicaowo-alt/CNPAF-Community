@@ -369,6 +369,7 @@ const programResult = await admin.request("/api/v1/programs", {
     configuration: {
       universityLocationId: locations[0].id,
       stakeholderModel: "CNPAF + university + ADHC",
+      collectionPurpose: "system_validation",
     },
   },
 });
@@ -533,7 +534,8 @@ for (const submission of submissions) {
   });
 }
 
-const analytics = await ops.request("/api/v1/analytics");
+const analytics = await ops.request("/api/v1/analytics?includeSystemValidation=1");
+const operationalAnalytics = await ops.request("/api/v1/analytics");
 const e2eRecordIds = new Set(submissions.map((submission) => submission.record.id));
 const reviewedRecords = await ops.request("/api/v1/records");
 const approvedE2eRecords = reviewedRecords.records.filter((record) =>
@@ -548,9 +550,15 @@ assert.ok(
   ),
 );
 assert.ok(analytics.authorizedRecordCount >= submissions.length);
+assert.ok(
+  operationalAnalytics.excludedValidationRecordCount >= submissions.length,
+  "System-validation records must be disclosed but excluded from normal analytics",
+);
 
 const researchLead = await ApiSession.login("research@cnpaf.local");
-const researchAnalytics = await researchLead.request("/api/v1/analytics");
+const researchAnalytics = await researchLead.request(
+  "/api/v1/analytics?includeSystemValidation=1",
+);
 assert.ok(researchAnalytics.authorizedRecordCount >= submissions.length);
 
 const stakeholder = await ApiSession.login("stakeholder@cnpaf.local");

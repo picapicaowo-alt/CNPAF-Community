@@ -17,6 +17,10 @@ import {
 } from "@/features/records/StructuredEvidencePanel";
 import type { RecordFieldAnswer } from "@/features/records/types";
 import { recordCitationLabel } from "@/features/records/display";
+import {
+  AiSuggestionsPanel,
+  type ReviewAiSuggestion,
+} from "@/features/review/AiSuggestionsPanel";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import {
   reviewItemLabel,
@@ -40,6 +44,7 @@ type ReviewItem = {
     recordVersion?: Record<string, unknown>;
     finding?: Record<string, unknown>;
     fieldAnswers?: RecordFieldAnswer[];
+    aiFindings?: ReviewAiSuggestion[];
   };
 };
 
@@ -51,6 +56,7 @@ export default function ReviewDetailPage() {
   const [notes, setNotes] = useState("");
   const [editedText, setEditedText] = useState("");
   const [correctionFieldIds, setCorrectionFieldIds] = useState<string[]>([]);
+  const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
@@ -59,7 +65,12 @@ export default function ReviewDetailPage() {
       const result = await apiFetch<{ item: ReviewItem }>(
         `/api/v1/review/items/${params.id}`,
       );
+      if (result.item.itemType === "ai_finding") {
+        router.replace(`/review/${result.item.recordId}`);
+        return;
+      }
       setItem(result.item);
+      setSelectedFindingIds([]);
       const versionText = result.item.detail.recordVersion?.qualitative;
       const findingText = result.item.detail.finding?.statement;
       setEditedText(
@@ -72,7 +83,7 @@ export default function ReviewDetailPage() {
     } catch (caught) {
       setError(errorMessage(caught));
     }
-  }, [params.id]);
+  }, [params.id, router]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -107,7 +118,15 @@ export default function ReviewDetailPage() {
           annotation: notes || undefined,
           correctionFieldIds:
             action === "needs_completion" ? correctionFieldIds : [],
-          findings: [],
+          findings:
+            action === "approve"
+              ? (item.detail.aiFindings ?? []).map((finding) => ({
+                  findingId: finding.id,
+                  decision: selectedFindingIds.includes(finding.id)
+                    ? "approve"
+                    : "reject",
+                }))
+              : [],
         },
       };
     else if (item.itemType === "privacy_flag")
@@ -175,7 +194,8 @@ export default function ReviewDetailPage() {
           ? ["resolved", "escalated", "dismissed"]
           : item.itemType === "ai_finding"
             ? ["approve", "edit", "dismiss", "re_run_requested"]
-            : ["keep_free_text", "dismissed"];
+              : ["keep_free_text", "dismissed"];
+  const canDecide = item.itemType !== "record" || item.status === "pending";
 
   return (
     <div className="stack">
@@ -183,14 +203,29 @@ export default function ReviewDetailPage() {
         eyebrow={recordLabel}
         title={reviewItemSummary(item, locale)}
         description={
-          locale === "zh"
-            ? "先查看证据，再作出人工决定。"
-            : "Review the evidence before making a human decision."
+          canDecide
+            ? locale === "zh"
+              ? "先查看证据，再作出人工决定。"
+              : "Review the evidence before making a human decision."
+            : locale === "zh"
+              ? "这是已完成的审核记录，保留在审核历史中供追溯。"
+              : "This completed review remains available as an auditable history record."
         }
         actions={
           <>
             <StatusPill tone={item.priority >= 90 ? "red" : "blue"}>
               {reviewItemLabel(item.itemType, locale)}
+            </StatusPill>
+            <StatusPill
+              tone={
+                item.status === "approved"
+                  ? "green"
+                  : item.status === "needs_completion"
+                    ? "red"
+                    : "amber"
+              }
+            >
+              {workflowLabel(item.status, locale)}
             </StatusPill>
             <Link className="button button-secondary" href={`/records/${item.recordId}`}>
               {locale === "zh" ? "打开原记录" : "Open record"}
@@ -199,7 +234,7 @@ export default function ReviewDetailPage() {
         }
       />
       {error ? <ErrorState message={error} /> : null}
-      <div className="content-aside">
+      <div className={canDecide ? "content-aside" : "stack"}>
         <div className="stack">
           <div className="card stack-sm">
             <div className="row">
@@ -243,6 +278,20 @@ export default function ReviewDetailPage() {
             }
             title={locale === "zh" ? "提交的表单回答" : "Submitted form answers"}
           />
+          {item.itemType === "record" && canDecide ? (
+            <AiSuggestionsPanel
+              findings={item.detail.aiFindings ?? []}
+              locale={locale}
+              onSelectionChange={(findingId, selected) =>
+                setSelectedFindingIds((current) =>
+                  selected
+                    ? [...new Set([...current, findingId])]
+                    : current.filter((id) => id !== findingId),
+                )
+              }
+              selectedFindingIds={selectedFindingIds}
+            />
+          ) : null}
           <StructuredEvidencePanel
             locale={locale}
             value={
@@ -268,7 +317,7 @@ export default function ReviewDetailPage() {
             </label>
           ) : null}
         </div>
-        <aside className="card stack-sm">
+        {canDecide ? <aside className="card stack-sm">
           <h2>{locale === "zh" ? "作出决定" : "Make a decision"}</h2>
           <label>
             {locale === "zh" ? "审核备注" : "Reviewer notes"}
@@ -306,10 +355,16 @@ export default function ReviewDetailPage() {
               onClick={() => decide(action)}
               type="button"
             >
-              {workflowLabel(action, locale)}
+              {item.itemType === "record" &&
+              action === "approve" &&
+              selectedFindingIds.length
+                ? locale === "zh"
+                  ? `批准并提交 ${selectedFindingIds.length} 条 AI 建议`
+                  : `Approve with ${selectedFindingIds.length} AI suggestions`
+                : workflowLabel(action, locale)}
             </button>
           ))}
-        </aside>
+        </aside> : null}
       </div>
     </div>
   );

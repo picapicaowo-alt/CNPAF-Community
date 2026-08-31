@@ -31,6 +31,7 @@ type InsightRecord = {
   sourceKind: string;
   reviewStatus: string;
   researchUseStatus: string;
+  collectionPurpose: string;
   concernCount: number;
   occurredAt?: string | null;
   updatedAt: string;
@@ -41,6 +42,12 @@ type InsightLocation = {
   nameEn?: string | null;
   nameZh?: string | null;
 };
+
+function operationalRecords(records: InsightRecord[]) {
+  return records.filter(
+    (record) => record.collectionPurpose !== "system_validation",
+  );
+}
 
 const categoryCopy: Record<
   Category,
@@ -136,7 +143,7 @@ export default function InsightCategoryPage() {
         apiFetch<{ locations: InsightLocation[] }>("/api/v1/locations"),
       ]);
       setPermissions(me.permissions ?? []);
-      setRecords(result.records ?? []);
+      setRecords(operationalRecords(result.records ?? []));
       setLocations(locationResult.locations ?? []);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -156,7 +163,7 @@ export default function InsightCategoryPage() {
         `/api/v1/records?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`,
         { cache: "no-store" },
       );
-      setRecords(result.records ?? []);
+      setRecords(operationalRecords(result.records ?? []));
       setError("");
     } catch (caught) {
       setError(errorMessage(caught));
@@ -469,7 +476,7 @@ export default function InsightCategoryPage() {
         <EmptyState
           title={locale === "zh" ? "当前范围没有记录" : "No records in this scope"}
           description={locale === "zh" ? "调整日期范围，或返回记录页查看现有证据。" : "Adjust the date range or return to Records to inspect existing evidence."}
-          action={<Link className="button button-secondary" href="/records">{locale === "zh" ? "查看记录" : "View records"}</Link>}
+          action={<Link className="button button-secondary" href="/records?scope=operational">{locale === "zh" ? "查看记录" : "View records"}</Link>}
         />
       )}
     </div>

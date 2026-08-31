@@ -17,6 +17,7 @@ import { sourceKindLabel, workflowLabel } from "@/lib/display-labels";
 
 type Analytics = {
   authorizedRecordCount: number;
+  excludedValidationRecordCount: number;
   recordsBySourceKind: Array<{
     sourceKind: string;
     started: number;
@@ -268,12 +269,23 @@ export default function InsightsPage() {
             <span className="eyebrow">{locale === "zh" ? "数据健康" : "Data health"}</span>
             <h2 id="data-health-title">{locale === "zh" ? "数据覆盖与采集质量" : "Data coverage and collection health"}</h2>
             <p>{locale === "zh" ? "这些指标帮助判断洞察是否可靠，但不代替一线内容本身。" : "These indicators help judge whether an insight is reliable; they do not replace field content."}</p>
+            {analytics.excludedValidationRecordCount ? (
+              <p className="data-health-exclusion-note">
+                {locale === "zh"
+                  ? `已排除 ${analytics.excludedValidationRecordCount} 条系统验收记录，不进入正式洞察。`
+                  : `${analytics.excludedValidationRecordCount} system-validation records are excluded from operational insights.`}
+              </p>
+            ) : null}
+            <Link className="inline-link data-health-detail-link" href="/ops/analytics">
+              {locale === "zh" ? "查看分析详情" : "Open analytics detail"}
+              <AppIcon name="arrow" />
+            </Link>
           </div>
-          <dl>
-            <div><dt>{locale === "zh" ? "授权记录" : "Authorized records"}</dt><dd>{analytics.authorizedRecordCount}</dd></div>
-            <div><dt>{locale === "zh" ? "已批准" : "Approved"}</dt><dd>{analytics.dataHealth.approvedRecordCount}</dd></div>
-            <div><dt>{locale === "zh" ? "活跃地点" : "Active locations"}</dt><dd>{analytics.dataHealth.activeSiteCount}</dd></div>
-            <div><dt>{locale === "zh" ? "最低完成率" : "Lowest completion"}</dt><dd>{lowestCompletion ? `${Math.round(lowestCompletion.rate * 100)}%` : "—"}</dd><small>{lowestCompletion ? sourceKindLabel(lowestCompletion.sourceKind, locale) : ""}</small></div>
+          <dl aria-label={locale === "zh" ? "可下钻的数据健康指标" : "Drill-down data health metrics"}>
+            <div><Link href="/records?scope=operational"><dt>{locale === "zh" ? "授权记录" : "Authorized records"}</dt><dd>{analytics.authorizedRecordCount}</dd><span>{locale === "zh" ? "查看记录" : "View records"}<AppIcon name="arrow" /></span></Link></div>
+            <div><Link href="/records?scope=operational&status=approved"><dt>{locale === "zh" ? "已批准" : "Approved"}</dt><dd>{analytics.dataHealth.approvedRecordCount}</dd><span>{locale === "zh" ? "查看已批准" : "View approved"}<AppIcon name="arrow" /></span></Link></div>
+            <div><Link href="/records?scope=operational"><dt>{locale === "zh" ? "活跃地点" : "Active locations"}</dt><dd>{analytics.dataHealth.activeSiteCount}</dd><span>{locale === "zh" ? "查看地点来源" : "View location sources"}<AppIcon name="arrow" /></span></Link></div>
+            <div><Link href={lowestCompletion ? `/records?scope=operational&source=${encodeURIComponent(lowestCompletion.sourceKind)}` : "/records?scope=operational"}><dt>{locale === "zh" ? "最低完成率" : "Lowest completion"}</dt><dd>{lowestCompletion ? `${Math.round(lowestCompletion.rate * 100)}%` : "—"}</dd><small>{lowestCompletion ? sourceKindLabel(lowestCompletion.sourceKind, locale) : locale === "zh" ? "暂无采集数据" : "No collection data"}</small><span>{locale === "zh" ? "查看来源" : "View source"}<AppIcon name="arrow" /></span></Link></div>
           </dl>
         </section>
         </>

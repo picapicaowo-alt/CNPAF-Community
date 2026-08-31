@@ -271,7 +271,7 @@ paths:
   /ai/model-configs/{id}:
     patch: { tags: [AI], operationId: updateAiModelConfig, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /analytics:
-    get: { tags: [Reports], operationId: getAnalytics, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    get: { tags: [Reports], operationId: getAnalytics, parameters: [{ in: query, name: includeSystemValidation, schema: { type: string, enum: ['0', '1'], default: '0' }, description: Include auditable system-validation records in metrics; normal product views omit them. }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /reports:
     get: { tags: [Reports], operationId: listReports, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
     post: { tags: [Reports], operationId: createEditableReport, requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '201': { $ref: '#/components/responses/JsonSuccess' } } }
@@ -368,9 +368,9 @@ paths:
   /notifications/{notificationId}/read:
     post: { tags: [Notifications], operationId: markNotificationRead, parameters: [{ $ref: '#/components/parameters/NotificationId' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /review/inbox:
-    get: { tags: [Records], operationId: getUnifiedReviewInbox, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    get: { tags: [Records], operationId: getUnifiedReviewInbox, description: Returns active human-review items plus complete scoped record history. Pending AI suggestions are counted on their owning record rather than emitted as standalone inbox items., responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /review/items/{id}:
-    get: { tags: [Records], operationId: getUnifiedReviewItem, parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
+    get: { tags: [Records], operationId: getUnifiedReviewItem, description: Record detail nests pending suggestions from the latest successful AI run when the reviewer has finding-review permission., parameters: [{ $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /review/items/{id}/decision:
     post: { tags: [Records], operationId: decideUnifiedReviewItem, parameters: [{ $ref: '#/components/parameters/Id' }], requestBody: { $ref: '#/components/requestBodies/JsonBody' }, responses: { '200': { $ref: '#/components/responses/JsonSuccess' } } }
   /reports/{id}/versions:

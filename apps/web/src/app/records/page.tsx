@@ -54,6 +54,7 @@ type RecordRow = {
   aiStatus: string;
   privacyStatus: string;
   researchUseStatus: string;
+  collectionPurpose: string;
   occurredAt?: string | null;
   submittedAt?: string | null;
   templateVersionId?: string | null;
@@ -128,6 +129,7 @@ function RecordsContent() {
   const recordRequestId = useRef(0);
   const concernsOnly = searchParams.get("hasConcerns") === "1";
   const stage = searchParams.get("stage");
+  const operationalOnly = searchParams.get("scope") === "operational";
   const canonicalDatasetFilters = useMemo(
     () => toDatasetFilters(datasetFilters),
     [datasetFilters],
@@ -248,11 +250,14 @@ function RecordsContent() {
           row.recordStatus === filter ||
           row.privacyStatus === filter;
         const matchesConcerns = !concernsOnly || row.concernCount > 0;
+        const matchesScope =
+          !operationalOnly || row.collectionPurpose !== "system_validation";
         const value = query.trim().toLocaleLowerCase();
         const location = row.siteId ? locationById.get(row.siteId) : null;
         return (
           matchesFilter &&
           matchesConcerns &&
+          matchesScope &&
           (!value ||
             [
               row.id,
@@ -275,6 +280,7 @@ function RecordsContent() {
       filter,
       formById,
       locationById,
+      operationalOnly,
       programById,
       query,
       rows,
@@ -284,6 +290,7 @@ function RecordsContent() {
   const statusParam = searchParams.get("status");
   const hasDrilldownFilter =
     concernsOnly ||
+    operationalOnly ||
     Boolean(stage) ||
     Boolean(sourceParam && sourceParam !== "all") ||
     Boolean(statusParam && statusParam !== "all");
@@ -412,8 +419,8 @@ function RecordsContent() {
             </strong>
             <span className="caption">
               {locale === "zh"
-                ? `共 ${visible.length} 条匹配记录，可点击记录编号查看详情。`
-                : `${visible.length} matching records. Open a record ID for details.`}
+                ? `${operationalOnly ? "已排除系统验收记录；" : ""}共 ${visible.length} 条匹配记录，可点击记录编号查看详情。`
+                : `${operationalOnly ? "System-validation records are excluded. " : ""}${visible.length} matching records. Open a record ID for details.`}
             </span>
           </span>
           <Link className="button button-secondary button-small" href="/records">

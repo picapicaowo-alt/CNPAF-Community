@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   aiFindings,
   aiRuns,
@@ -26,14 +26,27 @@ export async function applyReview(user: SessionUser, recordId: string, body: Rev
   const initialRecord = (await db.select().from(records).where(eq(records.id, recordId)).limit(1))[0];
   if (!initialRecord?.headVersionId) throw new ApiError("NOT_FOUND", "Record not found", 404);
   const access = await getAccessContext(user.id);
-  if (!evaluateAuthorization(access, "records.review", {
+  const recordResource = {
     organizationId: initialRecord.organizationId,
     programId: initialRecord.programId,
     siteId: initialRecord.siteId,
     serviceKey: initialRecord.sourceKind,
     researchUse: initialRecord.researchUseStatus,
-  }).allowed) throw new ApiError("FORBIDDEN", "Record is outside the assigned review scope", 403);
+  };
+  if (!evaluateAuthorization(access, "records.review", recordResource).allowed)
+    throw new ApiError("FORBIDDEN", "Record is outside the assigned review scope", 403);
   const sourcePolicy = await loadSourceKindPolicy(initialRecord.sourceKind);
+  if (
+    body.findings.length &&
+    !evaluateAuthorization(access, "ai.review_findings", recordResource).allowed &&
+    !evaluateAuthorization(access, "findings.review", recordResource).allowed
+  ) {
+    throw new ApiError(
+      "FORBIDDEN",
+      "AI findings are outside the assigned review scope",
+      403,
+    );
+  }
 
   return db.transaction(async (tx) => {
     // Serialize decisions for one record so two reviewers cannot both approve
@@ -95,12 +108,47 @@ export async function applyReview(user: SessionUser, recordId: string, body: Rev
       return { decision };
     }
 
-    const run = (await tx.select().from(aiRuns).where(eq(aiRuns.recordVersionId, version.id)).orderBy(desc(aiRuns.createdAt)).limit(1))[0];
+    const run = (await tx
+      .select()
+      .from(aiRuns)
+      .where(
+        and(
+          eq(aiRuns.recordVersionId, version.id),
+          eq(aiRuns.status, "succeeded"),
+        ),
+      )
+      .orderBy(desc(aiRuns.createdAt))
+      .limit(1))[0];
     const findings = run ? await tx.select().from(aiFindings).where(eq(aiFindings.aiRunId, run.id)) : [];
     const findingById = new Map(findings.map((finding) => [finding.id, finding]));
     const unknownFindingIds = body.findings.filter((item) => !findingById.has(item.findingId)).map((item) => item.findingId);
     if (unknownFindingIds.length) {
       throw new ApiError("BAD_REQUEST", "One or more findings do not belong to the latest analysis run", 400, { findingIds: unknownFindingIds });
+    }
+
+    for (const item of body.findings) {
+      await tx.execute(
+        sql`select id from ai_findings where id = ${item.findingId} for update`,
+      );
+    }
+    const existingFindingReviews = body.findings.length
+      ? await tx
+          .select({ findingId: findingReviews.aiFindingId })
+          .from(findingReviews)
+          .where(
+            inArray(
+              findingReviews.aiFindingId,
+              body.findings.map((item) => item.findingId),
+            ),
+          )
+      : [];
+    if (existingFindingReviews.length) {
+      throw new ApiError(
+        "CONFLICT",
+        "One or more AI suggestions have already been reviewed",
+        409,
+        { findingIds: existingFindingReviews.map((row) => row.findingId) },
+      );
     }
 
     for (const item of body.findings) {

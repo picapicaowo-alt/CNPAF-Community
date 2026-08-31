@@ -36,6 +36,7 @@ const workflowLabels: Record<string, { zh: string; en: string }> = {
   re_run_requested: { zh: "重新分析", en: "Run analysis again" },
   keep_free_text: { zh: "保留原文", en: "Keep as free text" },
   approved: { zh: "已批准", en: "Approved" },
+  rejected: { zh: "已退回", en: "Rejected" },
   published: { zh: "已发布", en: "Published" },
   draft: { zh: "草稿", en: "Draft" },
   queued: { zh: "等待分析", en: "Queued" },
@@ -47,6 +48,7 @@ const workflowLabels: Record<string, { zh: string; en: string }> = {
   restricted: { zh: "受限", en: "Restricted" },
   pending_research_review: { zh: "等待研究审核", en: "Pending research review" },
   excluded_from_research: { zh: "不用于研究", en: "Excluded from research" },
+  system_validation: { zh: "系统验收", en: "System validation" },
 };
 
 function humanize(value: string) {
