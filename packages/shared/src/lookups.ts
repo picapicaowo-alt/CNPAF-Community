@@ -34,6 +34,16 @@ export type LookupRow = {
   sortOrder: number;
 };
 
+export const COLLECTION_PURPOSES = [
+  "operational",
+  "program_evaluation",
+  "research",
+  "system_validation",
+] as const;
+export type CollectionPurpose = (typeof COLLECTION_PURPOSES)[number];
+export const SYSTEM_VALIDATION_COLLECTION_PURPOSE: CollectionPurpose =
+  "system_validation";
+
 export const LOOKUPS: LookupRow[] = [
   { category: "source_kind", key: "field_visit", nameZh: "现场访视", nameEn: "Field visit", sortOrder: 1 },
   { category: "source_kind", key: "professor_interview", nameZh: "专家访谈", nameEn: "Expert interview", sortOrder: 2 },
@@ -92,6 +102,7 @@ export const LOOKUPS: LookupRow[] = [
   { category: "collection_purpose", key: "operational", nameZh: "运营", nameEn: "Operational", sortOrder: 1 },
   { category: "collection_purpose", key: "program_evaluation", nameZh: "项目评估", nameEn: "Program evaluation", sortOrder: 2 },
   { category: "collection_purpose", key: "research", nameZh: "研究", nameEn: "Research", sortOrder: 3 },
+  { category: "collection_purpose", key: SYSTEM_VALIDATION_COLLECTION_PURPOSE, nameZh: "系统验收", nameEn: "System validation", sortOrder: 4 },
 
   { category: "research_use_status", key: "not_assessed", nameZh: "未评估", nameEn: "Not assessed", sortOrder: 1 },
   { category: "research_use_status", key: "operations_only", nameZh: "仅运营", nameEn: "Operations only", sortOrder: 2 },

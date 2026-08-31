@@ -1,20 +1,34 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { canonicalThemes, concerns, records, recordVersions } from "@cnpaf/db/schema";
+import { SYSTEM_VALIDATION_COLLECTION_PURPOSE } from "@cnpaf/shared";
 import { db } from "./db";
 import { evaluateAuthorization, getAccessContext } from "./authorization";
 
 const PSYCHOLOGICAL_CONCERN_TERMS = /lonely|loneliness|isolation|social connection|grief|loss|mood|anxiety|depress|attention|cognitive|engagement|孤独|社交|社会连接|哀伤|失落|情绪|焦虑|抑郁|注意力|认知|参与感/i;
 
-export async function analyticsSummary(userId: string) {
+export async function analyticsSummary(
+  userId: string,
+  options: { includeSystemValidation?: boolean } = {},
+) {
   const allRecords = await db.select().from(records);
   const access = await getAccessContext(userId);
-  const authorized = allRecords.filter((record) => evaluateAuthorization(access, "analytics.view", {
+  const scopedRecords = allRecords.filter((record) => evaluateAuthorization(access, "analytics.view", {
     organizationId: record.organizationId,
     programId: record.programId,
     siteId: record.siteId,
     serviceKey: record.sourceKind,
     researchUse: record.researchUseStatus,
   }).allowed);
+  const validationRecords = scopedRecords.filter(
+    (record) =>
+      record.collectionPurpose === SYSTEM_VALIDATION_COLLECTION_PURPOSE,
+  );
+  const authorized = options.includeSystemValidation
+    ? scopedRecords
+    : scopedRecords.filter(
+        (record) =>
+          record.collectionPurpose !== SYSTEM_VALIDATION_COLLECTION_PURPOSE,
+      );
   const approved = authorized.filter((record) => record.reviewStatus === "approved");
   const approvedIds = approved.map((record) => record.id);
   const concernRows = approvedIds.length
@@ -97,6 +111,7 @@ export async function analyticsSummary(userId: string) {
     completionBySourceKind,
     scopeApplied: true,
     authorizedRecordCount: authorized.length,
+    excludedValidationRecordCount: validationRecords.length,
     dataHealth: {
       approvedRecordCount: approved.length,
       activeSiteCount: new Set(authorized.flatMap((record) => record.siteId ? [record.siteId] : [])).size,

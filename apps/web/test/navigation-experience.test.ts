@@ -251,6 +251,28 @@ test("review field-selection guidance stays compact and left aligned", () => {
   assert.match(styles, /\.field-selection-help > svg\s*\{[\s\S]*?flex: 0 0 16px;/);
 });
 
+test("AI suggestions stay nested under their record and submit with approval", () => {
+  const reviewList = readFileSync(path.join(appRoot, "review/page.tsx"), "utf8");
+  const reviewDetail = readFileSync(
+    path.join(appRoot, "review/[id]/page.tsx"),
+    "utf8",
+  );
+  const suggestions = readFileSync(
+    path.resolve(
+      process.cwd(),
+      "src/features/review/AiSuggestionsPanel.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(reviewList, /if \(item\.itemType === "ai_finding"\) continue/);
+  assert.match(reviewList, /AI 建议 \$\{record\.aiSuggestionCount\}/);
+  assert.match(reviewDetail, /<AiSuggestionsPanel/);
+  assert.match(reviewDetail, /selectedFindingIds\.includes\(finding\.id\)/);
+  assert.match(reviewDetail, /\? "approve"\s*:\s*"reject"/);
+  assert.match(suggestions, /未勾选的建议将记为不采纳/);
+});
+
 test("site typography uses one readable semantic scale", () => {
   const globals = readFileSync(path.join(appRoot, "globals.css"), "utf8");
   const adaptive = readFileSync(path.join(appRoot, "adaptive-design.css"), "utf8");

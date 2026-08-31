@@ -12,7 +12,11 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
-import { reviewItemLabel, reviewItemSummary } from "@/lib/display-labels";
+import {
+  reviewItemLabel,
+  sourceKindLabel,
+  workflowLabel,
+} from "@/lib/display-labels";
 import { recordCitationLabel } from "@/features/records/display";
 import { taskDate } from "@/lib/task-ui";
 
@@ -27,7 +31,17 @@ type ReviewItem = {
   createdAt: string;
   recordOccurredAt?: string | null;
   recordUpdatedAt?: string | null;
+  collectionPurpose?: string;
+  aiSuggestionCount?: number;
 };
+
+const REVIEW_STATUS_ORDER = [
+  "pending",
+  "approved",
+  "needs_completion",
+  "not_submitted",
+  "rejected",
+] as const;
 
 const itemTone: Record<
   string,
@@ -43,6 +57,7 @@ const itemTone: Record<
 export default function ReviewInboxPage() {
   const { locale } = useI18n();
   const [items, setItems] = useState<ReviewItem[]>([]);
+  const [records, setRecords] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,10 +65,12 @@ export default function ReviewInboxPage() {
     setLoading(true);
     setError("");
     try {
-      setItems(
-        (await apiFetch<{ items: ReviewItem[] }>("/api/v1/review/inbox"))
-          .items ?? [],
-      );
+      const result = await apiFetch<{
+        items: ReviewItem[];
+        records: ReviewItem[];
+      }>("/api/v1/review/inbox");
+      setItems(result.items ?? []);
+      setRecords(result.records ?? []);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -64,20 +81,59 @@ export default function ReviewInboxPage() {
     void load();
   }, [load]);
 
-  const counts = useMemo(
+  const countsByStatus = useMemo(
     () =>
-      items.reduce<Record<string, number>>(
+      records.reduce<Record<string, number>>(
         (result, item) => ({
           ...result,
-          [item.itemType]: (result[item.itemType] ?? 0) + 1,
+          [item.status]: (result[item.status] ?? 0) + 1,
         }),
         {},
       ),
-    [items],
+    [records],
   );
-  const types = ["all", ...Object.keys(counts)];
+  const statusTabs = [
+    "all",
+    ...REVIEW_STATUS_ORDER.filter((status) => countsByStatus[status]),
+    ...Object.keys(countsByStatus).filter(
+      (status) =>
+        !REVIEW_STATUS_ORDER.includes(
+          status as (typeof REVIEW_STATUS_ORDER)[number],
+        ),
+    ),
+  ];
   const visible =
-    filter === "all" ? items : items.filter((item) => item.itemType === filter);
+    filter === "all"
+      ? records
+      : records.filter((record) => record.status === filter);
+  const activeItemByRecordId = useMemo(() => {
+    const byRecordId = new Map<string, ReviewItem>();
+    for (const item of items) {
+      if (item.itemType === "ai_finding") continue;
+      const current = byRecordId.get(item.recordId);
+      if (!current || (current.itemType === "record" && item.itemType !== "record")) {
+        byRecordId.set(item.recordId, item);
+      }
+    }
+    return byRecordId;
+  }, [items]);
+
+  function statusLabel(status: string) {
+    if (status === "all") return locale === "zh" ? "全部" : "All";
+    if (status === "pending") return locale === "zh" ? "待批准" : "Pending";
+    if (status === "approved") return locale === "zh" ? "已批准" : "Approved";
+    if (status === "needs_completion")
+      return locale === "zh" ? "已返回重审" : "Returned for revision";
+    return workflowLabel(status, locale);
+  }
+
+  function statusTone(status: string) {
+    if (status === "approved") return "green" as const;
+    if (status === "pending") return "amber" as const;
+    if (status === "needs_completion" || status === "rejected")
+      return "red" as const;
+    return "neutral" as const;
+  }
 
   return (
     <div className="stack">
@@ -85,24 +141,21 @@ export default function ReviewInboxPage() {
         title={locale === "zh" ? "审核" : "Review"}
         description={
           locale === "zh"
-            ? "一个收件箱，处理所有需要人工决定的内容。"
-            : "One inbox for anything that needs a human decision."
+            ? "完整记录每条 record 从提交、待批准、返回修订到已批准的状态。"
+            : "Track every record from submission through review, revision, and approval."
         }
       />
-      <div className="tabs">
-        {types.map((type) => (
+      <div aria-label={locale === "zh" ? "审核状态" : "Review status"} className="tabs" role="tablist">
+        {statusTabs.map((status) => (
           <button
-            className={`tab${filter === type ? " active" : ""}`}
-            key={type}
-            onClick={() => setFilter(type)}
+            aria-selected={filter === status}
+            className={`tab${filter === status ? " active" : ""}`}
+            key={status}
+            onClick={() => setFilter(status)}
+            role="tab"
             type="button"
           >
-            {type === "all"
-              ? locale === "zh"
-                ? "全部"
-                : "All"
-              : reviewItemLabel(type, locale)}{" "}
-            {type === "all" ? items.length : counts[type]}
+            {statusLabel(status)} {status === "all" ? records.length : countsByStatus[status]}
           </button>
         ))}
       </div>
@@ -113,38 +166,65 @@ export default function ReviewInboxPage() {
       ) : visible.length ? (
         <div className="list-panel">
           <div className="list-panel-title">
-            {locale === "zh" ? "需要关注" : "Needs attention"}
+            {filter === "all"
+              ? locale === "zh"
+                ? "全部审核记录"
+                : "All review records"
+              : statusLabel(filter)}
           </div>
-          {visible.map((item) => (
-            <Link
-              className="list-row"
-              href={`/review/${item.id}`}
-              key={`${item.itemType}:${item.id}`}
-            >
-              <div className="row">
-                <StatusPill tone={itemTone[item.itemType] ?? "neutral"}>
-                  {reviewItemLabel(item.itemType, locale)}
-                </StatusPill>
-              </div>
-              <div>
-                <div className="list-row-title">
-                  {reviewItemSummary(item, locale)}
+          {visible.map((record) => {
+            const activeItem = activeItemByRecordId.get(record.recordId);
+            return (
+              <Link
+                className="list-row review-record-row"
+                href={`/review/${activeItem?.id ?? record.id}`}
+                key={record.id}
+              >
+                <div className="review-record-statuses">
+                  <StatusPill tone={statusTone(record.status)}>
+                    {statusLabel(record.status)}
+                  </StatusPill>
+                  {activeItem && activeItem.itemType !== "record" ? (
+                    <StatusPill tone={itemTone[activeItem.itemType] ?? "neutral"}>
+                      {reviewItemLabel(activeItem.itemType, locale)}
+                    </StatusPill>
+                  ) : null}
+                  {record.aiSuggestionCount ? (
+                    <StatusPill tone="blue">
+                      {locale === "zh"
+                        ? `AI 建议 ${record.aiSuggestionCount}`
+                        : `${record.aiSuggestionCount} AI suggestions`}
+                    </StatusPill>
+                  ) : null}
+                  {record.collectionPurpose === "system_validation" ? (
+                    <StatusPill tone="violet">
+                      {locale === "zh" ? "系统验收" : "System validation"}
+                    </StatusPill>
+                  ) : null}
                 </div>
-                <div className="list-row-subtitle">
-                  {recordCitationLabel({
-                    id: item.recordId,
-                    sourceKind: item.sourceKind ?? "other",
-                    occurredAt: item.recordOccurredAt,
-                    updatedAt: item.recordUpdatedAt,
-                  }, locale)}
+                <div>
+                  <div className="list-row-title">
+                    {recordCitationLabel(
+                      {
+                        id: record.recordId,
+                        sourceKind: record.sourceKind ?? "other",
+                        occurredAt: record.recordOccurredAt,
+                        updatedAt: record.recordUpdatedAt,
+                      },
+                      locale,
+                    )}
+                  </div>
+                  <div className="list-row-subtitle">
+                    {sourceKindLabel(record.sourceKind ?? "other", locale)}
+                  </div>
                 </div>
-              </div>
-              <div className="muted">{taskDate(item.createdAt, locale)}</div>
-              <span className="list-row-arrow">
-                <AppIcon name="arrow" />
-              </span>
-            </Link>
-          ))}
+                <div className="muted">{taskDate(record.createdAt, locale)}</div>
+                <span className="list-row-arrow">
+                  <AppIcon name="arrow" />
+                </span>
+              </Link>
+            );
+          })}
         </div>
       ) : (
         <EmptyState
@@ -152,8 +232,8 @@ export default function ReviewInboxPage() {
           title={locale === "zh" ? "审核已清空" : "You’re all caught up"}
           description={
             locale === "zh"
-              ? "当前筛选中没有需要人工处理的内容。"
-              : "There is nothing awaiting a decision in this view."
+              ? `当前“${statusLabel(filter)}”筛选中没有 record。`
+              : `There are no records in the ${statusLabel(filter)} view.`
           }
         />
       )}

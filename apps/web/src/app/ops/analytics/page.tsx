@@ -6,9 +6,11 @@ import { AppIcon } from "@/components/AppIcon";
 import { useI18n } from "@/components/LocaleProvider";
 import { ErrorState, LoadingState, PageHeader } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { sourceKindLabel } from "@/lib/display-labels";
 
 type Analytics = {
   authorizedRecordCount: number;
+  excludedValidationRecordCount: number;
   recordsBySourceKind: Array<{
     sourceKind: string;
     started: number;
@@ -56,36 +58,43 @@ export default function AnalyticsPage() {
   return (
     <div className="stack">
       <PageHeader
-        title={locale === "zh" ? "数据统计" : "Analytics"}
+        title={locale === "zh" ? "数据健康与分析详情" : "Data health and analytics detail"}
         description={
           locale === "zh"
-            ? "仅统计当前账号授权范围内的数据，并区分开始、提交与批准。"
-            : "Counts are restricted to the current account's scope and separate started, submitted, and approved records."
+            ? "仅统计当前账号授权范围内的正式业务数据，并区分开始、提交与批准。"
+            : "Counts are restricted to authorized operational data and separate started, submitted, and approved records."
         }
       />
-      <div className="grid-2">
-        <Link className="card stat-card card-interactive" href="/records">
+      {data.excludedValidationRecordCount ? (
+        <div className="feedback feedback-info analytics-validation-note" role="status">
+          {locale === "zh"
+            ? `已识别并排除 ${data.excludedValidationRecordCount} 条系统验收 record；它们保留审计，但不进入洞察与运营统计。`
+            : `${data.excludedValidationRecordCount} system-validation records remain auditable but are excluded from insights and operational metrics.`}
+        </div>
+      ) : null}
+      <div className="grid-2 analytics-metric-grid">
+        <Link className="card stat-card card-interactive" href="/records?scope=operational">
           <div className="stat-value">{data.authorizedRecordCount}</div>
           <div className="stat-label">
             {locale === "zh" ? "授权范围内记录" : "Authorized records"}
           </div>
           <span className="stat-link">{locale === "zh" ? "查看记录" : "View records"} <AppIcon name="arrow" /></span>
         </Link>
-        <Link className="card stat-card card-interactive" href="/records?status=approved">
+        <Link className="card stat-card card-interactive" href="/records?scope=operational&status=approved">
           <div className="stat-value">{totals.approved}</div>
           <div className="stat-label">
             {locale === "zh" ? "已批准记录" : "Approved records"}
           </div>
           <span className="stat-link">{locale === "zh" ? "查看已批准记录" : "View approved"} <AppIcon name="arrow" /></span>
         </Link>
-        <Link className="card stat-card card-interactive" href="/records?status=approved&hasConcerns=1">
+        <Link className="card stat-card card-interactive" href="/records?scope=operational&status=approved&hasConcerns=1">
           <div className="stat-value">{totalConcerns}</div>
           <div className="stat-label">
             {locale === "zh" ? "已批准关注点" : "Approved concerns"}
           </div>
           <span className="stat-link">{locale === "zh" ? "查看关注点来源" : "Trace concerns"} <AppIcon name="arrow" /></span>
         </Link>
-        <Link className="card stat-card card-interactive" href="/records?stage=submitted">
+        <Link className="card stat-card card-interactive" href="/records?scope=operational&stage=submitted">
           <div className="stat-value">{Math.round(overallRate * 100)}%</div>
           <div className="stat-label">
             {locale === "zh"
@@ -95,36 +104,27 @@ export default function AnalyticsPage() {
           <span className="stat-link">{locale === "zh" ? "查看已提交记录" : "View submissions"} <AppIcon name="arrow" /></span>
         </Link>
       </div>
-      <section className="card stack-sm">
+      <section className="card stack-sm analytics-source-section">
         <h2>{locale === "zh" ? "按采集来源" : "By collection source"}</h2>
         {data.completionBySourceKind.length ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{locale === "zh" ? "来源" : "Source"}</th>
-                  <th>{locale === "zh" ? "开始" : "Started"}</th>
-                  <th>{locale === "zh" ? "提交" : "Submitted"}</th>
-                  <th>{locale === "zh" ? "批准" : "Approved"}</th>
-                  <th>{locale === "zh" ? "完成率" : "Completion"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.completionBySourceKind.map((item) => (
-                  <tr className="analytics-source-row" key={item.sourceKind}>
-                    <td>
-                      <Link className="table-link" href={`/records?source=${encodeURIComponent(item.sourceKind)}`}>
-                        {item.sourceKind} <AppIcon name="arrow" />
-                      </Link>
-                    </td>
-                    <td><Link href={`/records?source=${encodeURIComponent(item.sourceKind)}`}>{item.started}</Link></td>
-                    <td><Link href={`/records?source=${encodeURIComponent(item.sourceKind)}&stage=submitted`}>{item.submitted}</Link></td>
-                    <td><Link href={`/records?source=${encodeURIComponent(item.sourceKind)}&status=approved`}>{item.approved}</Link></td>
-                    <td><Link href={`/records?source=${encodeURIComponent(item.sourceKind)}`}>{Math.round(item.rate * 100)}%</Link></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="analytics-source-list">
+            {data.completionBySourceKind.map((item) => {
+              const source = encodeURIComponent(item.sourceKind);
+              return (
+                <article className="analytics-source-card" key={item.sourceKind}>
+                  <Link className="analytics-source-heading" href={`/records?scope=operational&source=${source}`}>
+                    <span>{sourceKindLabel(item.sourceKind, locale)}</span>
+                    <AppIcon name="arrow" />
+                  </Link>
+                  <dl>
+                    <div><dt>{locale === "zh" ? "开始" : "Started"}</dt><dd><Link href={`/records?scope=operational&source=${source}`}>{item.started}</Link></dd></div>
+                    <div><dt>{locale === "zh" ? "提交" : "Submitted"}</dt><dd><Link href={`/records?scope=operational&source=${source}&stage=submitted`}>{item.submitted}</Link></dd></div>
+                    <div><dt>{locale === "zh" ? "批准" : "Approved"}</dt><dd><Link href={`/records?scope=operational&source=${source}&status=approved`}>{item.approved}</Link></dd></div>
+                    <div><dt>{locale === "zh" ? "完成率" : "Completion"}</dt><dd><Link href={`/records?scope=operational&source=${source}`}>{Math.round(item.rate * 100)}%</Link></dd></div>
+                  </dl>
+                </article>
+              );
+            })}
           </div>
         ) : (
           <p className="muted">

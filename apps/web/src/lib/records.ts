@@ -24,7 +24,9 @@ import {
   taskAssignments,
 } from "@cnpaf/db/schema";
 import {
+  COLLECTION_PURPOSES,
   validateSourceAttribution,
+  type CollectionPurpose,
   type DraftBody,
   type SubmitBody,
 } from "@cnpaf/shared";
@@ -57,6 +59,17 @@ function approvedEvidenceEligible(record: typeof records.$inferSelect) {
   return record.reviewStatus === "approved" &&
     ["clear", "redacted"].includes(record.privacyStatus) &&
     record.researchUseStatus === "approved_for_research";
+}
+
+function collectionPurposeFromProgram(
+  program: typeof programs.$inferSelect | null,
+): CollectionPurpose {
+  const configured = (program?.configuration as { collectionPurpose?: unknown } | null)
+    ?.collectionPurpose;
+  return typeof configured === "string" &&
+    (COLLECTION_PURPOSES as readonly string[]).includes(configured)
+    ? (configured as CollectionPurpose)
+    : "operational";
 }
 
 export async function recordAccessMode(userId: string, record: typeof records.$inferSelect) {
@@ -200,7 +213,11 @@ async function validateRecordContext(user: SessionUser, body: DraftBody, permiss
     serviceKey: body.sourceKind,
     ownerUserId: user.id,
   }).allowed) throw new ApiError("FORBIDDEN", "Collection context is outside the assigned scope", 403);
-  return { organizationId, form };
+  return {
+    organizationId,
+    form,
+    collectionPurpose: collectionPurposeFromProgram(program),
+  };
 }
 
 async function validateTaskContext(user: SessionUser, body: DraftBody) {
@@ -243,7 +260,7 @@ export async function upsertDraft(user: SessionUser, body: DraftBody, permission
       siteId: body.siteId ?? null,
       visitId: body.visitId ?? null,
       activityDefinitionId: body.activityDefinitionId ?? null,
-      collectionPurpose: "operational",
+      collectionPurpose: context.collectionPurpose,
       researchUseStatus: "not_assessed",
       recordStatus: "draft",
       reviewStatus: "not_submitted",
@@ -327,6 +344,7 @@ export async function upsertDraft(user: SessionUser, body: DraftBody, permission
       taskId: body.taskId ?? record.taskId,
       taskAssignmentId: body.taskAssignmentId ?? record.taskAssignmentId,
       activityDefinitionId: body.activityDefinitionId ?? record.activityDefinitionId,
+      collectionPurpose: context.collectionPurpose,
       headVersionId: draft.id,
       updatedAt: new Date(),
     }).where(eq(records.id, record.id)).returning();

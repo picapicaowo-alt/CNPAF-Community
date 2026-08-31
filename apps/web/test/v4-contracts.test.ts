@@ -611,6 +611,29 @@ test("returning a record requires a reason and preserves field targets", () => {
   );
 });
 
+test("record approval accepts selected and unselected AI suggestions in one decision", () => {
+  const parsed = reviewBodySchema.safeParse({
+    action: "approve",
+    findings: [
+      { findingId: ids.location, decision: "approve" },
+      { findingId: ids.organization, decision: "reject" },
+    ],
+  });
+  assert.equal(parsed.success, true);
+  assert.deepEqual(
+    parsed.success
+      ? parsed.data.findings.map(({ findingId, decision }) => ({
+          findingId,
+          decision,
+        }))
+      : [],
+    [
+      { findingId: ids.location, decision: "approve" },
+      { findingId: ids.organization, decision: "reject" },
+    ],
+  );
+});
+
 test("manual account provisioning cannot reference an unrelated role assignment", () => {
   const parsed = manualAccountCreateBodySchema.safeParse({
     email: "person@example.org",

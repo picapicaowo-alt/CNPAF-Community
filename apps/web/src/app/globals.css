@@ -4608,6 +4608,73 @@ input[type="radio"] {
   font-size: var(--type-meta);
   line-height: 1.55;
 }
+.ai-review-suggestions {
+  border-color: #cddbe8;
+  background: #fbfcfe;
+}
+.ai-review-suggestions-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+.ai-review-suggestions-heading h2,
+.ai-review-suggestions-heading p {
+  margin: 0;
+}
+.ai-review-suggestions-heading p {
+  max-width: 68ch;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: var(--type-meta);
+}
+.ai-review-suggestion-list {
+  border-top: 1px solid var(--line);
+}
+.ai-review-suggestion {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 15px 2px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.ai-review-suggestion:last-child {
+  padding-bottom: 2px;
+  border-bottom: 0;
+}
+.ai-review-suggestion > input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--blue);
+}
+.ai-review-suggestion-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.ai-review-suggestion-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--type-caption);
+}
+.ai-review-suggestion-meta strong {
+  color: var(--blue-dark);
+}
+.ai-review-suggestion-statement {
+  color: var(--ink);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.ai-review-suggestion-evidence {
+  color: var(--muted);
+  font-size: var(--type-caption);
+  line-height: 1.55;
+}
 .ai-analysis-pending,
 .ai-analysis-note {
   display: flex;

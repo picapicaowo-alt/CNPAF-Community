@@ -174,8 +174,8 @@ Quick capture uses `GET /quick-capture/forms` and `GET /quick-capture/forms/:ver
 | POST | `/records/:id/attachments` | scoped `records.edit_own` | draft versions only; bounded image/audio/video/document upload with normalized media kind; documents include PDF, text, CSV, Word, Excel, and PowerPoint (`.ppt`/`.pptx`) |
 | GET | `/records/:id/attachments/:attachmentId` | scoped record permission | private inline media response for the current Record Version |
 | POST | `/records/:id/review-decisions` | scoped `records.review` | `reviewBodySchema` |
-| GET | `/review/inbox` | scoped `review.view` plus item capability | unified summaries; privacy-gated records only |
-| GET | `/review/items/:id` | scoped `review.view` plus item capability | type-specific detail without client-side queue dispatch |
+| GET | `/review/inbox` | scoped `review.view` plus item capability | active human-review items plus complete scoped record review history; AI suggestions are counted on their owning record instead of returned as standalone inbox items |
+| GET | `/review/items/:id` | scoped `review.view` plus item capability | type-specific detail; record detail nests pending suggestions from the latest successful AI run when the reviewer has finding-review permission |
 | POST | `/review/items/:id/decision` | `review.decide` plus underlying capability | `unifiedReviewDecisionBodySchema` |
 | GET | `/review-queue` | scoped `records.review` | — |
 | GET | `/privacy-queue` | scoped `privacy.view` | — |
@@ -264,7 +264,7 @@ Classification output is validated against the selected versioned JSON Schema. T
 
 | Method | Path | Permission | Request contract |
 |---|---|---|---|
-| GET | `/analytics` | scoped `analytics.view` or canonical `insights.view` | origin-separated aggregates |
+| GET | `/analytics` | scoped `analytics.view` or canonical `insights.view` | origin-separated operational aggregates; `system_validation` records are disclosed but excluded unless `includeSystemValidation=1` |
 | GET | `/reports` | scoped `reports.view` | authorized editable reports plus legacy generated artifacts |
 | POST | `/report-runs` | `reports.generate` | `reportRunBodySchema`; returns `202` |
 | GET | `/report-runs/:id` | `reports.view` plus current evidence access | — |
